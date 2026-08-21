@@ -114,3 +114,32 @@ Only the Windows Codex agent edits this file.
 - Deliberate deferrals: FastAPI/Task 4, frontend, 24-container scenario, OR-Tools, stochastic sampling, uncertainty bands, RTA negotiation, carrier simulator, DG semantic analysis, LLM integration, and deployment. The test-only `NoCapacityYardService` supplies zero capacity to exercise escalation; production yard capacity remains a fixed read-only synthetic forecast.
 - Blockers: None. Successful state sequence is `INCIDENT_RECEIVED → COLLECTING_STATE → CONSTRAINT_VALIDATION → RECOVERY_ANALYSIS → RESOLVED`; no-dominant path ends `ESCALATED`. Audit actors emitted are only `SYSTEM` and `POLICY`; `AGENT` is never emitted.
 - Recommended next step: Review Task 3 behavior and authorize Task 4 separately if accepted.
+
+## 2026-08-22T01:33:05.5846979+08:00 — Task 4 session start
+
+- Timestamp: `2026-08-22T01:33:05.5846979+08:00`
+- Task: Execute Task 4 only — minimal FastAPI trigger and repository-backed inspection API for the verified one-container workflow.
+- Branch: `main`
+- Base SHA: `1a5af0ab43c2c90c2c94d5421c6d4bc9f9b92a9c`
+- Plan task: Task 4 — Minimal FastAPI Trigger and Inspection API.
+- Resulting HEAD SHA: Not yet produced at session start.
+- Files changed: Session-start coordination record only.
+- Tests run and results: Not yet run at session start.
+- Interfaces/contracts changed: None planned; Task 1 frozen domain contracts and the Task 3 workflow are consumed unchanged.
+- Deliberate deferrals: Task 5 as a separately implemented task and every post-foundation feature; no reset route unless isolation proves it necessary.
+- Blockers: None at session start.
+- Recommended next step: Complete the six requested endpoint-level RED → GREEN behaviors, verify the API and authority boundary, commit Task 4, and stop.
+
+## 2026-08-22T01:37:53.6889996+08:00 — Task 4 completed
+
+- Timestamp: `2026-08-22T01:37:53.6889996+08:00`
+- Task: Task 4 — expose the verified one-container recovery workflow through a minimal FastAPI trigger and repository-backed inspection API.
+- Branch: `main`
+- Base SHA: `1a5af0ab43c2c90c2c94d5421c6d4bc9f9b92a9c`
+- Resulting HEAD SHA: `d8573f4cf8aa0dffd5bce2be4602a4ca8c530053` (Task 4 implementation commit).
+- Files changed: `backend/app/main.py`; `backend/tests/conftest.py`; `backend/tests/test_api.py`; `backend/tests/test_authority_boundaries.py`; `docs/coordination/WORKSTREAMS.md`; `docs/coordination/logs/win-codex.md`.
+- Tests run and results: Baseline full suite passed 34 tests in 0.11s. Trigger/authority RED failed during collection with missing `backend.app.main`; GREEN passed 2 tests in 0.63s. Incident/404 RED failed 2 tests with missing route/generic 404; GREEN passed 2 tests in 0.10s. Decision RED failed with 404; GREEN passed 1 test in 0.08s. Audit RED failed with 404; GREEN passed 1 test in 0.09s. Final focused API/authority suite passed 6 tests in 0.15s; final full suite passed 40 tests in 0.22s. The Task 5 lifespan/OpenAPI smoke exited 0 and printed `PSA Transshipment Recovery`; `git diff --check` exited 0. TestClient commands emitted one non-failing Starlette/httpx deprecation warning from the installed dependency set.
+- Interfaces/contracts changed: Added `create_app(*, database_engine=None) -> FastAPI`, module-level `app`, immutable `TriggerResponse`, `POST /synthetic/scenarios/schedule-delay`, `GET /incidents/{incident_id}`, `GET /incidents/{incident_id}/decisions`, and `GET /incidents/{incident_id}/audit-events`. Added isolated `StaticPool` API fixtures with a `get_session` dependency override. No frozen Task 1 domain contract changed.
+- Deliberate deferrals: No reset route was needed. Task 5 was not implemented as a task; only its specifically requested lifespan/OpenAPI smoke command was run. Frontend, 24-container scenario, OR-Tools, uncertainty/sampling, carrier/RTA behavior, DG analysis, LLM/agent behavior, auth, deployment, WebSockets, and workers remain deferred.
+- Blockers: None. The installed FastAPI/Starlette TestClient reports a deprecation warning for its current httpx integration, but all requested behavior and verification pass.
+- Recommended next step: Review and approve the Task 4 API surface; authorize any next task separately.
