@@ -22,7 +22,7 @@ Only the Windows Cursor agent edits this file.
 - Task: Build `web/` operations console against current FastAPI API (typed client, trigger flow, incident/decision/audit UI, frontend tests)
 - Branch: main
 - Base SHA: 3f2a992fc495bc011835aeb9024d6364348539e6
-- Resulting HEAD SHA: (filled by commit)
+- Resulting HEAD SHA: 8daa234134cd0dcdf0003b79d54bd50186feeb47
 - Files changed:
   - `.gitignore` — ignore `web/node_modules/` and `web/dist/`
   - `web/` — Vite React TypeScript app with Tailwind, typed API client, operations console UI, Vitest tests
