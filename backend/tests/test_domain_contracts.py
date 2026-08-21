@@ -294,5 +294,10 @@ def test_carrier_response_does_not_accept_a_boolean_acceptance_field() -> None:
         )
 
 
-def test_future_timing_request_action_is_request_rta() -> None:
-    assert DecisionAction.REQUEST_RTA.value == "REQUEST_RTA"
+def test_decision_actions_match_the_frozen_recovery_vocabulary() -> None:
+    assert {action.value for action in DecisionAction} == {
+        "EXPEDITE",
+        "REQUEST_RTA",
+        "ROLL",
+        "ESCALATE",
+    }

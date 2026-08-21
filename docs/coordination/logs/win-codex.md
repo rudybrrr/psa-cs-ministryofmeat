@@ -29,3 +29,18 @@ Only the Windows Codex agent edits this file.
 - Deliberate deferrals: All Task 2+ behavior and persistence; React; 24-container scenario; OR-Tools; stochastic sampling; RTA negotiation behavior; carrier simulator; DG semantic analysis; LLM integration; deployment; population of the owner-supplied final-plan text.
 - Blockers: None for Task 1. Task 2 is intentionally gated on owner approval of these contracts.
 - Recommended next step: Review and approve the Task 1 contracts, copy the approved final plan into `docs/specs/psa-code-sprint-final-plan.md`, then authorize Task 2 if the contracts are accepted.
+
+## 2026-08-21T22:46:36.4315064+08:00 — Task 2 session start
+
+- Timestamp: `2026-08-21T22:46:36.4315064+08:00`
+- Task: Preflight corrections, then Task 2 explicit state machine and SQLite persistence if the canonical source-plan gate passes.
+- Branch: `main`
+- Base SHA: `e59681b66ee97b0e7776c1e3fc37fc714d726ab6`
+- Plan task: Task 2 — Explicit Incident State Machine and SQLite Persistence.
+- Resulting HEAD SHA: Not yet produced at session start.
+- Files changed: This log entry only at session start.
+- Tests run and results: Not yet run at session start.
+- Interfaces/contracts changed: None at session start; `DecisionAction` preflight verification is pending.
+- Deliberate deferrals: Task 3 and all later scope remain excluded.
+- Blockers: Canonical source-plan verification pending.
+- Recommended next step: Verify the source-plan file and `DecisionAction`, correct and separately commit any discrepancy, then enter Task 2 only if both gates pass.

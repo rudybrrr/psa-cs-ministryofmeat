@@ -163,6 +163,8 @@ class IncidentState(StrEnum):
 class DecisionAction(StrEnum):
     EXPEDITE = "EXPEDITE"
     REQUEST_RTA = "REQUEST_RTA"
+    ROLL = "ROLL"
+    ESCALATE = "ESCALATE"
 
 
 class CarrierResponseType(StrEnum):

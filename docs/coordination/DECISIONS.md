@@ -25,3 +25,9 @@ This document is append-only. Add entries only for approved or proposed changes 
 - Status: Approved
 - Decision: The future timing-request action is `REQUEST_RTA`. A `CarrierResponse` uses the explicit values `ACCEPT` or `COUNTER` and may include a counter ETA/PTA.
 - Consequence: Silence is represented by the absence of a response after a future timeout/deadline, never as a `CarrierResponse`. `REQUEST_CARRIER_REBOOK` and an `accepted` boolean are not frozen into the contracts.
+
+## 2026-08-21 — Complete recovery decision action vocabulary
+
+- Status: Approved
+- Decision: `DecisionAction` contains exactly `EXPEDITE`, `REQUEST_RTA`, `ROLL`, and `ESCALATE` at the Task 2 base.
+- Consequence: The two additional actions are frozen contract vocabulary only. Task 2 does not implement roll, escalation workflow behavior, carrier negotiation, or any optimizer.
