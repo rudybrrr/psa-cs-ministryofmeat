@@ -6,6 +6,7 @@ This file is maintained only by the lead/integration workflow. Individual agents
 | --- | --- | --- | --- | --- | --- |
 | Task 1: foundation and contracts | `win-codex.md` | `main` | unborn branch | Complete; pending contract approval | Result `0271bb7c24f2d97af7bdf86628c55df3a5a9f07c`; plan hygiene, coordination baseline, project metadata, frozen domain contracts, and contract tests |
 | Task 2: state and persistence | `win-codex.md` | `main` | `0373384567b5ca32ea41ed007987bf0b75a9d2de` | Complete; pending Task 3 authorization | Result `2f868e8e48d7569ac0945bed8e25f13ea2944fef`; explicit state machine, SQLModel/SQLite repositories, and append-only audit service/tests only |
+| Task 3: deterministic vertical slice | `win-codex.md` | `main` | `a5eeccbb5c081430d309c71da8484ffee0abdb6e` | Complete; pending Task 4 authorization | Result `5dd81723b4b5b27513de0d3cb593c421afa109e8`; synthetic services, feasibility, deterministic dominance policy, persisted one-container workflow, and audit evidence only |
 
 ## Coordination rules
 

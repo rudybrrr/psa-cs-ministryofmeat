@@ -86,3 +86,31 @@ Only the Windows Codex agent edits this file.
 - Deliberate deferrals: The state machine does not emit audit events itself; deterministic transition auditing is wired by the future Task 3 workflow and must use `AuditActor.SYSTEM`. Task 3 and all frontend, synthetic recovery workflow, solver, carrier negotiation, LLM, OR-Tools, uncertainty, and DG behavior remain deferred.
 - Blockers: None. `ALLOWED_TRANSITIONS` uses immutable `frozenset` values instead of mutable sets from the plan example, with identical allowed-transition behavior.
 - Recommended next step: Review Task 2 persistence interfaces and authorize Task 3 separately if accepted.
+
+## 2026-08-21T23:44:28.0508057+08:00 — Task 3 session start
+
+- Timestamp: `2026-08-21T23:44:28.0508057+08:00`
+- Task: Execute Task 3 only — one synthetic container through deterministic services, feasibility, dominance policy, persisted workflow, and audit trail.
+- Branch: `main`
+- Base SHA: `a5eeccbb5c081430d309c71da8484ffee0abdb6e`
+- Resulting HEAD SHA: Not yet produced at session start.
+- Files changed: Session-start coordination record only.
+- Tests run and results: Not yet run at session start.
+- Interfaces/contracts changed: None planned; all Task 1 frozen domain contracts are consumed unchanged.
+- Deliberate deferrals: FastAPI/Task 4, frontend, 24-container scenario, OR-Tools, stochastic sampling, uncertainty bands, RTA negotiation, carrier simulator, DG semantic analysis, LLM integration, and deployment.
+- Blockers: None at session start.
+- Recommended next step: Complete the seven requested RED → GREEN cycles, verify, commit Task 3, and stop before Task 4.
+
+## 2026-08-21T23:51:21.5583329+08:00 — Task 3 completed
+
+- Timestamp: `2026-08-21T23:51:21.5583329+08:00`
+- Task: Task 3 — one clearly synthetic container through deterministic schedule, manifest, yard, feasibility, dominance policy, persisted workflow, and immutable audit trail.
+- Branch: `main`
+- Base SHA: `a5eeccbb5c081430d309c71da8484ffee0abdb6e`
+- Resulting HEAD SHA: `5dd81723b4b5b27513de0d3cb593c421afa109e8`
+- Files changed: `backend/app/orchestration/state_machine.py`; `backend/app/policies/__init__.py`; `backend/app/policies/dominance.py`; `backend/app/services/__init__.py`; `backend/app/services/manifest.py`; `backend/app/services/schedule.py`; `backend/app/services/yard.py`; `backend/tests/test_vertical_slice.py`; `shared/fixtures/README.md`; `docs/coordination/WORKSTREAMS.md`; `docs/coordination/logs/win-codex.md`.
+- Tests run and results: Baseline full suite passed 23 tests in 0.07s. Schedule RED failed with missing services module, GREEN passed 1. Manifest RED failed with missing manifest module, GREEN passed 1. Yard RED failed with missing yard module, GREEN passed 1. Normal-feasibility RED failed with missing method, GREEN passed 1. Expedited-feasibility RED failed with missing method, GREEN passed 1. Dominance RED failed with missing policies module, GREEN passed 4. Workflow RED failed with missing `build_workflow`, GREEN passed 2. Final focused Task 3 suite passed 11 tests in 0.07s; final full suite passed 34 tests in 0.11s; Python compile check and staged diff check exited 0.
+- Interfaces/contracts changed: Added `SyntheticScheduleService.delay_event/create_incident/normal_connection_feasible/expedited_connection_feasible`; `SyntheticManifestService.affected_container`; `SyntheticYardService.forecast`; `DominancePolicy.decide`; frozen internal `RecoveryResult`; `TransshipmentRecoveryWorkflow.run`; and `build_workflow`. Task 1 frozen domain contracts were not changed.
+- Deliberate deferrals: FastAPI/Task 4, frontend, 24-container scenario, OR-Tools, stochastic sampling, uncertainty bands, RTA negotiation, carrier simulator, DG semantic analysis, LLM integration, and deployment. The test-only `NoCapacityYardService` supplies zero capacity to exercise escalation; production yard capacity remains a fixed read-only synthetic forecast.
+- Blockers: None. Successful state sequence is `INCIDENT_RECEIVED → COLLECTING_STATE → CONSTRAINT_VALIDATION → RECOVERY_ANALYSIS → RESOLVED`; no-dominant path ends `ESCALATED`. Audit actors emitted are only `SYSTEM` and `POLICY`; `AGENT` is never emitted.
+- Recommended next step: Review Task 3 behavior and authorize Task 4 separately if accepted.
