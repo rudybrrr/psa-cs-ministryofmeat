@@ -44,3 +44,17 @@ Only the Windows Codex agent edits this file.
 - Deliberate deferrals: Task 3 and all later scope remain excluded.
 - Blockers: Canonical source-plan verification pending.
 - Recommended next step: Verify the source-plan file and `DecisionAction`, correct and separately commit any discrepancy, then enter Task 2 only if both gates pass.
+
+## 2026-08-21T22:48:42.1819377+08:00 — Task 2 preflight blocked
+
+- Timestamp: `2026-08-21T22:48:42.1819377+08:00`
+- Task: Verify both pre-Task-2 gates and correct the approved `DecisionAction` vocabulary under TDD.
+- Branch: `main`
+- Base SHA: `e59681b66ee97b0e7776c1e3fc37fc714d726ab6`
+- Resulting HEAD SHA: `e26e8396b0b29a005a8a86cef58311cf515b4be9`
+- Files changed: `backend/app/domain/enums.py`; `backend/tests/test_domain_contracts.py`; `docs/coordination/DECISIONS.md`; `docs/coordination/logs/win-codex.md`; `docs/superpowers/plans/2026-08-21-transshipment-recovery.md`.
+- Tests run and results: Baseline `uv run --python 3.12 --extra dev pytest -q` passed 9 tests in 0.18s. RED focused enum test failed with missing `ROLL` and `ESCALATE`. GREEN focused enum test passed 1 test in 0.08s. Full verification passed 9 tests in 0.08s; staged diff check exited 0.
+- Interfaces/contracts changed: `DecisionAction` now contains exactly `EXPEDITE`, `REQUEST_RTA`, `ROLL`, and `ESCALATE`; the approved change is recorded append-only in `DECISIONS.md`. No behavior for `ROLL` or `ESCALATE` was implemented.
+- Deliberate deferrals: Task 2 was not started. Task 3 and all frontend, solver, carrier negotiation, LLM, OR-Tools, uncertainty, and DG work remain deferred.
+- Blockers: `docs/specs/psa-code-sprint-final-plan.md` still contains only the owner-copy placeholder. Repository and history search found no actual approved Final Plan text, so the mandatory source-of-truth gate cannot pass safely.
+- Recommended next step: The project owner should copy the actual approved Final Plan into `docs/specs/psa-code-sprint-final-plan.md`; then rerun the Task 2 session from HEAD `e26e8396b0b29a005a8a86cef58311cf515b4be9` (or its coordination-log descendant).

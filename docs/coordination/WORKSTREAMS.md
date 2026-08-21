@@ -5,7 +5,7 @@ This file is maintained only by the lead/integration workflow. Individual agents
 | Workstream | Owner log | Branch | Base | Status | Scope |
 | --- | --- | --- | --- | --- | --- |
 | Task 1: foundation and contracts | `win-codex.md` | `main` | unborn branch | Complete; pending contract approval | Result `0271bb7c24f2d97af7bdf86628c55df3a5a9f07c`; plan hygiene, coordination baseline, project metadata, frozen domain contracts, and contract tests |
-| Task 2: state and persistence | Unassigned | — | — | Blocked pending approval | Do not begin until Task 1 contracts are approved |
+| Task 2: state and persistence | `win-codex.md` | `main` | `e26e8396b0b29a005a8a86cef58311cf515b4be9` | Blocked: canonical spec is a placeholder | Do not begin until the owner copies the actual approved Final Plan into the canonical spec file |
 
 ## Coordination rules
 
