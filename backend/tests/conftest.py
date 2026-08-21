@@ -3,6 +3,8 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy.engine import Engine
 from sqlmodel import Session, SQLModel, create_engine
 from sqlmodel.pool import StaticPool
 
@@ -26,6 +28,34 @@ def test_engine():
 def session(test_engine) -> Iterator[Session]:
     with Session(test_engine) as database_session:
         yield database_session
+
+
+@pytest.fixture
+def api_engine() -> Iterator[Engine]:
+    database_engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    yield database_engine
+    database_engine.dispose()
+
+
+@pytest.fixture
+def client(api_engine: Engine) -> Iterator[TestClient]:
+    from backend.app.main import create_app
+    from backend.app.storage.database import get_session
+
+    application = create_app(database_engine=api_engine)
+
+    def override_get_session() -> Iterator[Session]:
+        with Session(api_engine) as database_session:
+            yield database_session
+
+    application.dependency_overrides[get_session] = override_get_session
+    with TestClient(application) as test_client:
+        yield test_client
+    application.dependency_overrides.clear()
 
 
 @pytest.fixture
