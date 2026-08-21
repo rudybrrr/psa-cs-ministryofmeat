@@ -58,3 +58,31 @@ Only the Windows Codex agent edits this file.
 - Deliberate deferrals: Task 2 was not started. Task 3 and all frontend, solver, carrier negotiation, LLM, OR-Tools, uncertainty, and DG work remain deferred.
 - Blockers: `docs/specs/psa-code-sprint-final-plan.md` still contains only the owner-copy placeholder. Repository and history search found no actual approved Final Plan text, so the mandatory source-of-truth gate cannot pass safely.
 - Recommended next step: The project owner should copy the actual approved Final Plan into `docs/specs/psa-code-sprint-final-plan.md`; then rerun the Task 2 session from HEAD `e26e8396b0b29a005a8a86cef58311cf515b4be9` (or its coordination-log descendant).
+
+## 2026-08-21T23:27:59.7135540+08:00 — Task 2 resumed session start
+
+- Timestamp: `2026-08-21T23:27:59.7135540+08:00`
+- Task: Execute Task 2 only — explicit incident state machine, SQLModel/SQLite repositories, and append-only audit service/tests.
+- Branch: `main`
+- Base SHA: `0373384567b5ca32ea41ed007987bf0b75a9d2de`
+- Resulting HEAD SHA: Not yet produced at session start.
+- Files changed: Session-start coordination record only.
+- Tests run and results: Not yet run at session start.
+- Interfaces/contracts changed: None planned; Task 1 domain contracts are consumed unchanged.
+- Deliberate deferrals: Task 3 and all frontend, synthetic recovery workflow, solver, carrier negotiation, LLM, OR-Tools, uncertainty, and DG behavior.
+- Blockers: None at session start; the populated canonical Final Plan and four-value `DecisionAction` contract were verified.
+- Recommended next step: Follow Task 2 RED → GREEN cycles, verify, commit, and stop before Task 3.
+
+## 2026-08-21T23:34:04.3177951+08:00 — Task 2 completed
+
+- Timestamp: `2026-08-21T23:34:04.3177951+08:00`
+- Task: Task 2 — explicit incident state machine, SQLModel/SQLite persistence, concrete repositories, and append-only audit service/tests.
+- Branch: `main`
+- Base SHA: `0373384567b5ca32ea41ed007987bf0b75a9d2de`
+- Resulting HEAD SHA: `2f868e8e48d7569ac0945bed8e25f13ea2944fef`
+- Files changed: `backend/app/audit/__init__.py`; `backend/app/audit/service.py`; `backend/app/orchestration/__init__.py`; `backend/app/orchestration/state_machine.py`; `backend/app/storage/__init__.py`; `backend/app/storage/database.py`; `backend/app/storage/repositories.py`; `backend/tests/conftest.py`; `backend/tests/test_audit.py`; `backend/tests/test_state_machine.py`; `docs/superpowers/plans/2026-08-21-transshipment-recovery.md`; `docs/coordination/WORKSTREAMS.md`; `docs/coordination/logs/win-codex.md`.
+- Tests run and results: Baseline full suite passed 9 tests in 0.19s. State RED failed during collection with missing `backend.app.orchestration`; state GREEN passed 7 tests in 0.09s. Persistence/audit RED failed during collection with missing `backend.app.audit`; persistence/audit GREEN passed 7 tests in 0.40s. Final focused Task 2 suite passed 14 tests in 0.07s; final full suite passed 23 tests in 0.08s; Python compile check exited 0; `git diff --check` and staged diff check exited 0.
+- Interfaces/contracts changed: Added `IncidentStateMachine.transition(Incident, IncidentState) -> Incident` and `InvalidIncidentTransition`; `IncidentRepository.create/get/update_state`; `DecisionRepository.add/list_for_incident`; `AuditRepository.append/list_for_incident`; `AuditService.record` with mandatory explicit `actor` and optional `actor_id`; SQLite table/session helpers. Task 1 domain contracts were not changed. Decision `supersedes` and `supersession_reason`, audit `actor` and `actor_id`, and timezone-aware UTC values round-trip through SQLite.
+- Deliberate deferrals: The state machine does not emit audit events itself; deterministic transition auditing is wired by the future Task 3 workflow and must use `AuditActor.SYSTEM`. Task 3 and all frontend, synthetic recovery workflow, solver, carrier negotiation, LLM, OR-Tools, uncertainty, and DG behavior remain deferred.
+- Blockers: None. `ALLOWED_TRANSITIONS` uses immutable `frozenset` values instead of mutable sets from the plan example, with identical allowed-transition behavior.
+- Recommended next step: Review Task 2 persistence interfaces and authorize Task 3 separately if accepted.

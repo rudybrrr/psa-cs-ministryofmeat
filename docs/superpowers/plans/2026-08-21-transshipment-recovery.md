@@ -395,7 +395,7 @@ Run: `uv run --python 3.12 --extra dev pytest backend/tests/test_state_machine.p
 
 Expected: all selected tests PASS.
 
-- [ ] **Step 9: Commit state and persistence**
+- [x] **Step 9: Commit state and persistence**
 
 ```powershell
 git add backend/app/orchestration backend/app/storage backend/app/audit backend/tests/conftest.py backend/tests/test_state_machine.py backend/tests/test_audit.py
