@@ -4,7 +4,7 @@ This file is maintained only by the lead/integration workflow. Individual agents
 
 | Workstream | Owner log | Branch | Base | Status | Scope |
 | --- | --- | --- | --- | --- | --- |
-| Task 1: foundation and contracts | `win-codex.md` | `main` | unborn branch | In progress | Plan hygiene, coordination baseline, project metadata, frozen domain contracts, and contract tests |
+| Task 1: foundation and contracts | `win-codex.md` | `main` | unborn branch | Complete; pending contract approval | Result `0271bb7c24f2d97af7bdf86628c55df3a5a9f07c`; plan hygiene, coordination baseline, project metadata, frozen domain contracts, and contract tests |
 | Task 2: state and persistence | Unassigned | — | — | Blocked pending approval | Do not begin until Task 1 contracts are approved |
 
 ## Coordination rules

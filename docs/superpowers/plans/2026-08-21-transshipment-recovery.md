@@ -226,7 +226,7 @@ Run: `uv run --python 3.12 --extra dev pytest backend/tests/test_domain_contract
 
 Expected: all domain contract tests PASS.
 
-- [ ] **Step 5: Commit the foundation**
+- [x] **Step 5: Commit the foundation**
 
 ```powershell
 git add .gitignore pyproject.toml docs/superpowers/plans/2026-08-21-transshipment-recovery.md docs/specs docs/coordination backend/app/__init__.py backend/app/domain backend/tests/__init__.py backend/tests/test_domain_contracts.py shared/fixtures/README.md
