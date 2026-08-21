@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.12, FastAPI, Pydantic v2, SQLModel, SQLite, pytest, HTTPX/TestClient, `pyproject.toml`.
 
-**Spec:** `docs/specs/psa-code-sprint-final-plan.md` — reserved for the project owner to copy in the approved “PSA Code Sprint 2.0: Final Plan.” Product direction and the four hard requirements in that document are frozen.
+**Spec:** `docs/specs/psa-code-sprint-final-plan.md` — the populated, approved “PSA Code Sprint 2.0: Final Plan.” Product direction and the four hard requirements in that document are frozen.
 
 ## Global Constraints
 
@@ -255,7 +255,7 @@ git commit -m "chore: establish recovery domain foundation"
 - Consumes: `Incident`, `Decision`, `AuditEvent`, `IncidentState`, and `AuditActor` from Task 1.
 - Produces: `IncidentStateMachine.transition(incident, target) -> Incident`; `IncidentRepository.create/get/update_state`; `DecisionRepository.add/list_for_incident`; `AuditRepository.append/list_for_incident`; `AuditService.record(...) -> AuditEvent`; `get_session() -> Iterator[Session]`.
 
-- [ ] **Step 1: Add failing state transition tests**
+- [x] **Step 1: Add failing state transition tests**
 
 Create an incident in `INCIDENT_RECEIVED`, transition it through the slice, and assert the exact sequence:
 
@@ -283,13 +283,13 @@ def test_state_machine_rejects_skipping_recovery_analysis(incident):
         IncidentStateMachine().transition(incident, IncidentState.RESOLVED)
 ```
 
-- [ ] **Step 2: Run the state-machine tests and confirm the import failure**
+- [x] **Step 2: Run the state-machine tests and confirm the import failure**
 
 Run: `uv run --python 3.12 --extra dev pytest backend/tests/test_state_machine.py -q`
 
 Expected: FAIL because the orchestration module does not exist.
 
-- [ ] **Step 3: Implement the explicit allowed-transition map**
+- [x] **Step 3: Implement the explicit allowed-transition map**
 
 Use exactly this behavior:
 
@@ -320,13 +320,13 @@ class IncidentStateMachine:
         return incident.model_copy(update={"state": target})
 ```
 
-- [ ] **Step 4: Run the state-machine tests and confirm they pass**
+- [x] **Step 4: Run the state-machine tests and confirm they pass**
 
 Run: `uv run --python 3.12 --extra dev pytest backend/tests/test_state_machine.py -q`
 
 Expected: all state-machine tests PASS.
 
-- [ ] **Step 5: Add failing persistence and append-only audit tests**
+- [x] **Step 5: Add failing persistence and append-only audit tests**
 
 Configure `backend/tests/conftest.py` to create a new `sqlite://` engine with `check_same_thread=False` and `StaticPool`, call `SQLModel.metadata.create_all(engine)`, and yield a fresh `Session` per test.
 
@@ -362,13 +362,13 @@ def test_audit_events_are_append_only_and_ordered(session, incident):
 
 Add repository tests that round-trip an incident, update only its current state through `update_state`, persist a decision, and list decisions by incident.
 
-- [ ] **Step 6: Run the persistence tests and confirm the expected import failure**
+- [x] **Step 6: Run the persistence tests and confirm the expected import failure**
 
 Run: `uv run --python 3.12 --extra dev pytest backend/tests/test_audit.py -q`
 
 Expected: FAIL because storage and audit modules do not exist.
 
-- [ ] **Step 7: Implement the concrete SQLModel tables and repositories**
+- [x] **Step 7: Implement the concrete SQLModel tables and repositories**
 
 Create only three table classes: `IncidentRecord`, `DecisionRecord`, and `AuditEventRecord`. Store UUIDs as strings and UTC datetimes through helpers:
 
@@ -389,7 +389,7 @@ def from_utc_text(value: str) -> datetime:
 
 `AuditService.record` constructs a frozen `AuditEvent` and immediately appends it through `AuditRepository`.
 
-- [ ] **Step 8: Run state, repository, and audit tests**
+- [x] **Step 8: Run state, repository, and audit tests**
 
 Run: `uv run --python 3.12 --extra dev pytest backend/tests/test_state_machine.py backend/tests/test_audit.py -q`
 
