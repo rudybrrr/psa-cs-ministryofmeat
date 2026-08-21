@@ -7,3 +7,5 @@ __pycache__/
 .coverage
 htmlcov/
 backend/transshipment.db
+web/node_modules/
+web/dist/
