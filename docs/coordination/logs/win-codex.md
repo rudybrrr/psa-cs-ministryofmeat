@@ -143,3 +143,17 @@ Only the Windows Codex agent edits this file.
 - Deliberate deferrals: No reset route was needed. Task 5 was not implemented as a task; only its specifically requested lifespan/OpenAPI smoke command was run. Frontend, 24-container scenario, OR-Tools, uncertainty/sampling, carrier/RTA behavior, DG analysis, LLM/agent behavior, auth, deployment, WebSockets, and workers remain deferred.
 - Blockers: None. The installed FastAPI/Starlette TestClient reports a deprecation warning for its current httpx integration, but all requested behavior and verification pass.
 - Recommended next step: Review and approve the Task 4 API surface; authorize any next task separately.
+
+## 2026-08-22T15:33:01.4915218+08:00 — Phase 2 Task 1 completed
+
+- Timestamp: `2026-08-22T15:33:01.4915218+08:00`
+- Task: Phase 2 Task 1 — additive scarce-capacity domain contracts only.
+- Branch: `main`
+- Base SHA: `ecb56c8993de2f17f283f26cf5890a1774903ae7`
+- Resulting HEAD SHA: `55a9d53e0dc85721bd32f846d6867f48e89a95fd` (Task 1 implementation commit).
+- Files changed: `backend/app/domain/scarcity.py`; `backend/tests/test_scarcity_contracts.py`; this authorized `docs/coordination/logs/win-codex.md` handoff entry.
+- Tests run and results: Baseline `uv run --python 3.12 --extra dev pytest -q` passed 40 tests in 0.30s. RED `uv run --python 3.12 --extra dev pytest backend/tests/test_scarcity_contracts.py -q` failed during collection with the expected `ModuleNotFoundError: No module named 'backend.app.domain.scarcity'`. GREEN focused command passed 57 tests in 0.05s. Final full suite passed 97 tests in 0.26s. `git diff --check`, staged diff check, and the frozen Phase 1 file diff check exited 0. TestClient runs retained the existing single Starlette/httpx deprecation warning.
+- Interfaces/contracts changed: Added additive `CargoKind`, `AllocationStrategy`, `ServiceWindow`, `ContainerRecoveryProfile`, `HandlingGroupLimit`, `ExpediteCapacityPlan`, `CanonicalIncidentFixture`, `ScenarioAssumptions`, `NamedFactor`, `ScenarioWorld`, `ScenarioSet`, `AllocationPlan`, `ServiceOutcome`, `StrategyEvaluation`, `ScarcityEvaluationReport`, `EvaluationSeedManifest`, `HoldoutAllocationComparison`, and `ScarcityBenchmarkReport`. `ServiceWindow` enforces the synthetic PTA-plus-35-minute boundary. All Pydantic contracts inherit the existing frozen, extra-forbidding base; collections are tuples; timestamp fields are timezone-aware; holdout deltas may be negative.
+- Deliberate deferrals: Phase 2 Task 2 and every later task; fixture loading; scenario generation; evaluation behavior; baseline allocation; OR-Tools/solver behavior; persistence; workflow; API; frontend; RTA/carrier behavior; DG semantic reasoning; and LLM integration.
+- Blockers: None. No frozen Phase 1 contract or enum changed, and no `DECISIONS.md` entry was required.
+- Recommended next step: Review and approve the additive Phase 2 contracts, then authorize Phase 2 Task 2 separately if accepted.
