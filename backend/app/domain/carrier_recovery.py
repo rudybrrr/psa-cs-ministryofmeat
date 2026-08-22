@@ -8,7 +8,7 @@ from uuid import UUID, uuid4
 from pydantic import AwareDatetime, Field, field_validator
 
 from backend.app.domain.enums import ApprovalStatus
-from backend.app.domain.models import Approval, AuditEvent, CarrierResponse, RTARequest, FrozenContract, utc_now
+from backend.app.domain.models import Approval, AuditEvent, CarrierResponse, Decision, RTARequest, FrozenContract, utc_now
 
 
 class CarrierRecoveryCaseState(StrEnum):
@@ -130,6 +130,7 @@ class CarrierRecoveryHistory(FrozenContract):
     carrier_responses: Sequence[CarrierResponse] = ()
     effective_timings: Sequence[EffectiveConnectionTiming] = ()
     decision_links: Sequence[CarrierRecoveryDecisionLink] = ()
+    decisions: Sequence[Decision] = ()
     results: Sequence[ContainerReconsiderationResult] = ()
     audit_events: Sequence[AuditEvent] = ()
 

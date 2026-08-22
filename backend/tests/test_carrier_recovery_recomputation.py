@@ -79,3 +79,23 @@ def test_timeout_recompute_keeps_fallback_roll_without_external_timing(session) 
     assert all(result.disposition.value == "STILL_ROLL" for result in history.results)
     assert all(result.replacement_decision_id is None for result in history.results)
     assert all(link.role != "PRESERVE_VIA_RTA" for link in history.decision_links)
+
+
+def test_history_is_case_scoped_ordered_and_includes_linked_decisions(session) -> None:
+    phase_two = build_scarce_capacity_workflow(session).run()
+    workflow = build_carrier_recovery_workflow(session)
+    case = workflow.prepare(prepare_command(phase_two.incident.id, "SYN-CONN-EC3"))
+    approve_and_send(workflow, case)
+    workflow.evaluate_timeout(EvaluateTimeoutCommand(
+        case_id=case.id,
+        effective_at="2026-08-22T09:00:00Z",
+    ))
+    workflow.recompute(case.id)
+
+    history = workflow.history(case.id)
+
+    assert {decision.id for decision in history.decisions} == {
+        link.decision_id for link in history.decision_links
+    }
+    assert [event.id for event in history.audit_events] == list(dict.fromkeys(event.id for event in history.audit_events))
+    assert all(event.incident_id == phase_two.incident.id for event in history.audit_events)

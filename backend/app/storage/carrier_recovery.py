@@ -19,7 +19,7 @@ from backend.app.domain.carrier_recovery import (
 )
 from backend.app.domain.enums import ApprovalStatus, CarrierResponseType, RTARequestStatus
 from backend.app.domain.models import Approval, AuditEvent, CarrierResponse, RTARequest
-from backend.app.storage.repositories import AuditEventRecord, AuditRepository, from_utc_text, to_utc_text
+from backend.app.storage.repositories import AuditEventRecord, AuditRepository, DecisionRepository, from_utc_text, to_utc_text
 
 
 class CarrierRecoveryCaseRecord(SQLModel, table=True):
@@ -270,7 +270,9 @@ class CarrierRecoveryRepository:
         results = tuple(ContainerReconsiderationResult(id=UUID(record.id), case_id=UUID(record.case_id), container_id=record.container_id, disposition=record.disposition, prior_decision_id=UUID(record.prior_decision_id), replacement_decision_id=UUID(record.replacement_decision_id) if record.replacement_decision_id else None, preserved_world_count=record.preserved_world_count, world_count=record.world_count, hard_constraints_satisfied=record.hard_constraints_satisfied, created_at=from_utc_text(record.created_at_utc)) for record in result_records)
         link_records = self._session.exec(select(CarrierRecoveryDecisionLinkRecord).where(CarrierRecoveryDecisionLinkRecord.case_id == str(case_id))).all()
         decision_links = tuple(CarrierRecoveryDecisionLink(case_id=UUID(record.case_id), decision_id=UUID(record.decision_id), role=record.role, created_at=from_utc_text(record.created_at_utc)) for record in link_records)
-        return CarrierRecoveryHistory(case=self.get_case(case_id), request=request, request_context=context, bindings=bindings, approvals=approvals, carrier_responses=carrier_responses, effective_timings=effective_timings, decision_links=decision_links, results=results, audit_events=tuple(events))
+        linked_ids = {link.decision_id for link in decision_links}
+        decisions = tuple(decision for decision in DecisionRepository(self._session).list_for_incident(self.get_case(case_id).incident_id) if decision.id in linked_ids)
+        return CarrierRecoveryHistory(case=self.get_case(case_id), request=request, request_context=context, bindings=bindings, approvals=approvals, carrier_responses=carrier_responses, effective_timings=effective_timings, decision_links=decision_links, decisions=decisions, results=results, audit_events=tuple(events))
 
     @staticmethod
     def _case(record: CarrierRecoveryCaseRecord) -> CarrierRecoveryCase:
