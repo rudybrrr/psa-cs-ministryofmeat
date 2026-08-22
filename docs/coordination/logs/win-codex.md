@@ -171,3 +171,17 @@ Only the Windows Codex agent edits this file.
 - Deliberate deferrals: Phase 2 Task 3 and every later task; scenario generation; evaluation behavior; baseline allocation; OR-Tools/solver behavior; persistence; workflow; API; frontend; carrier/RTA behavior; DG semantic reasoning; and LLM integration. The frozen `ScheduleEvent` has no separate inbound-service-code field, so the approved `ASX-17` label is explicit in fixture documentation and synthetic event/call naming while the structured event retains the exact vessel-call ID and vessel name.
 - Blockers: None. `backend/app/domain/scarcity.py` and all frozen Phase 1 contracts/enums are unchanged. The fixture contains no beneficiary/outcome flag and no Pasir Panjang identifier.
 - Recommended next step: Review and approve the canonical fixture, then authorize Phase 2 Task 3 separately if accepted.
+
+## 2026-08-22T16:30:01.7298501+08:00 — Phase 2 Task 3 completed
+
+- Timestamp: `2026-08-22T16:30:01.7298501+08:00`
+- Task: Phase 2 Task 3 — correlated seeded scenario worlds for the canonical 24-container synthetic incident.
+- Branch: `main`
+- Base SHA: `c0aed6a509b00c0124245eaa3d31dd0a31c2e5f3`
+- Resulting HEAD SHA: `80c805cb1e7dd94788d521aa1befdc1991fcf6a1` (Task 3 implementation commit).
+- Files changed: `backend/app/services/scenarios.py`; `backend/tests/test_scenario_worlds.py`; `backend/tests/conftest.py`; this authorized `docs/coordination/logs/win-codex.md` handoff entry.
+- Tests run and results: Baseline `uv run --python 3.12 --extra dev pytest -q` passed 111 tests in 0.29s. RED `uv run --python 3.12 --extra dev pytest backend/tests/test_scenario_worlds.py -q` failed during collection with the expected missing `backend.app.services.scenarios` import. GREEN and final focused commands each passed 11 tests (final run 0.08s). Final full suite passed 122 tests in 0.39s. The focused correlation check passed and reported same-group correlation `0.974089` and cross-group correlation `0.705059`. `git diff --check`, staged diff check, and frozen fixture/contract diff checks exited 0. TestClient runs retained the existing single Starlette/httpx deprecation warning.
+- Interfaces/contracts changed: Added `SeededScenarioGenerator.generate(fixture, *, seed=20260822, world_count=50) -> ScenarioSet` and the `canonical_scenarios` pytest fixture. No domain contract or enum changed. Generation uses a local `random.Random(seed)`, sorted handling-group/container keys, 25 Gaussian base worlds at synthetic standard deviations 12/7/2 minutes, and 25 exact antithetic mirrors with stable indices.
+- Deliberate deferrals: Phase 2 Task 4 and every later task; ready-time arithmetic; allocation evaluation; baseline allocation; OR-Tools/solver behavior; Pareto filtering; persistence; workflow; API additions; frontend; carrier/RTA behavior; DG semantic reasoning; and LLM integration.
+- Blockers: None. The canonical JSON fixture, Phase 2 scarcity contracts, and frozen Phase 1 contracts/enums are unchanged. Scenario generation imports no OR-Tools and does not touch global random state.
+- Recommended next step: Review and approve the correlated-world generator, then authorize Phase 2 Task 4 separately if accepted.
