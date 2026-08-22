@@ -306,6 +306,16 @@ class CarrierRecoveryWorkflow:
         self,
         command: SimulateCarrierResponseCommand,
     ) -> CarrierSimulationResult:
+        receipt = self._cases.simulation_receipt(command.case_id)
+        if receipt is not None:
+            effective_at, carrier_response_id, no_response_emitted = receipt
+            if effective_at == command.effective_at:
+                return CarrierSimulationResult(
+                    case_id=command.case_id,
+                    carrier_response_id=carrier_response_id,
+                    no_response_emitted=no_response_emitted,
+                )
+            raise CarrierRecoveryConflict("contradictory carrier simulation retry")
         history = self._cases.history(command.case_id)
         case, request, context = history.case, history.request, history.request_context
         if (
@@ -320,10 +330,11 @@ class CarrierRecoveryWorkflow:
             raise CarrierRecoveryConflict("carrier simulation is not valid for this request state or deadline")
         response = self._simulator.emit(request, command.effective_at)
         if response is None:
-            return CarrierSimulationResult(
-                case_id=case.id,
-                no_response_emitted=True,
-            )
+            with self._cases.transaction():
+                self._cases.add_simulation_receipt(
+                    case.id, command.effective_at, None, True
+                )
+            return CarrierSimulationResult(case_id=case.id, no_response_emitted=True)
         now = command.effective_at
         closed_request = request.model_copy(update={"status": RTARequestStatus.CLOSED})
         closed_context = context.model_copy(update={"closed_at": now})
@@ -347,6 +358,9 @@ class CarrierRecoveryWorkflow:
             effective_timing = None
             target_case = case.model_copy(update={"state": CarrierRecoveryCaseState.AWAITING_COUNTER_APPROVAL, "updated_at": now})
         with self._cases.transaction():
+            self._cases.add_simulation_receipt(
+                case.id, command.effective_at, response.id, False
+            )
             if proposal is not None:
                 self._decisions.add_many_uncommitted((proposal,))
             self._cases.add_carrier_response(response)

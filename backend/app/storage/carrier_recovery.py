@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from datetime import datetime
 from typing import Iterator
 from uuid import UUID
 
@@ -85,6 +86,14 @@ class CarrierResponseRecord(SQLModel, table=True):
     counter_eta_pta_utc: str | None = None
     message: str | None = None
     received_at_utc: str
+
+
+class CarrierSimulationReceiptRecord(SQLModel, table=True):
+    __tablename__ = "carrier_simulation_receipts"
+    case_id: str = Field(primary_key=True)
+    effective_at_utc: str
+    carrier_response_id: str | None = None
+    no_response_emitted: bool
 
 
 class EffectiveConnectionTimingRecord(SQLModel, table=True):
@@ -238,6 +247,25 @@ class CarrierRecoveryRepository:
     def add_carrier_response(self, response: CarrierResponse) -> CarrierResponse:
         self._persist(CarrierResponseRecord(request_id=str(response.request_id), id=str(response.id), carrier_id=response.carrier_id, response=response.response.value, counter_eta_pta_utc=to_utc_text(response.counter_eta_pta) if response.counter_eta_pta else None, message=response.message, received_at_utc=to_utc_text(response.received_at)))
         return response
+
+    def simulation_receipt(self, case_id: UUID) -> tuple[datetime, UUID | None, bool] | None:
+        record = self._session.get(CarrierSimulationReceiptRecord, str(case_id))
+        if record is None:
+            return None
+        return (
+            from_utc_text(record.effective_at_utc),
+            UUID(record.carrier_response_id) if record.carrier_response_id else None,
+            record.no_response_emitted,
+        )
+
+    def add_simulation_receipt(
+        self, case_id: UUID, effective_at: datetime, carrier_response_id: UUID | None, no_response_emitted: bool
+    ) -> None:
+        self._persist(CarrierSimulationReceiptRecord(
+            case_id=str(case_id), effective_at_utc=to_utc_text(effective_at),
+            carrier_response_id=str(carrier_response_id) if carrier_response_id else None,
+            no_response_emitted=no_response_emitted,
+        ))
 
     def responses_for_request(self, request_id: UUID) -> tuple[CarrierResponse, ...]:
         records = self._session.exec(select(CarrierResponseRecord).where(CarrierResponseRecord.request_id == str(request_id))).all()

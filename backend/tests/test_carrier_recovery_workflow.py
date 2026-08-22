@@ -257,13 +257,16 @@ def test_silent_plan_returns_no_response_and_persists_no_carrier_event(
     case = workflow.prepare(command(phase_two.incident.id, "SYN-CONN-EC3"))
     approve_and_send(workflow, case)
 
-    result = workflow.simulate_response(SimulateCarrierResponseCommand(
+    command_at = SimulateCarrierResponseCommand(
         case_id=case.id,
         effective_at="2026-08-22T08:30:00Z",
-    ))
+    )
+    result = workflow.simulate_response(command_at)
+    retry = workflow.simulate_response(command_at)
     history = workflow.history(case.id)
 
     assert result.no_response_emitted is True
+    assert retry == result
     assert history.carrier_responses == ()
     assert AuditActor.CARRIER not in {event.actor for event in history.audit_events}
 
@@ -308,6 +311,10 @@ def test_accept_creates_effective_requested_timing_without_second_approval(
 
     assert result.carrier_response_id is not None
     assert history.carrier_responses[0].response.value == "ACCEPT"
+    assert workflow.simulate_response(SimulateCarrierResponseCommand(
+        case_id=case.id,
+        effective_at="2026-08-22T08:30:00Z",
+    )) == result
     assert history.effective_timings[0].effective_eta_pta == history.request.requested_eta_pta
     assert history.case.state.value in {"COMPLETED", "ESCALATED"}
 
