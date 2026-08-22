@@ -300,4 +300,5 @@ def test_decision_actions_match_the_frozen_recovery_vocabulary() -> None:
         "REQUEST_RTA",
         "ROLL",
         "ESCALATE",
+        "PRESERVE_VIA_RTA",
     }

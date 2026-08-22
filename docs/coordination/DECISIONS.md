@@ -43,3 +43,9 @@ This document is append-only. Add entries only for approved or proposed changes 
 - Status: Approved
 - Decision: The canonical 18-preserved target is decomposed into 5 preserved without intervention, 8 preserved through scarce yard expedition, and 5 intended to be preserved through the later carrier/RTA recovery phase. The remaining target outcomes are 5 rolled and 1 escalated.
 - Consequence: Phase 2 proves only the 13-beneficiary/eight-slot scarce-capacity portion. The later RTA phase must empirically establish its intended five recoveries, and the implementation must report observed evidence rather than hard-code an 18/5/1 result when evidence differs.
+
+## 2026-08-22 — Carrier recovery preservation decision action
+
+- Status: Approved
+- Decision: Add `DecisionAction.PRESERVE_VIA_RTA` as the sole frozen Phase 1/2 contract mutation for Phase 3.
+- Consequence: `PRESERVE_VIA_RTA` is container-level recovery semantics only after valid carrier timing and p90 evidence. `REQUEST_RTA` remains connection-level request/authorization semantics and is never container-level.

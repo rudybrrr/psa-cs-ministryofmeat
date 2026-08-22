@@ -15,6 +15,7 @@ class DecisionAction(StrEnum):
     REQUEST_RTA = "REQUEST_RTA"
     ROLL = "ROLL"
     ESCALATE = "ESCALATE"
+    PRESERVE_VIA_RTA = "PRESERVE_VIA_RTA"
 
 
 class DecisionStatus(StrEnum):
