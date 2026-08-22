@@ -6,7 +6,6 @@ from typing import Iterator
 from uuid import UUID
 
 from sqlalchemy import Column, JSON, UniqueConstraint
-from sqlalchemy.exc import IntegrityError
 from sqlmodel import Field, Session, SQLModel, select
 
 from backend.app.domain.carrier_recovery import (
@@ -230,19 +229,6 @@ class CarrierRecoveryRepository:
         self._persist(ApprovalRecord(id=str(approval.id), decision_id=str(approval.decision_id), operator_id=approval.operator_id, status=approval.status.value, reason=approval.reason, created_at_utc=to_utc_text(approval.created_at)))
         return approval
 
-    def try_add_approval(self, approval: Approval) -> bool:
-        """Insert one approval without letting a unique-key race abort the unit of work."""
-        try:
-            with self._session.begin_nested():
-                self._session.add(ApprovalRecord(
-                    id=str(approval.id), decision_id=str(approval.decision_id),
-                    operator_id=approval.operator_id, status=approval.status.value,
-                    reason=approval.reason, created_at_utc=to_utc_text(approval.created_at),
-                ))
-                self._session.flush()
-            return True
-        except IntegrityError:
-            return False
 
     def get_approval_for_proposal(self, proposal_decision_id: UUID) -> Approval | None:
         record = self._session.exec(select(ApprovalRecord).where(ApprovalRecord.decision_id == str(proposal_decision_id))).one_or_none()
