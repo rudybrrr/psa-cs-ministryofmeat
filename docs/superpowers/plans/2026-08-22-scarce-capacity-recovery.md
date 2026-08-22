@@ -26,6 +26,8 @@
 - Factor distributions and all fixture values are synthetic experimental assumptions, not PSA-calibrated forecasts.
 - Persist timestamps as timezone-aware UTC. Document Singapore display times alongside UTC fixture values.
 - The primary optimization objective is only the integer total of preserved connections across the supplied development decision worlds. Cargo priority, service preference, and downstream consequence never appear as arbitrary weights.
+- Keep the headline `13 p50 expedition candidates / 8 available slots`, but use precise implementation terms: `p50 beneficiaries` are the deterministic baseline pool, while `stochastic candidates` are structurally eligible containers with positive incremental preservation across the exact supplied `ScenarioSet`. The 13 p50 beneficiaries are not an exhaustive claim about which containers can benefit under uncertainty.
+- `P50GreedyAllocator` consumes only `p50_beneficiary_ids`. `ScenarioAwareAllocator` consumes only `stochastic_candidate_ids`; it must not gate stochastic optimization through the deterministic median.
 - Equipment, handling-group, total-slot, reefer-continuity, and structural DG eligibility are hard constraints. No allocation exceeds eight critical-overlap slots.
 - Deterministic orchestration and synthetic retrieval use `AuditActor.SYSTEM`; CP-SAT uses `AuditActor.SOLVER`; baseline, evaluation, Pareto filtering, dominance, and deterministic decision creation use `AuditActor.POLICY`. `AuditActor.AGENT` remains unused.
 - No callable or route may expose `hold_feeder`, `change_carrier_schedule`, `override_dg_rule`, or `set_yard_capacity`.
@@ -83,7 +85,7 @@
 | `SYN-CNT-023` | EC3 | REEFER | SYN-C-EQ3 | 55 | false | true | expedition cannot preserve |
 | `SYN-CNT-024` | EC3 | DRY | SYN-A-EQ1 | 60 | true | true | expedition cannot preserve |
 
-This yields service counts 9/8/7, cargo counts DRY/REEFER/DG = 14/6/4, 13 beneficiaries = 7 SF1 + 6 JV2, five needing no expedition, and six not preserved by expedition alone. Later RTA and DG-semantic phases may change downstream outcomes; this plan does not claim the Final Plan's ultimate 18/5/1 outcome.
+This yields service counts 9/8/7, cargo counts DRY/REEFER/DG = 14/6/4, 13 p50 beneficiaries = 7 SF1 + 6 JV2, five needing no expedition at p50, and six not preserved by expedition alone at p50. The canonical UI/headline remains `13 p50 expedition candidates / 8 available slots`. These p50 classifications define the naive baseline and do not restrict the stochastic candidate pool: a structurally eligible container outside the 13 may still have positive incremental preservation in the supplied uncertainty worlds. Later RTA and DG-semantic phases may change downstream outcomes; this plan does not claim the Final Plan's ultimate 18/5/1 outcome.
 
 ## File Map
 
@@ -92,7 +94,7 @@ This yields service counts 9/8/7, cargo counts DRY/REEFER/DG = 14/6/4, 13 benefi
 - `shared/fixtures/canonical-24-container.json`, `shared/fixtures/scarcity-evaluation-seeds.json`, `shared/fixtures/README.md`: Exact synthetic fixture, assumptions, and frozen final-benchmark seed manifest.
 - `backend/app/services/canonical_incident.py`: Read-only fixture loader.
 - `backend/app/services/scenarios.py`: Correlated seeded world generation; no OR-Tools import.
-- `backend/app/evaluation/__init__.py`, `backend/app/evaluation/scarcity.py`, `backend/app/evaluation/benchmark.py`: Evaluation package plus ready arithmetic, beneficiaries, constraints, outcomes, metrics, comparison, holdout benchmarking, and reproducibility keys.
+- `backend/app/evaluation/__init__.py`, `backend/app/evaluation/scarcity.py`, `backend/app/evaluation/benchmark.py`: Evaluation package plus ready arithmetic, p50 beneficiaries, stochastic candidates, constraints, outcomes, metrics, comparison, holdout benchmarking, and reproducibility keys.
 - `backend/app/policies/baseline.py`: Deterministic p50 greedy baseline.
 - `backend/app/optimization/__init__.py`, `backend/app/optimization/scarcity.py`: Optimization package plus CP-SAT allocation and optimal-set enumeration only.
 - `backend/app/policies/allocation_dominance.py`: Pareto filtering and deterministic dominance.
@@ -402,7 +404,7 @@ class SyntheticCanonicalIncidentService:
 
 Run: `uv run --python 3.12 --extra dev pytest backend/tests/test_canonical_incident.py -q`
 
-Expected: PASS with 24 containers, 13 beneficiaries, and eight slots.
+Expected: PASS with 24 containers, 13 p50 beneficiaries, and eight slots.
 
 Run: `uv run --python 3.12 --extra dev pytest -q`
 
@@ -529,7 +531,7 @@ git commit -m "feat: generate correlated recovery scenarios"
 
 **Interfaces:**
 - Consumes: Canonical fixture and one pre-generated `ScenarioSet`.
-- Produces: `ScarcityEvaluator.ready_at`, `preserves_connection`, `p50_beneficiary_ids`, `incremental_preservation_count`, `constraint_diagnostics`, `evaluate -> StrategyEvaluation`, and `semantic_reproducibility_key -> str`.
+- Produces: `ScarcityEvaluator.ready_at`, `preserves_connection`, `p50_beneficiary_ids`, `incremental_preservation_count`, `stochastic_candidate_ids`, `constraint_diagnostics`, `evaluate -> StrategyEvaluation`, and `semantic_reproducibility_key -> str`.
 
 - [ ] **Step 1: Write failing arithmetic, safety, and metric tests**
 
@@ -558,9 +560,38 @@ def test_evaluation_reports_required_metrics(canonical_fixture, canonical_scenar
     assert result.capacity_violations == 0
     assert result.unsafe_allocations == 0
     assert result.runtime_ms == 1.25
+
+
+def test_stochastic_candidates_require_eligibility_and_positive_increment(
+    canonical_fixture, canonical_scenarios
+):
+    evaluator = ScarcityEvaluator()
+    candidates = evaluator.stochastic_candidate_ids(
+        canonical_fixture, canonical_scenarios
+    )
+    profiles = {
+        profile.container.id: profile for profile in canonical_fixture.profiles
+    }
+    assert all(
+        evaluator.incremental_preservation_count(
+            canonical_fixture, canonical_scenarios, container_id
+        ) > 0
+        for container_id in candidates
+    )
+    assert all(
+        (
+            profiles[container_id].cargo_kind is not CargoKind.REEFER
+            or profiles[container_id].reefer_continuity_available
+        )
+        and (
+            profiles[container_id].cargo_kind is not CargoKind.DG
+            or profiles[container_id].dg_structurally_cleared
+        )
+        for container_id in candidates
+    )
 ```
 
-Add negative tests for nine allocations, each group limit, reefer/DG limits, `SYN-CNT-022` without clearance, and `SYN-CNT-023` without continuity. Assert `p50_beneficiary_ids` returns the exact 13 IDs in the fixture table. Verify nearest-rank p10 and ordered SF1/JV2/EC3 totals.
+Add negative tests for nine allocations, each group limit, reefer/DG limits, `SYN-CNT-022` without clearance, and `SYN-CNT-023` without continuity. Assert `p50_beneficiary_ids` returns the exact 13 IDs in the fixture table. Assert `stochastic_candidate_ids` is deterministically ordered, excludes every structurally ineligible profile even if its arithmetic coefficient would be positive, and includes exactly the structurally eligible profiles whose incremental count is positive over the supplied worlds. Verify nearest-rank p10 and ordered SF1/JV2/EC3 totals. Do not assert that the stochastic candidate set equals or is a subset of the 13 p50 beneficiaries.
 
 - [ ] **Step 2: Run RED**
 
@@ -582,7 +613,7 @@ if expedited:
     ready_at -= timedelta(minutes=profile.expedite_minutes_saved)
 ```
 
-`incremental_preservation_count` is expedited successes minus normal successes across the supplied worlds. `p50_beneficiary_ids` uses median normal/expedited readiness from those worlds plus structural eligibility. Define rollovers as 24 minus preserved connections in each experimental world without creating `ROLL` decisions.
+`incremental_preservation_count(fixture, scenarios, container_id)` is the number of supplied worlds preserving the connection with expedition minus the number preserving it without expedition. `p50_beneficiary_ids` uses median normal/expedited readiness from those worlds plus structural eligibility. `stochastic_candidate_ids` independently filters all fixture profiles to structural eligibility plus `incremental_preservation_count(...) > 0`; it does not call or intersect `p50_beneficiary_ids`. A reefer requires continuity and a DG container requires structural clearance; all other cargo is structurally eligible for this Phase 2 calculation. Return stochastic candidate IDs in deterministic container-ID order. Define rollovers as 24 minus preserved connections in each experimental world without creating `ROLL` decisions.
 
 The CP-SAT objective later uses `constant normal-success total + sum(incremental_count[id] * allocated[id])`. Because the normal-success total is constant across allocations, maximizing the integer incremental term is exactly equivalent to maximizing total preserved connections; it is not a proxy score.
 
@@ -613,7 +644,7 @@ git commit -m "feat: evaluate recovery allocations across shared worlds"
 
 **Interfaces:**
 - Consumes: Fixture, `ScenarioSet`, and `ScarcityEvaluator`.
-- Produces: `P50GreedyAllocator.allocate(fixture, scenarios) -> AllocationPlan`.
+- Produces: `P50GreedyAllocator.allocate(fixture, scenarios) -> AllocationPlan`, using only `ScarcityEvaluator.p50_beneficiary_ids` as its candidate pool.
 
 - [ ] **Step 1: Write failing baseline tests**
 
@@ -642,7 +673,7 @@ def test_baseline_is_reproducible(canonical_fixture, canonical_scenarios):
     )
 ```
 
-Pin naive order to `(service.ready_boundary, container.id)`. Verify the allocator skips a beneficiary if adding it breaks a hard constraint and never reads per-world expected-preservation coefficients.
+Pin naive order to `(service.ready_boundary, container.id)`. Verify the allocator skips a p50 beneficiary if adding it breaks a hard constraint, never calls `stochastic_candidate_ids`, and never reads per-world expected-preservation coefficients. The naive baseline semantics remain exactly 13 p50 beneficiaries greedily competing for eight slots.
 
 - [ ] **Step 2: Run RED**
 
@@ -666,7 +697,7 @@ return AllocationPlan(
 )
 ```
 
-Do not add probabilities, cargo weights, service weights, or CP-SAT.
+Build `beneficiary_profiles` only from `evaluator.p50_beneficiary_ids(fixture, scenarios)`. Do not substitute or union `stochastic_candidate_ids`. Do not add probabilities, cargo weights, service weights, or CP-SAT.
 
 - [ ] **Step 4: Run GREEN and full verification**
 
@@ -695,7 +726,7 @@ git commit -m "feat: add p50 greedy recovery baseline"
 - Create: `backend/tests/test_scarcity_optimizer.py`
 
 **Interfaces:**
-- Consumes: 13 p50 beneficiary IDs, precomputed integer incremental-preservation counts, and hard-capacity facts.
+- Consumes: `ScarcityEvaluator.stochastic_candidate_ids(fixture, scenarios)`, precomputed positive integer incremental-preservation counts for those IDs, and hard-capacity facts. The candidate pool is not restricted to the 13 p50 beneficiaries.
 - Produces: `ScenarioAwareAllocator.solve(fixture, scenarios) -> tuple[AllocationPlan, ...]` and `ScarcityOptimizationError`.
 
 - [ ] **Step 1: Write failing solver tests before adding production behavior**
@@ -710,6 +741,15 @@ def test_cp_sat_maximises_expected_preserved_connections(hand_checkable_case):
     assert [plan.allocated_container_ids for plan in plans] == [
         ("SYN-OPT-001", "SYN-OPT-002")
     ]
+    evaluator = ScarcityEvaluator()
+    assert sum(
+        evaluator.incremental_preservation_count(
+            hand_checkable_case.fixture,
+            hand_checkable_case.scenarios,
+            container_id,
+        )
+        for container_id in plans[0].allocated_container_ids
+    ) == 70
 
 
 def test_canonical_plans_are_safe_and_reproducible(
@@ -719,12 +759,40 @@ def test_canonical_plans_are_safe_and_reproducible(
     evaluator = ScarcityEvaluator()
     first = allocator.solve(canonical_fixture, canonical_scenarios)
     second = allocator.solve(canonical_fixture, canonical_scenarios)
+    candidate_ids = set(
+        evaluator.stochastic_candidate_ids(canonical_fixture, canonical_scenarios)
+    )
+    profiles = {
+        profile.container.id: profile for profile in canonical_fixture.profiles
+    }
     assert first == second
     assert first
     assert all(len(plan.allocated_container_ids) <= 8 for plan in first)
     assert all(
-        set(plan.allocated_container_ids)
-        <= set(evaluator.p50_beneficiary_ids(canonical_fixture, canonical_scenarios))
+        set(plan.allocated_container_ids) <= candidate_ids
+        for plan in first
+    )
+    assert all(
+        all(
+            evaluator.incremental_preservation_count(
+                canonical_fixture, canonical_scenarios, container_id
+            ) > 0
+            for container_id in plan.allocated_container_ids
+        )
+        for plan in first
+    )
+    assert all(
+        all(
+            (
+                profiles[container_id].cargo_kind is not CargoKind.REEFER
+                or profiles[container_id].reefer_continuity_available
+            )
+            and (
+                profiles[container_id].cargo_kind is not CargoKind.DG
+                or profiles[container_id].dg_structurally_cleared
+            )
+            for container_id in plan.allocated_container_ids
+        )
         for plan in first
     )
     assert all(
@@ -741,9 +809,26 @@ def test_canonical_plans_are_safe_and_reproducible(
         for plan in first
     }
     assert len(objective_values) == 1
+
+
+def test_non_p50_tail_candidate_is_legally_considered(non_p50_tail_case):
+    evaluator = ScarcityEvaluator()
+    fixture = non_p50_tail_case.fixture
+    scenarios = non_p50_tail_case.scenarios
+    assert evaluator.p50_beneficiary_ids(fixture, scenarios) == ()
+    assert evaluator.stochastic_candidate_ids(fixture, scenarios) == (
+        "SYN-TAIL-001",
+    )
+    assert evaluator.incremental_preservation_count(
+        fixture, scenarios, "SYN-TAIL-001"
+    ) == 1
+    plans = ScenarioAwareAllocator().solve(fixture, scenarios)
+    assert tuple(plan.allocated_container_ids for plan in plans) == (
+        ("SYN-TAIL-001",),
+    )
 ```
 
-The four-container fixture has a unique optimum, so its exact allocation assertion is meaningful. Add tests for total/group/reefer/DG limits, structural ineligibility, `OPTIMAL` status, and a generator spy that raises if the optimizer tries to sample worlds. Add a separate tied-optima fixture that asserts the optimal objective value, both valid tied allocations, and every constraint invariant; do not introduce a business weight or secondary tie-break merely to choose one.
+The four-container fixture has a unique optimum of `40 + 30 = 70`, so its exact allocation and objective assertions are meaningful. The purpose-built `non_p50_tail_case` has one structurally eligible container whose base readiness is before the boundary at p50, one tail-delay world in which only expedition preserves it, its antithetic mirror, and capacity one; this proves legal stochastic consideration without forcing the canonical optimum to contain a non-p50 ID. Add tests for total/group/reefer/DG limits, structural ineligibility, positive incremental coefficients, `OPTIMAL` status, and a generator spy that raises if the optimizer tries to sample worlds. Add a separate tied-optima fixture that asserts the optimal objective value, both valid tied allocations, and every constraint invariant; do not introduce a business weight or secondary tie-break merely to choose one.
 
 - [ ] **Step 2: Run RED**
 
@@ -764,7 +849,7 @@ Expected: lock resolves a Python 3.12-compatible OR-Tools release.
 ```python
 variables = {
     container_id: model.new_bool_var(f"expedite_{container_id}")
-    for container_id in beneficiary_ids
+    for container_id in stochastic_candidate_ids
 }
 model.add(sum(variables.values()) <= fixture.capacity.total_slots)
 for limit in fixture.capacity.handling_group_limits:
@@ -777,7 +862,9 @@ model.add(sum(variables[item.container.id] for item in dg_profiles) <= fixture.c
 model.maximize(sum(coefficients[item_id] * variable for item_id, variable in variables.items()))
 ```
 
-Set `num_search_workers=1` and `random_seed=0`; require `OPTIMAL`. Read the integer optimum. Build a second satisfaction model with identical constraints plus `objective_expression == optimum`, no active objective, and `enumerate_all_solutions=True`; collect assignments with `CpSolverSolutionCallback`. Sort IDs within plans and plans lexicographically only for reproducible representation, not as a business preference. The canonical full-slot search has at most `C(13, 8)=1287` sets, so do not truncate objective-optimal alternatives. Tests either use the hand-checkable unique-optimum fixture or assert optimal objective value plus hard-constraint invariants; they do not pin a canonical container set unless product semantics make it uniquely optimal without artificial weights.
+Obtain `stochastic_candidate_ids` directly from the evaluator, assert every associated coefficient is positive, and create no variable for any structurally ineligible or zero-increment profile. Set `num_search_workers=1` and `random_seed=0`; require `OPTIMAL`. Read the integer optimum. Build a second satisfaction model with identical constraints plus `objective_expression == optimum`, no active objective, and `enumerate_all_solutions=True`; collect assignments with `CpSolverSolutionCallback`. Sort IDs within plans and plans lexicographically only for reproducible representation, not as a business preference. Tests either use the hand-checkable unique-optimum fixture or assert optimal objective value plus hard-constraint invariants; they do not pin a canonical container set unless product semantics make it uniquely optimal without artificial weights.
+
+Do not claim enumeration is bounded by `C(13, 8)=1287`: the stochastic candidate pool may be larger than 13. Task 6 initially requires complete enumeration of objective-optimal allocations and must never silently stop a callback or return a partial tuple. If exact canonical enumeration proves impractical in measured runtime or memory, stop Task 6 with `ScarcityOptimizationError` and report the evidence before changing the interface. The principled bounded proposal for review is one representative per distinct Pareto-relevant outcome vector `(preserved_connection_total, p10_preserved_connections, ordered service preserved totals, allocation_slot_count)`, generated through constraint-based nondominated outcome-vector enumeration; allocations equal on that entire established policy vector are one equivalence class, and the lexicographically first ID tuple is only its reproducible representative. This uses no weighted score and preserves every distinct business trade-off visible to the approved dominance policy. Because the frozen `tuple[AllocationPlan, ...]` return cannot communicate equivalence-class multiplicity or enumeration completeness, adopting that representation requires a separately approved additive result contract; do not implement a hidden cap or this fallback during Task 6 without that approval.
 
 - [ ] **Step 5: Run GREEN and full verification**
 
@@ -1308,14 +1395,16 @@ Stop. Do not begin carrier negotiation, DG semantic analysis, LLM orchestration,
 
 ## Self-Review Results
 
-- Spec coverage: explicit tasks cover the 24-box fixture, SF1/JV2/EC3, PTA+35, dry/reefer/DG structure, 13/8 scarcity, hierarchical correlation, shared seeded worlds, p50 baseline, CP-SAT objective, hard constraints, Pareto/dominance, measurements, reproducibility, persistence, audit, and inspection.
+- Spec coverage: explicit tasks cover the 24-box fixture, SF1/JV2/EC3, PTA+35, dry/reefer/DG structure, the `13 p50 beneficiaries / 8 slots` headline, the broader positive-increment stochastic candidate pool, hierarchical correlation, shared seeded worlds, p50 baseline, CP-SAT objective, hard constraints, Pareto/dominance, measurements, reproducibility, persistence, audit, and inspection.
 - Scope: LLM, agent behavior, carrier/RTA loop, silence, DG semantics, frontend, auth, deployment, reset, and async infrastructure are excluded.
 - Contract safety: Phase 2 contracts are additive; frozen models/enums remain untouched.
 - Type consistency: `ScenarioSet` is the same type through baseline, solver, evaluator, workflow, and tests; produced interface names match later consumers.
 - Solver boundary: scenario sampling and ready arithmetic are plain Python; CP-SAT sees integer coefficients and hard allocation facts only.
+- Candidate boundary: the greedy baseline consumes exactly the p50 beneficiaries; the scenario-aware solver independently consumes all structurally eligible positive-increment stochastic candidates from the supplied worlds. No median gate leaks into stochastic optimization.
 - Policy transparency: there is no cargo/service weight or hidden score; raw outcome dimensions remain visible.
 - Reproducibility: semantic outputs are deterministic for fixture/seed/assumptions; runtime, IDs, and timestamps remain measured but excluded from equality/key. Development/debug seeds are separate from the frozen 50-seed holdout manifest.
 - Empirical comparison: allocations are fixed before holdout worlds are loaded, every fixed allocation sees identical holdout worlds, and the final report preserves the observed positive, neutral, or negative delta without a pass/fail assertion on its sign.
-- Solver-test integrity: the hand-checkable fixture has a genuine unique optimum; canonical and tie tests assert objective calculations and hard-constraint invariants without arbitrary weights or a synthetic tie-break.
+- Solver-test integrity: the hand-checkable fixture has a genuine unique optimum; the non-p50 tail fixture proves legal stochastic consideration; canonical and tie tests assert candidate eligibility, positive incremental value, objective calculations, and hard-constraint invariants without arbitrary weights or a synthetic tie-break.
+- Optimal-set integrity: the plan makes no `C(13,8)` bound claim and forbids silent truncation. If complete enumeration is impractical, Task 6 stops; the proposed bounded replacement is an explicitly reviewed, additive representation of distinct Pareto-relevant outcome-vector equivalence classes.
 - Test intent: focused tests cover reproducibility, capacity, safety, valid allocations, objective arithmetic, and hierarchical correlated uncertainty. No test requires the scenario-aware allocator to beat the greedy baseline.
 - Placeholder scan: every task names concrete files, interfaces, tests, commands, RED/GREEN expectations, and commit boundaries.
