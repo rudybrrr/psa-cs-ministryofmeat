@@ -191,6 +191,23 @@ class CarrierRecoveryRepository:
         if record is None: raise LookupError(f"request context for {case_id} not found")
         return RTARequestContext(case_id=UUID(record.case_id), request_id=UUID(record.request_id), payload_fingerprint=record.payload_fingerprint, response_deadline=from_utc_text(record.response_deadline_utc), sent_at=from_utc_text(record.sent_at_utc) if record.sent_at_utc else None, closed_at=from_utc_text(record.closed_at_utc) if record.closed_at_utc else None)
 
+    def update_request(self, request: RTARequest) -> RTARequest:
+        record = self._session.get(RTARequestRecord, str(request.id))
+        if record is None:
+            raise LookupError(f"request {request.id} not found")
+        record.status = request.status.value
+        self._persist(record)
+        return request
+
+    def update_request_context(self, context: RTARequestContext) -> RTARequestContext:
+        record = self._session.get(RTARequestContextRecord, str(context.case_id))
+        if record is None:
+            raise LookupError(f"request context for {context.case_id} not found")
+        record.sent_at_utc = to_utc_text(context.sent_at) if context.sent_at else None
+        record.closed_at_utc = to_utc_text(context.closed_at) if context.closed_at else None
+        self._persist(record)
+        return context
+
     def add_approval_binding(self, binding: ApprovalBinding) -> ApprovalBinding:
         self._persist(ApprovalBindingRecord(proposal_decision_id=str(binding.proposal_decision_id), case_id=str(binding.case_id), subject_kind=binding.subject_kind.value, subject_id=str(binding.subject_id), payload_fingerprint=binding.payload_fingerprint, created_at_utc=to_utc_text(binding.created_at)))
         return binding

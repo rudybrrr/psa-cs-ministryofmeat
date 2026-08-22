@@ -117,3 +117,39 @@ def test_request_rejection_closes_authorization_without_a_dead_end(session: Sess
     ))
 
     assert workflow.history(case.id).case.state.value == "RECOMPUTING"
+
+
+def test_send_requires_exact_approved_binding(session: Session) -> None:
+    phase_two = build_scarce_capacity_workflow(session).run()
+    workflow = build_carrier_recovery_workflow(session)
+    case = workflow.prepare(command(phase_two.incident.id, "JV2"))
+
+    with pytest.raises(CarrierRecoveryConflict):
+        workflow.send_authorised_request(case.id)
+
+
+def test_send_is_idempotent_after_exact_approval(session: Session) -> None:
+    phase_two = build_scarce_capacity_workflow(session).run()
+    workflow = build_carrier_recovery_workflow(session)
+    case = workflow.prepare(command(phase_two.incident.id, "JV2"))
+    binding = workflow.history(case.id).bindings[0]
+    workflow.record_request_approval(RequestApprovalCommand(
+        case_id=case.id,
+        proposal_decision_id=binding.proposal_decision_id,
+        request_id=binding.subject_id,
+        expected_payload_fingerprint=binding.payload_fingerprint,
+        operator_id="operator-19",
+        status=ApprovalStatus.APPROVED,
+    ))
+
+    first = workflow.send_authorised_request(case.id)
+    second = workflow.send_authorised_request(case.id)
+    history = workflow.history(case.id)
+
+    assert second == first
+    assert history.case.state.value == "AWAITING_CARRIER"
+    assert history.request is not None
+    assert history.request.status.value == "SENT"
+    assert history.request_context is not None
+    assert history.request_context.sent_at is not None
+    assert [event.event_type for event in history.audit_events].count("rta.request_sent") == 1

@@ -16,6 +16,7 @@ from backend.app.domain.carrier_recovery import (
     CarrierRecoveryHistory,
     PrepareCarrierRecoveryCaseCommand,
     RequestApprovalCommand,
+    RTARequestContext,
 )
 from backend.app.domain.enums import ApprovalStatus, AuditActor, DecisionAction, DecisionStatus, IncidentState, RTARequestStatus
 from backend.app.domain.models import Approval, AuditEvent, Decision, RTARequest, utc_now
@@ -105,6 +106,37 @@ class CarrierRecoveryWorkflow:
                 self._cases.update_case(updated_case)
             self._cases.link_audit(case.id, AuditEvent(actor=AuditActor.OPERATOR, actor_id=command.operator_id, incident_id=case.incident_id, event_type="carrier_recovery.request_approval_recorded", payload={"recovery_case_id": str(case.id), "proposal_decision_id": str(command.proposal_decision_id), "subject_id": str(command.request_id), "payload_fingerprint": command.expected_payload_fingerprint, "status": command.status.value}, timestamp=now))
         return approval
+
+    def send_authorised_request(self, case_id: UUID) -> RTARequestContext:
+        case = self._cases.get_case(case_id)
+        history = self._cases.history(case_id)
+        request, context = history.request, history.request_context
+        if request is None or context is None:
+            raise CarrierRecoveryConflict("case is missing its immutable RTA request context")
+        if case.state is CarrierRecoveryCaseState.AWAITING_CARRIER:
+            if request.status is RTARequestStatus.SENT and context.sent_at is not None:
+                return context
+            raise CarrierRecoveryConflict("contradictory prior dispatch state")
+        if case.state is not CarrierRecoveryCaseState.AWAITING_REQUEST_APPROVAL:
+            raise CarrierRecoveryConflict("case is not awaiting request authorization")
+        if request.status is not RTARequestStatus.PENDING or context.sent_at is not None or context.closed_at is not None:
+            raise CarrierRecoveryConflict("request is no longer pending")
+        matching = [binding for binding in history.bindings if binding.subject_kind is AuthorizationSubjectKind.OUTBOUND_REQUEST and binding.subject_id == request.id and binding.payload_fingerprint == context.payload_fingerprint]
+        if len(matching) != 1:
+            raise CarrierRecoveryConflict("exact outbound request binding is missing or ambiguous")
+        approval = self._cases.get_approval_for_proposal(matching[0].proposal_decision_id)
+        if approval is None or approval.status is not ApprovalStatus.APPROVED:
+            raise CarrierRecoveryConflict("exact outbound request authorization is not approved")
+        now = utc_now()
+        sent_context = context.model_copy(update={"sent_at": now})
+        sent_request = request.model_copy(update={"status": RTARequestStatus.SENT})
+        sent_case = case.model_copy(update={"state": CarrierRecoveryCaseState.AWAITING_CARRIER, "updated_at": now})
+        with self._cases.transaction():
+            self._cases.update_request(sent_request)
+            self._cases.update_request_context(sent_context)
+            self._cases.update_case(sent_case)
+            self._cases.link_audit(case_id, AuditEvent(actor=AuditActor.SYSTEM, actor_id="carrier-recovery-workflow", incident_id=case.incident_id, event_type="rta.request_sent", payload={"recovery_case_id": str(case_id), "request_id": str(request.id), "payload_fingerprint": context.payload_fingerprint}, timestamp=now))
+        return sent_context
 
 
 def build_carrier_recovery_workflow(session: Session) -> CarrierRecoveryWorkflow:
