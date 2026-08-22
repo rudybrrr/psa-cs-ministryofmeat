@@ -5,10 +5,18 @@ import pytest
 from sqlmodel import Session
 
 from backend.app.domain.carrier_recovery import PrepareCarrierRecoveryCaseCommand
-from backend.app.domain.carrier_recovery import RequestApprovalCommand, SimulateCarrierResponseCommand
+from backend.app.domain.carrier_recovery import (
+    CounterApprovalCommand,
+    RequestApprovalCommand,
+    SimulateCarrierResponseCommand,
+)
 from backend.app.domain.enums import ApprovalStatus, AuditActor, DecisionAction, DecisionStatus
 from backend.app.orchestration.carrier_recovery import CarrierRecoveryConflict, build_carrier_recovery_workflow
 from backend.app.orchestration.scarce_capacity import build_scarce_capacity_workflow
+from backend.app.services.carrier_simulator import (
+    CarrierResponsePlan,
+    DeterministicCarrierSimulator,
+)
 from backend.app.storage.repositories import DecisionRepository
 
 
@@ -208,3 +216,109 @@ def test_simulator_rejects_effective_at_at_or_after_deadline(session: Session) -
             case_id=case.id,
             effective_at="2026-08-22T09:00:00Z",
         ))
+
+
+def accept_simulator_for_jv2() -> DeterministicCarrierSimulator:
+    return DeterministicCarrierSimulator(CarrierResponsePlan.model_validate({
+        "plan_id": "TEST-ACCEPT-V1",
+        "fixture_id": "SYN-CANONICAL-24-V1",
+        "responses": [{"connection_id": "SYN-CONN-JV2", "outcome": "ACCEPT"}],
+    }))
+
+
+def test_accept_creates_effective_requested_timing_without_second_approval(
+    session: Session,
+) -> None:
+    phase_two = build_scarce_capacity_workflow(session).run()
+    workflow = build_carrier_recovery_workflow(
+        session,
+        simulator=accept_simulator_for_jv2(),
+    )
+    case = workflow.prepare(command(phase_two.incident.id, "SYN-CONN-JV2"))
+    approve_and_send(workflow, case)
+
+    result = workflow.simulate_response(SimulateCarrierResponseCommand(
+        case_id=case.id,
+        effective_at="2026-08-22T08:30:00Z",
+    ))
+    history = workflow.history(case.id)
+
+    assert result.carrier_response_id is not None
+    assert history.carrier_responses[0].response.value == "ACCEPT"
+    assert history.effective_timings[0].effective_eta_pta == history.request.requested_eta_pta
+    assert history.case.state.value == "RECOMPUTING"
+
+
+def test_counter_requires_fresh_exact_approval_before_effective_timing(
+    session: Session,
+) -> None:
+    phase_two = build_scarce_capacity_workflow(session).run()
+    workflow = build_carrier_recovery_workflow(session)
+    case = workflow.prepare(command(phase_two.incident.id, "SYN-CONN-JV2"))
+    approve_and_send(workflow, case)
+
+    response = workflow.simulate_response(SimulateCarrierResponseCommand(
+        case_id=case.id,
+        effective_at="2026-08-22T08:30:00Z",
+    ))
+    history = workflow.history(case.id)
+
+    assert response.carrier_response_id is not None
+    assert history.effective_timings == ()
+    assert history.case.state.value == "AWAITING_COUNTER_APPROVAL"
+    assert history.bindings[-1].subject_kind.value == "COUNTER_PROPOSAL"
+
+
+def test_approved_counter_creates_exact_effective_timing_idempotently(
+    session: Session,
+) -> None:
+    phase_two = build_scarce_capacity_workflow(session).run()
+    workflow = build_carrier_recovery_workflow(session)
+    case = workflow.prepare(command(phase_two.incident.id, "SYN-CONN-JV2"))
+    approve_and_send(workflow, case)
+    workflow.simulate_response(SimulateCarrierResponseCommand(
+        case_id=case.id,
+        effective_at="2026-08-22T08:30:00Z",
+    ))
+    binding = workflow.history(case.id).bindings[-1]
+    exact = CounterApprovalCommand(
+        case_id=case.id,
+        proposal_decision_id=binding.proposal_decision_id,
+        carrier_response_id=binding.subject_id,
+        expected_payload_fingerprint=binding.payload_fingerprint,
+        operator_id="operator-21",
+        status=ApprovalStatus.APPROVED,
+    )
+
+    first = workflow.record_counter_approval(exact)
+    second = workflow.record_counter_approval(exact)
+    history = workflow.history(case.id)
+
+    assert first == second
+    assert history.effective_timings[0].effective_eta_pta == history.carrier_responses[0].counter_eta_pta
+    assert history.case.state.value == "RECOMPUTING"
+
+
+def test_rejected_counter_uses_no_counter_effective_timing(session: Session) -> None:
+    phase_two = build_scarce_capacity_workflow(session).run()
+    workflow = build_carrier_recovery_workflow(session)
+    case = workflow.prepare(command(phase_two.incident.id, "SYN-CONN-JV2"))
+    approve_and_send(workflow, case)
+    workflow.simulate_response(SimulateCarrierResponseCommand(
+        case_id=case.id,
+        effective_at="2026-08-22T08:30:00Z",
+    ))
+    binding = workflow.history(case.id).bindings[-1]
+
+    workflow.record_counter_approval(CounterApprovalCommand(
+        case_id=case.id,
+        proposal_decision_id=binding.proposal_decision_id,
+        carrier_response_id=binding.subject_id,
+        expected_payload_fingerprint=binding.payload_fingerprint,
+        operator_id="operator-22",
+        status=ApprovalStatus.REJECTED,
+    ))
+    history = workflow.history(case.id)
+
+    assert history.effective_timings == ()
+    assert history.case.state.value == "RECOMPUTING"

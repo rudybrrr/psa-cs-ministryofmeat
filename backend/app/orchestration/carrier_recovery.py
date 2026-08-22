@@ -19,6 +19,8 @@ from backend.app.domain.carrier_recovery import (
     RTARequestContext,
     SimulateCarrierResponseCommand,
     CarrierSimulationResult,
+    EffectiveConnectionTiming,
+    CounterApprovalCommand,
 )
 from backend.app.domain.enums import ApprovalStatus, AuditActor, DecisionAction, DecisionStatus, IncidentState, RTARequestStatus
 from backend.app.domain.models import Approval, AuditEvent, Decision, RTARequest, utc_now
@@ -38,9 +40,10 @@ class CarrierRecoveryConflict(RuntimeError):
 
 
 class CarrierRecoveryWorkflow:
-    def __init__(self, *, fixture_service: SyntheticCanonicalIncidentService, scenarios: SeededScenarioGenerator, cases: CarrierRecoveryRepository, incidents: IncidentRepository, evaluations: ScarcityEvaluationRepository, decisions: DecisionRepository) -> None:
+    def __init__(self, *, fixture_service: SyntheticCanonicalIncidentService, scenarios: SeededScenarioGenerator, cases: CarrierRecoveryRepository, incidents: IncidentRepository, evaluations: ScarcityEvaluationRepository, decisions: DecisionRepository, simulator: DeterministicCarrierSimulator) -> None:
         self._fixture_service, self._scenarios, self._cases = fixture_service, scenarios, cases
         self._incidents, self._evaluations, self._decisions = incidents, evaluations, decisions
+        self._simulator = simulator
 
     def prepare(self, command: PrepareCarrierRecoveryCaseCommand) -> CarrierRecoveryCase:
         incident = self._incidents.get(command.incident_id)
@@ -148,6 +151,33 @@ class CarrierRecoveryWorkflow:
             self._cases.link_audit(case_id, AuditEvent(actor=AuditActor.SYSTEM, actor_id="carrier-recovery-workflow", incident_id=case.incident_id, event_type="rta.request_sent", payload={"recovery_case_id": str(case_id), "request_id": str(request.id), "payload_fingerprint": context.payload_fingerprint}, timestamp=now))
         return sent_context
 
+    def record_counter_approval(self, command: CounterApprovalCommand) -> Approval:
+        history = self._cases.history(command.case_id)
+        case = history.case
+        binding = self._cases.get_binding_for_proposal(command.proposal_decision_id)
+        existing = self._cases.get_approval_for_proposal(command.proposal_decision_id)
+        if existing is not None:
+            if (binding.case_id == command.case_id and binding.subject_kind is AuthorizationSubjectKind.COUNTER_PROPOSAL and binding.subject_id == command.carrier_response_id and binding.payload_fingerprint == command.expected_payload_fingerprint and existing.operator_id == command.operator_id and existing.status is command.status):
+                return existing
+            raise CarrierRecoveryConflict("contradictory counter approval retry")
+        if (case.state is not CarrierRecoveryCaseState.AWAITING_COUNTER_APPROVAL or binding.case_id != command.case_id or binding.subject_kind is not AuthorizationSubjectKind.COUNTER_PROPOSAL or binding.subject_id != command.carrier_response_id or binding.payload_fingerprint != command.expected_payload_fingerprint or not command.operator_id.strip()):
+            raise CarrierRecoveryConflict("counter approval does not match its immutable authorization subject")
+        response = next((item for item in history.carrier_responses if item.id == command.carrier_response_id), None)
+        if response is None or response.counter_eta_pta is None:
+            raise CarrierRecoveryConflict("counter response is missing its persisted timing")
+        now = utc_now()
+        approval = Approval(decision_id=command.proposal_decision_id, operator_id=command.operator_id, status=command.status, created_at=now)
+        target_case = case.model_copy(update={"state": CarrierRecoveryCaseState.RECOMPUTING, "updated_at": now})
+        timing = EffectiveConnectionTiming(case_id=case.id, request_id=response.request_id, carrier_response_id=response.id, effective_eta_pta=response.counter_eta_pta, created_at=now) if command.status is ApprovalStatus.APPROVED else None
+        with self._cases.transaction():
+            self._cases.add_approval(approval)
+            self._cases.update_case(target_case)
+            if timing is not None:
+                self._cases.add_effective_timing(timing)
+                self._cases.link_audit(case.id, AuditEvent(actor=AuditActor.SYSTEM, actor_id="carrier-recovery-workflow", incident_id=case.incident_id, event_type="carrier.timing_effective", payload={"recovery_case_id": str(case.id), "carrier_response_id": str(response.id), "effective_eta_pta": response.counter_eta_pta.astimezone(UTC).isoformat()}, timestamp=now))
+            self._cases.link_audit(case.id, AuditEvent(actor=AuditActor.OPERATOR, actor_id=command.operator_id, incident_id=case.incident_id, event_type="carrier.counter_approval_recorded", payload={"recovery_case_id": str(case.id), "proposal_decision_id": str(command.proposal_decision_id), "carrier_response_id": str(response.id), "payload_fingerprint": command.expected_payload_fingerprint, "status": command.status.value}, timestamp=now))
+        return approval
+
     def simulate_response(
         self,
         command: SimulateCarrierResponseCommand,
@@ -161,17 +191,61 @@ class CarrierRecoveryWorkflow:
             or request.status is not RTARequestStatus.SENT
             or context.sent_at is None
             or command.effective_at >= context.response_deadline
+            or history.carrier_responses
         ):
             raise CarrierRecoveryConflict("carrier simulation is not valid for this request state or deadline")
-        response = DeterministicCarrierSimulator(
-            SyntheticCarrierResponsePlan().load()
-        ).emit(request, command.effective_at)
+        response = self._simulator.emit(request, command.effective_at)
+        if response is None:
+            return CarrierSimulationResult(
+                case_id=case.id,
+                no_response_emitted=True,
+            )
+        now = command.effective_at
+        closed_request = request.model_copy(update={"status": RTARequestStatus.CLOSED})
+        closed_context = context.model_copy(update={"closed_at": now})
+        if response.response.value == "ACCEPT":
+            effective_timing = EffectiveConnectionTiming(
+                case_id=case.id,
+                request_id=request.id,
+                carrier_response_id=response.id,
+                effective_eta_pta=request.requested_eta_pta,
+                created_at=now,
+            )
+            target_case = case.model_copy(update={"state": CarrierRecoveryCaseState.RECOMPUTING, "updated_at": now})
+            proposal = None
+            binding = None
+        else:
+            if response.counter_eta_pta is None:
+                raise CarrierRecoveryConflict("counter response requires explicit counter timing")
+            proposal = Decision(incident_id=case.incident_id, container_id=None, action=DecisionAction.REQUEST_RTA, status=DecisionStatus.PROPOSED, rationale="Connection-level counter timing authorization proposal.", created_at=now)
+            proposal = self._decisions.add(proposal)
+            fingerprint = hashlib.sha256(json.dumps({"carrier_response_id": str(response.id), "counter_eta_pta": response.counter_eta_pta.astimezone(UTC).isoformat()}, sort_keys=True).encode()).hexdigest()
+            binding = ApprovalBinding(case_id=case.id, proposal_decision_id=proposal.id, subject_kind=AuthorizationSubjectKind.COUNTER_PROPOSAL, subject_id=response.id, payload_fingerprint=fingerprint, created_at=now)
+            effective_timing = None
+            target_case = case.model_copy(update={"state": CarrierRecoveryCaseState.AWAITING_COUNTER_APPROVAL, "updated_at": now})
+        with self._cases.transaction():
+            self._cases.add_carrier_response(response)
+            self._cases.update_request(closed_request)
+            self._cases.update_request_context(closed_context)
+            self._cases.update_case(target_case)
+            if effective_timing is not None:
+                self._cases.add_effective_timing(effective_timing)
+                self._cases.link_audit(case.id, AuditEvent(actor=AuditActor.SYSTEM, actor_id="carrier-recovery-workflow", incident_id=case.incident_id, event_type="carrier.timing_effective", payload={"recovery_case_id": str(case.id), "request_id": str(request.id), "effective_eta_pta": request.requested_eta_pta.astimezone(UTC).isoformat()}, timestamp=now))
+            if binding is not None and proposal is not None:
+                self._cases.add_approval_binding(binding)
+                self._cases.add_decision_link(CarrierRecoveryDecisionLink(case_id=case.id, decision_id=proposal.id, role="COUNTER_RTA_PROPOSAL", created_at=now))
+                self._cases.link_audit(case.id, AuditEvent(actor=AuditActor.SYSTEM, actor_id="carrier-recovery-workflow", incident_id=case.incident_id, event_type="carrier.counter_awaiting_approval", payload={"recovery_case_id": str(case.id), "proposal_decision_id": str(proposal.id), "carrier_response_id": str(response.id)}, timestamp=now))
+            self._cases.link_audit(case.id, AuditEvent(actor=AuditActor.CARRIER, actor_id=response.carrier_id, incident_id=case.incident_id, event_type="carrier.response_received", payload={"recovery_case_id": str(case.id), "request_id": str(request.id), "carrier_response_id": str(response.id), "response": response.response.value}, timestamp=now))
         return CarrierSimulationResult(
             case_id=case.id,
-            carrier_response_id=response.id if response is not None else None,
-            no_response_emitted=response is None,
+            carrier_response_id=response.id,
+            no_response_emitted=False,
         )
 
 
-def build_carrier_recovery_workflow(session: Session) -> CarrierRecoveryWorkflow:
-    return CarrierRecoveryWorkflow(fixture_service=SyntheticCanonicalIncidentService(), scenarios=SeededScenarioGenerator(), cases=CarrierRecoveryRepository(session), incidents=IncidentRepository(session), evaluations=ScarcityEvaluationRepository(session), decisions=DecisionRepository(session))
+def build_carrier_recovery_workflow(
+    session: Session,
+    *,
+    simulator: DeterministicCarrierSimulator | None = None,
+) -> CarrierRecoveryWorkflow:
+    return CarrierRecoveryWorkflow(fixture_service=SyntheticCanonicalIncidentService(), scenarios=SeededScenarioGenerator(), cases=CarrierRecoveryRepository(session), incidents=IncidentRepository(session), evaluations=ScarcityEvaluationRepository(session), decisions=DecisionRepository(session), simulator=simulator or DeterministicCarrierSimulator(SyntheticCarrierResponsePlan().load()))

@@ -235,6 +235,18 @@ class CarrierRecoveryRepository:
         self._persist(ContainerReconsiderationResultRecord(id=str(result.id), case_id=str(result.case_id), container_id=result.container_id, disposition=result.disposition.value, prior_decision_id=str(result.prior_decision_id), replacement_decision_id=str(result.replacement_decision_id) if result.replacement_decision_id else None, preserved_world_count=result.preserved_world_count, world_count=result.world_count, hard_constraints_satisfied=result.hard_constraints_satisfied, created_at_utc=to_utc_text(result.created_at)))
         return result
 
+    def add_carrier_response(self, response: CarrierResponse) -> CarrierResponse:
+        self._persist(CarrierResponseRecord(request_id=str(response.request_id), id=str(response.id), carrier_id=response.carrier_id, response=response.response.value, counter_eta_pta_utc=to_utc_text(response.counter_eta_pta) if response.counter_eta_pta else None, message=response.message, received_at_utc=to_utc_text(response.received_at)))
+        return response
+
+    def responses_for_request(self, request_id: UUID) -> tuple[CarrierResponse, ...]:
+        records = self._session.exec(select(CarrierResponseRecord).where(CarrierResponseRecord.request_id == str(request_id))).all()
+        return tuple(CarrierResponse(id=UUID(record.id), request_id=UUID(record.request_id), carrier_id=record.carrier_id, response=CarrierResponseType(record.response), counter_eta_pta=from_utc_text(record.counter_eta_pta_utc) if record.counter_eta_pta_utc else None, message=record.message, received_at=from_utc_text(record.received_at_utc)) for record in records)
+
+    def add_effective_timing(self, timing: EffectiveConnectionTiming) -> EffectiveConnectionTiming:
+        self._persist(EffectiveConnectionTimingRecord(id=str(timing.id), case_id=str(timing.case_id), request_id=str(timing.request_id), carrier_response_id=str(timing.carrier_response_id), effective_eta_pta_utc=to_utc_text(timing.effective_eta_pta), created_at_utc=to_utc_text(timing.created_at)))
+        return timing
+
     def link_audit(self, case_id: UUID, event: AuditEvent) -> AuditEvent:
         AuditRepository(self._session).add_uncommitted(event)
         self._persist(CarrierRecoveryAuditLinkRecord(audit_event_id=str(event.id), case_id=str(case_id)))
@@ -251,9 +263,12 @@ class CarrierRecoveryRepository:
         binding_records = self._session.exec(select(ApprovalBindingRecord).where(ApprovalBindingRecord.case_id == str(case_id))).all()
         bindings = tuple(ApprovalBinding(case_id=UUID(record.case_id), proposal_decision_id=UUID(record.proposal_decision_id), subject_kind=record.subject_kind, subject_id=UUID(record.subject_id), payload_fingerprint=record.payload_fingerprint, created_at=from_utc_text(record.created_at_utc)) for record in binding_records)
         approvals = tuple(item for item in (self.get_approval_for_proposal(binding.proposal_decision_id) for binding in bindings) if item is not None)
+        carrier_responses = () if request is None else self.responses_for_request(request.id)
+        timing_records = self._session.exec(select(EffectiveConnectionTimingRecord).where(EffectiveConnectionTimingRecord.case_id == str(case_id))).all()
+        effective_timings = tuple(EffectiveConnectionTiming(id=UUID(record.id), case_id=UUID(record.case_id), request_id=UUID(record.request_id), carrier_response_id=UUID(record.carrier_response_id), effective_eta_pta=from_utc_text(record.effective_eta_pta_utc), created_at=from_utc_text(record.created_at_utc)) for record in timing_records)
         link_records = self._session.exec(select(CarrierRecoveryDecisionLinkRecord).where(CarrierRecoveryDecisionLinkRecord.case_id == str(case_id))).all()
         decision_links = tuple(CarrierRecoveryDecisionLink(case_id=UUID(record.case_id), decision_id=UUID(record.decision_id), role=record.role, created_at=from_utc_text(record.created_at_utc)) for record in link_records)
-        return CarrierRecoveryHistory(case=self.get_case(case_id), request=request, request_context=context, bindings=bindings, approvals=approvals, decision_links=decision_links, audit_events=tuple(events))
+        return CarrierRecoveryHistory(case=self.get_case(case_id), request=request, request_context=context, bindings=bindings, approvals=approvals, carrier_responses=carrier_responses, effective_timings=effective_timings, decision_links=decision_links, audit_events=tuple(events))
 
     @staticmethod
     def _case(record: CarrierRecoveryCaseRecord) -> CarrierRecoveryCase:
