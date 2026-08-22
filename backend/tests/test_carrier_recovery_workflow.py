@@ -7,6 +7,7 @@ from sqlmodel import Session
 from backend.app.domain.carrier_recovery import PrepareCarrierRecoveryCaseCommand
 from backend.app.domain.carrier_recovery import (
     CounterApprovalCommand,
+    EvaluateTimeoutCommand,
     RequestApprovalCommand,
     SimulateCarrierResponseCommand,
 )
@@ -322,3 +323,56 @@ def test_rejected_counter_uses_no_counter_effective_timing(session: Session) -> 
 
     assert history.effective_timings == ()
     assert history.case.state.value == "RECOMPUTING"
+
+
+def test_timeout_at_deadline_observes_absence_once_and_retries_idempotently(
+    session: Session,
+) -> None:
+    phase_two = build_scarce_capacity_workflow(session).run()
+    workflow = build_carrier_recovery_workflow(session)
+    case = workflow.prepare(command(phase_two.incident.id, "SYN-CONN-EC3"))
+    approve_and_send(workflow, case)
+    at_deadline = EvaluateTimeoutCommand(
+        case_id=case.id,
+        effective_at="2026-08-22T09:00:00Z",
+    )
+
+    first = workflow.evaluate_timeout(at_deadline)
+    second = workflow.evaluate_timeout(at_deadline)
+    history = workflow.history(case.id)
+
+    assert second == first
+    assert history.case.state.value == "RECOMPUTING"
+    assert history.carrier_responses == ()
+    assert [event.event_type for event in history.audit_events].count("carrier.response_timed_out") == 1
+    assert AuditActor.CARRIER not in {event.actor for event in history.audit_events}
+
+
+def test_timeout_before_deadline_and_after_response_fail_closed(session: Session) -> None:
+    phase_two = build_scarce_capacity_workflow(session).run()
+    workflow = build_carrier_recovery_workflow(session)
+    silent_case = workflow.prepare(command(phase_two.incident.id, "SYN-CONN-EC3"))
+    approve_and_send(workflow, silent_case)
+
+    with pytest.raises(CarrierRecoveryConflict):
+        workflow.evaluate_timeout(EvaluateTimeoutCommand(
+            case_id=silent_case.id,
+            effective_at="2026-08-22T08:59:00Z",
+        ))
+
+    accepting = build_carrier_recovery_workflow(
+        session,
+        simulator=accept_simulator_for_jv2(),
+    )
+    accept_case = accepting.prepare(command(phase_two.incident.id, "SYN-CONN-JV2"))
+    approve_and_send(accepting, accept_case)
+    accepting.simulate_response(SimulateCarrierResponseCommand(
+        case_id=accept_case.id,
+        effective_at="2026-08-22T08:30:00Z",
+    ))
+
+    with pytest.raises(CarrierRecoveryConflict):
+        accepting.evaluate_timeout(EvaluateTimeoutCommand(
+            case_id=accept_case.id,
+            effective_at="2026-08-22T09:00:00Z",
+        ))

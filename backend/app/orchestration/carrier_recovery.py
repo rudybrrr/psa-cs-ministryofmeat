@@ -21,6 +21,7 @@ from backend.app.domain.carrier_recovery import (
     CarrierSimulationResult,
     EffectiveConnectionTiming,
     CounterApprovalCommand,
+    EvaluateTimeoutCommand,
 )
 from backend.app.domain.enums import ApprovalStatus, AuditActor, DecisionAction, DecisionStatus, IncidentState, RTARequestStatus
 from backend.app.domain.models import Approval, AuditEvent, Decision, RTARequest, utc_now
@@ -177,6 +178,47 @@ class CarrierRecoveryWorkflow:
                 self._cases.link_audit(case.id, AuditEvent(actor=AuditActor.SYSTEM, actor_id="carrier-recovery-workflow", incident_id=case.incident_id, event_type="carrier.timing_effective", payload={"recovery_case_id": str(case.id), "carrier_response_id": str(response.id), "effective_eta_pta": response.counter_eta_pta.astimezone(UTC).isoformat()}, timestamp=now))
             self._cases.link_audit(case.id, AuditEvent(actor=AuditActor.OPERATOR, actor_id=command.operator_id, incident_id=case.incident_id, event_type="carrier.counter_approval_recorded", payload={"recovery_case_id": str(case.id), "proposal_decision_id": str(command.proposal_decision_id), "carrier_response_id": str(response.id), "payload_fingerprint": command.expected_payload_fingerprint, "status": command.status.value}, timestamp=now))
         return approval
+
+    def evaluate_timeout(
+        self,
+        command: EvaluateTimeoutCommand,
+    ) -> CarrierRecoveryCase:
+        history = self._cases.history(command.case_id)
+        case, request, context = history.case, history.request, history.request_context
+        effective_at = command.effective_at.astimezone(UTC)
+        existing = [
+            event
+            for event in history.audit_events
+            if event.event_type == "carrier.response_timed_out"
+        ]
+        if existing:
+            if (
+                len(existing) == 1
+                and existing[0].payload.get("effective_at")
+                == effective_at.isoformat()
+            ):
+                return case
+            raise CarrierRecoveryConflict("contradictory timeout retry")
+        if (
+            request is None
+            or context is None
+            or case.state is not CarrierRecoveryCaseState.AWAITING_CARRIER
+            or request.status is not RTARequestStatus.SENT
+            or context.sent_at is None
+            or context.closed_at is not None
+            or history.carrier_responses
+            or effective_at < context.response_deadline
+        ):
+            raise CarrierRecoveryConflict("timeout is not valid for this request state or deadline")
+        closed_request = request.model_copy(update={"status": RTARequestStatus.CLOSED})
+        closed_context = context.model_copy(update={"closed_at": effective_at})
+        timed_out_case = case.model_copy(update={"state": CarrierRecoveryCaseState.RECOMPUTING, "updated_at": effective_at})
+        with self._cases.transaction():
+            self._cases.update_request(closed_request)
+            self._cases.update_request_context(closed_context)
+            self._cases.update_case(timed_out_case)
+            self._cases.link_audit(case.id, AuditEvent(actor=AuditActor.SYSTEM, actor_id="carrier-recovery-workflow", incident_id=case.incident_id, event_type="carrier.response_timed_out", payload={"recovery_case_id": str(case.id), "request_id": str(request.id), "effective_at": effective_at.isoformat()}, timestamp=effective_at))
+        return timed_out_case
 
     def simulate_response(
         self,
