@@ -195,6 +195,10 @@ class CarrierRecoveryRepository:
         self._persist(ApprovalBindingRecord(proposal_decision_id=str(binding.proposal_decision_id), case_id=str(binding.case_id), subject_kind=binding.subject_kind.value, subject_id=str(binding.subject_id), payload_fingerprint=binding.payload_fingerprint, created_at_utc=to_utc_text(binding.created_at)))
         return binding
 
+    def add_decision_link(self, link: CarrierRecoveryDecisionLink) -> CarrierRecoveryDecisionLink:
+        self._persist(CarrierRecoveryDecisionLinkRecord(decision_id=str(link.decision_id), case_id=str(link.case_id), role=link.role, created_at_utc=to_utc_text(link.created_at)))
+        return link
+
     def get_binding_for_proposal(self, proposal_decision_id: UUID) -> ApprovalBinding:
         record = self._session.get(ApprovalBindingRecord, str(proposal_decision_id))
         if record is None: raise LookupError(f"approval binding {proposal_decision_id} not found")
@@ -213,7 +217,15 @@ class CarrierRecoveryRepository:
         links = self._session.exec(select(CarrierRecoveryAuditLinkRecord).where(CarrierRecoveryAuditLinkRecord.case_id == str(case_id))).all()
         ids = [link.audit_event_id for link in links]
         events = [] if not ids else [AuditRepository._to_domain(record) for record in self._session.exec(select(AuditEventRecord).where(AuditEventRecord.id.in_(ids)).order_by(AuditEventRecord.sequence)).all()]
-        return CarrierRecoveryHistory(case=self.get_case(case_id), audit_events=tuple(events))
+        context_record = self._session.get(RTARequestContextRecord, str(case_id))
+        context = None if context_record is None else self.get_request_context(case_id)
+        request_record = None if context is None else self._session.get(RTARequestRecord, str(context.request_id))
+        request = None if request_record is None else RTARequest(id=UUID(request_record.id), incident_id=UUID(request_record.incident_id), connection_id=request_record.connection_id, requested_eta_pta=from_utc_text(request_record.requested_eta_pta_utc), status=RTARequestStatus(request_record.status), created_at=from_utc_text(request_record.created_at_utc))
+        binding_records = self._session.exec(select(ApprovalBindingRecord).where(ApprovalBindingRecord.case_id == str(case_id))).all()
+        bindings = tuple(ApprovalBinding(case_id=UUID(record.case_id), proposal_decision_id=UUID(record.proposal_decision_id), subject_kind=record.subject_kind, subject_id=UUID(record.subject_id), payload_fingerprint=record.payload_fingerprint, created_at=from_utc_text(record.created_at_utc)) for record in binding_records)
+        link_records = self._session.exec(select(CarrierRecoveryDecisionLinkRecord).where(CarrierRecoveryDecisionLinkRecord.case_id == str(case_id))).all()
+        decision_links = tuple(CarrierRecoveryDecisionLink(case_id=UUID(record.case_id), decision_id=UUID(record.decision_id), role=record.role, created_at=from_utc_text(record.created_at_utc)) for record in link_records)
+        return CarrierRecoveryHistory(case=self.get_case(case_id), request=request, request_context=context, bindings=bindings, decision_links=decision_links, audit_events=tuple(events))
 
     @staticmethod
     def _case(record: CarrierRecoveryCaseRecord) -> CarrierRecoveryCase:
