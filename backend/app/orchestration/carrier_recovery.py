@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import UTC
+from datetime import UTC, timedelta
 from uuid import UUID
 
 from sqlmodel import Session
@@ -22,6 +22,8 @@ from backend.app.domain.carrier_recovery import (
     EffectiveConnectionTiming,
     CounterApprovalCommand,
     EvaluateTimeoutCommand,
+    CarrierRecoveryDisposition,
+    ContainerReconsiderationResult,
 )
 from backend.app.domain.enums import ApprovalStatus, AuditActor, DecisionAction, DecisionStatus, IncidentState, RTARequestStatus
 from backend.app.domain.models import Approval, AuditEvent, Decision, RTARequest, utc_now
@@ -219,6 +221,71 @@ class CarrierRecoveryWorkflow:
             self._cases.update_case(timed_out_case)
             self._cases.link_audit(case.id, AuditEvent(actor=AuditActor.SYSTEM, actor_id="carrier-recovery-workflow", incident_id=case.incident_id, event_type="carrier.response_timed_out", payload={"recovery_case_id": str(case.id), "request_id": str(request.id), "effective_at": effective_at.isoformat()}, timestamp=effective_at))
         return timed_out_case
+
+    def recompute(self, case_id: UUID) -> CarrierRecoveryCase:
+        history = self._cases.history(case_id)
+        case = history.case
+        if history.results:
+            return case
+        if case.state is not CarrierRecoveryCaseState.RECOMPUTING:
+            raise CarrierRecoveryConflict("case is not awaiting frozen-evidence recomputation")
+        report = self._evaluations.get_for_incident(case.incident_id)
+        fixture = self._fixture_service.load()
+        if report.fixture_id != fixture.fixture_id or report.selected_allocation is None:
+            raise CarrierRecoveryConflict("source scarcity evidence is incomplete")
+        scenarios = self._scenarios.generate(fixture, seed=report.seed, world_count=report.scenario_count)
+        profiles = {profile.container.id: profile for profile in fixture.profiles if profile.container.onward_connection.id == case.connection_id}
+        allocation = set(report.selected_allocation.allocated_container_ids)
+        timing = history.effective_timings[0] if history.effective_timings else None
+        fallback_links = {link.decision_id for link in history.decision_links if link.role == "FALLBACK_ROLL"}
+        decisions = {decision.id: decision for decision in self._decisions.list_for_incident(case.incident_id)}
+        fallback_by_container = {decisions[decision_id].container_id: decisions[decision_id] for decision_id in fallback_links if decision_id in decisions}
+        created_at = utc_now()
+        replacements: list[Decision] = []
+        pending_results: list[tuple[str, CarrierRecoveryDisposition, int, bool, Decision, Decision | None]] = []
+        for container_id in case.affected_container_ids:
+            profile = profiles.get(container_id)
+            fallback = fallback_by_container.get(container_id)
+            if profile is None or fallback is None:
+                raise CarrierRecoveryConflict("case snapshot fallback lineage is incomplete")
+            hard_safe = profile is not None and _is_structurally_eligible(profile)
+            if not hard_safe:
+                disposition, preserved = CarrierRecoveryDisposition.ESCALATE, 0
+            elif timing is None:
+                disposition, preserved = CarrierRecoveryDisposition.STILL_ROLL, 0
+            else:
+                boundary = timing.effective_eta_pta + timedelta(minutes=35)
+                preserved = sum(
+                    ScarcityEvaluator().ready_at(profile, world, expedited=container_id in allocation) <= boundary
+                    for world in scenarios.worlds
+                )
+                if preserved * 10 >= len(scenarios.worlds) * 9:
+                    disposition = CarrierRecoveryDisposition.PRESERVED_VIA_RTA
+                elif preserved == 0:
+                    disposition = CarrierRecoveryDisposition.STILL_ROLL
+                else:
+                    disposition = CarrierRecoveryDisposition.ESCALATE
+            replacement = None
+            if disposition is not CarrierRecoveryDisposition.STILL_ROLL:
+                action = DecisionAction.PRESERVE_VIA_RTA if disposition is CarrierRecoveryDisposition.PRESERVED_VIA_RTA else DecisionAction.ESCALATE
+                replacement = Decision(incident_id=case.incident_id, container_id=container_id, action=action, status=DecisionStatus.APPROVED, rationale="Frozen-evidence Phase 3 p90 carrier recovery recomputation.", supersedes=fallback.id, supersession_reason=f"Phase 3 frozen-evidence result: {disposition.value}; preserved worlds {preserved}/{len(scenarios.worlds)}." if timing is not None else "Phase 3 frozen-evidence hard-constraint escalation.", created_at=created_at)
+                replacements.append(replacement)
+            pending_results.append((container_id, disposition, preserved, hard_safe, fallback, replacement))
+        persisted_replacements = {item.id: item for item in self._decisions.add_many(tuple(replacements))} if replacements else {}
+        has_escalation = any(item[1] is CarrierRecoveryDisposition.ESCALATE for item in pending_results)
+        terminal = CarrierRecoveryCaseState.ESCALATED if has_escalation else CarrierRecoveryCaseState.COMPLETED
+        completed_case = case.model_copy(update={"state": terminal, "updated_at": created_at})
+        with self._cases.transaction():
+            for container_id, disposition, preserved, hard_safe, fallback, replacement in pending_results:
+                persisted_replacement = persisted_replacements.get(replacement.id) if replacement else None
+                result = ContainerReconsiderationResult(case_id=case.id, container_id=container_id, disposition=disposition, prior_decision_id=fallback.id, replacement_decision_id=persisted_replacement.id if persisted_replacement else None, preserved_world_count=preserved, world_count=len(scenarios.worlds), hard_constraints_satisfied=hard_safe, created_at=created_at)
+                self._cases.add_result(result)
+                if persisted_replacement is not None:
+                    self._cases.add_decision_link(CarrierRecoveryDecisionLink(case_id=case.id, decision_id=persisted_replacement.id, role=disposition.value, created_at=created_at))
+            self._cases.update_case(completed_case)
+            self._cases.link_audit(case.id, AuditEvent(actor=AuditActor.SYSTEM, actor_id="carrier-recovery-workflow", incident_id=case.incident_id, event_type="carrier_recovery.recomputation_completed", payload={"recovery_case_id": str(case.id), "seed": report.seed, "world_count": report.scenario_count, "selected_allocation": list(report.selected_allocation.allocated_container_ids)}, timestamp=created_at))
+            self._cases.link_audit(case.id, AuditEvent(actor=AuditActor.POLICY, actor_id="synthetic-p90-policy", incident_id=case.incident_id, event_type="carrier_recovery.disposition_recorded", payload={"recovery_case_id": str(case.id), "state": terminal.value}, timestamp=created_at))
+        return completed_case
 
     def simulate_response(
         self,
