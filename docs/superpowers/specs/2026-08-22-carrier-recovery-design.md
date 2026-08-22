@@ -76,7 +76,7 @@ This decision action is container-level. It may be created only after valid effe
 
 - `CarrierRecoveryCase`: case ID, original incident ID, connection ID, source scarcity evaluation ID, immutable affected-container IDs, case state, and lifecycle timestamps.
 - `RTARequestContext`: links the existing immutable `RTARequest` to its case; stores the request ID/version, canonical payload fingerprint, explicit response deadline, send evidence, and close evidence. The existing RTA request ID is the request version identity. Its timing payload is never overwritten.
-- `ApprovalBinding`: binds one existing `Approval` to one case-level authorization proposal, a subject kind (`OUTBOUND_REQUEST` or `COUNTER_PROPOSAL`), the exact request or persisted response, and that subject's canonical fingerprint.
+- `ApprovalBinding`: an immutable, persisted authorization-subject binding created with one case-level proposal. It contains that proposal decision ID, a subject kind (`OUTBOUND_REQUEST` or `COUNTER_PROPOSAL`), the exact request or persisted response ID, and that subject's canonical fingerprint. A later existing `Approval` binds to it through the same proposal decision ID.
 - `EffectiveConnectionTiming`: immutable evidence for one accepted request or operator-approved counter; includes case ID, request ID, response ID, source kind, effective ETA/PTA, and creation time.
 - `CarrierRecoveryDecisionLink`: connects a case to each fallback, connection-level authorization, replacement, or escalation decision without changing the frozen `Decision` shape.
 - `CarrierRecoveryDisposition`: `PRESERVED_VIA_RTA`, `STILL_ROLL`, or `ESCALATE`.
@@ -87,11 +87,12 @@ This decision action is container-level. It may be created only after valid effe
 An existing `Approval` is used honestly, not as a proxy for an arbitrary container:
 
 1. Preparation creates a connection-level `Decision` with `container_id=None`, `action=REQUEST_RTA`, and `status=PROPOSED`.
-2. Its meaning is “authorize use of the RTA recovery lever for this connection at the exact timing payload identified by its binding.”
-3. The operator creates an immutable `Approval` referencing that decision ID. `Approval.operator_id` must be a non-empty explicit identifier and is mandatory evidence of the approving or rejecting operator even though authentication is deferred.
-4. The accompanying `ApprovalBinding` proves the exact case, subject, and fingerprint authorized by that approval.
+2. It atomically creates the immutable pending `ApprovalBinding` for that proposal, case, exact subject, and fingerprint.
+3. The proposal means “authorize use of the RTA recovery lever for this connection at the exact timing payload identified by its binding.”
+4. The operator creates an immutable `Approval` referencing that decision ID. `Approval.operator_id` must be a non-empty explicit identifier and is mandatory evidence of the approving or rejecting operator even though authentication is deferred.
+5. The `Approval` and already-persisted `ApprovalBinding`, joined by proposal decision ID, prove the exact case, subject, and fingerprint authorized by that approval.
 
-Authorization is derived from the pair `Approval + ApprovalBinding`; the frozen `Decision` is never updated. A fresh case-level `REQUEST_RTA` proposal, approval, and binding are required to approve a `COUNTER`. Case-level authorization decisions never participate in container decision supersession. Rejection of the original request closes its pending request artifact before fallback recomputation.
+Authorization is derived from the pair `Approval + ApprovalBinding`; the frozen `Decision` is never updated. A fresh case-level `REQUEST_RTA` proposal and pending binding are required for a `COUNTER`, followed by a fresh approval joined to that proposal. Case-level authorization decisions never participate in container decision supersession. Rejection of the original request closes its pending request artifact before fallback recomputation.
 
 An approval is stale and invalid if its case is no longer in the matching authorization state, its request or response fingerprint does not match, its subject is not the current case subject, it has already been consumed by the relevant transition, the case is terminal, or a response/timeout has made the command contradictory. Phase 3 provides no cancellation or second-request path; it must not invent one.
 
@@ -100,6 +101,8 @@ An approval is stale and invalid if its case is no longer in the matching author
 `prepare_rta_request()` is connection-scoped. It verifies that the incident is the resolved Phase 2 incident, loads its persisted scarcity evaluation, finds the requested connection in the frozen canonical fixture, regenerates the exact source scenario worlds from the report's seed and scenario count, and keeps the selected Phase 2 expedite allocation fixed.
 
 The affected snapshot contains only containers on that connection that are structurally safe and have zero preserved worlds under the original timing with that fixed allocation. For each affected container, preparation atomically creates a deterministic fallback `ROLL` decision with `status=APPROVED` and a decision link. These are recovery decisions, not immediate local carrier operations. The case-level `REQUEST_RTA` proposal is separate from them.
+
+Fallback `ROLL` lineage is explicit and immutable. Before creating each fallback, preparation resolves the container's current recovery decision in the original incident: the unique container-level decision that no later decision supersedes. If that current decision exists, fallback `ROLL.supersedes` must reference it and `supersession_reason` must name the evidence-driven Phase 3 finding: zero preserved worlds under original timing with the frozen Phase 2 allocation. If no current recovery decision exists, fallback `ROLL.supersedes` is `None`. If the lineage is ambiguous, preparation fails closed with `409 Conflict` rather than guessing. `STILL_ROLL` leaves that fallback `ROLL` current. A later `PRESERVE_VIA_RTA` or `ESCALATE` decision supersedes that fallback `ROLL`. This generic rule applies even when the canonical fixture does not exercise every branch; it prevents unsuperseded, contradictory Phase 2 and Phase 3 recovery decisions.
 
 Preparation accepts a requested ETA/PTA and a response deadline. Both command timestamps must be explicit UTC input: their source text must use `Z` or `+00:00`; another non-zero timezone offset is rejected even if timezone-aware. Persisted values are normalized to canonical UTC. The deadline must be later than the preparation timestamp. No duration is invented by the workflow.
 
@@ -162,7 +165,7 @@ Add these persistence records and constraints:
 
 - `carrier_recovery_cases`, unique by `(incident_id, connection_id)`;
 - `rta_requests` and request-context records, unique per case;
-- `approvals` for the existing approval model and `approval_bindings`, unique per approved/rejected authorization subject;
+- `approvals` for the existing approval model and `approval_bindings`, unique by authorization proposal decision ID and created before the operator action;
 - `carrier_responses`, unique by request ID;
 - `effective_connection_timings`, unique per applied carrier outcome;
 - `carrier_recovery_decision_links`, unique by linked decision ID;
@@ -178,10 +181,10 @@ Every Phase 3 audit payload also contains `recovery_case_id`. `carrier_recovery_
 The additive API is:
 
 - `POST /incidents/{incident_id}/carrier-recovery-cases` — prepare a case with `connection_id`, requested ETA/PTA, and response deadline.
-- `POST /carrier-recovery-cases/{case_id}/request-approval` — operator approval or rejection for the outbound request proposal.
+- `POST /carrier-recovery-cases/{case_id}/request-approval` — operator approval or rejection for one exact outbound request proposal. Its body identifies `proposal_decision_id`, `request_id`, `expected_payload_fingerprint`, non-empty `operator_id`, and approve/reject intent.
 - `POST /carrier-recovery-cases/{case_id}/send` — exact authorized dispatch.
 - `POST /carrier-recovery-cases/{case_id}/simulate-carrier-response` — run the fixed carrier plan at `effective_at`.
-- `POST /carrier-recovery-cases/{case_id}/counter-approval` — operator approval or rejection for the persisted counter proposal.
+- `POST /carrier-recovery-cases/{case_id}/counter-approval` — operator approval or rejection for one exact persisted counter proposal. Its body identifies `proposal_decision_id`, `carrier_response_id`, `expected_payload_fingerprint`, non-empty `operator_id`, and approve/reject intent.
 - `POST /carrier-recovery-cases/{case_id}/evaluate-timeout` — deterministic timeout evaluation at `effective_at`.
 - `GET /incidents/{incident_id}/carrier-recovery-cases` — list cases for the original incident.
 - `GET /carrier-recovery-cases/{case_id}` — current case state and summary.
@@ -189,7 +192,8 @@ The additive API is:
 
 Commands fail closed:
 
-- Return **409 Conflict** for stale authorization, wrong case state, altered payload, mismatched approval binding, response after deadline, a conflicting second simulation, a response/timeout contradiction, or any other stale/conflicting workflow command.
+- Approval commands never mean “approve whatever is active for this case.” The server first recognizes an exact retry by its already-persisted approval and matching binding, returning that durable approval unchanged. Otherwise, it looks up the persisted pending `ApprovalBinding` by the supplied proposal decision ID and verifies the supplied request or response ID and expected fingerprint against that exact binding and current case state before creating `Approval`. Any stale proposal, mismatched subject, altered fingerprint, or conflicting intent returns **409 Conflict**.
+- Return **409 Conflict** for stale authorization, wrong case state, altered payload, mismatched approval binding, response after deadline, a conflicting second simulation, a response/timeout contradiction, ambiguous fallback lineage, or any other stale/conflicting workflow command.
 - An exact retry of a completed command returns the original durable result without duplicate dispatches, responses, audits, decisions, or results. A configured silent simulation's exact retry returns the same no-response-emitted command result without persisting carrier evidence.
 - Return **404 Not Found** for unknown incidents, cases, requests, or dependencies.
 - Return **422 Unprocessable Content** for malformed payloads, non-UTC command timestamps, invalid deadline ordering, and other field-level validation errors.
@@ -229,7 +233,8 @@ Tests must preserve all existing one-container and Phase 2 behavior and add cove
 - case uniqueness by incident and connection, valid state transitions, and transactional rollback;
 - strict UTC `Z`/`+00:00` validation and canonical UTC persistence for command timestamps;
 - connection-scoped affected snapshots and prohibition on container-scoped RTA requests;
-- no send without an exact approved request binding, and rejection of stale or altered authorization;
+- fallback-roll lineage from an existing current Phase 2 decision, no-prior-decision lineage, still-roll continuity, and later replacement supersession;
+- no send without an exact approved request binding, approval-command subject matching, exact approval retries, and rejection of stale or altered authorization;
 - mandatory fresh counter proposal/binding/approval;
 - exact accept timing, counter timing, and one-response-only behavior;
 - configured silent simulation with no `CarrierResponse` and no `CARRIER` event;
