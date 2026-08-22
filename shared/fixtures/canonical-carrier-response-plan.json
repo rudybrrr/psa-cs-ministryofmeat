@@ -1,0 +1,9 @@
+{
+  "plan_id": "SYN-CANONICAL-CARRIER-RTA-V1",
+  "fixture_id": "SYN-CANONICAL-24-V1",
+  "responses": [
+    {"connection_id": "SYN-CONN-SF1", "outcome": "ACCEPT"},
+    {"connection_id": "SYN-CONN-JV2", "outcome": "COUNTER", "counter_eta_pta": "2026-08-22T06:45:00Z"},
+    {"connection_id": "SYN-CONN-EC3", "outcome": "SILENT"}
+  ]
+}

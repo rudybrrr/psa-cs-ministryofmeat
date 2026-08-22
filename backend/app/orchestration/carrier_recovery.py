@@ -17,12 +17,18 @@ from backend.app.domain.carrier_recovery import (
     PrepareCarrierRecoveryCaseCommand,
     RequestApprovalCommand,
     RTARequestContext,
+    SimulateCarrierResponseCommand,
+    CarrierSimulationResult,
 )
 from backend.app.domain.enums import ApprovalStatus, AuditActor, DecisionAction, DecisionStatus, IncidentState, RTARequestStatus
 from backend.app.domain.models import Approval, AuditEvent, Decision, RTARequest, utc_now
 from backend.app.evaluation.scarcity import ScarcityEvaluator, _is_structurally_eligible
 from backend.app.services.canonical_incident import SyntheticCanonicalIncidentService
 from backend.app.services.scenarios import SeededScenarioGenerator
+from backend.app.services.carrier_simulator import (
+    DeterministicCarrierSimulator,
+    SyntheticCarrierResponsePlan,
+)
 from backend.app.storage.carrier_recovery import CarrierRecoveryRepository
 from backend.app.storage.repositories import DecisionRepository, IncidentRepository, ScarcityEvaluationRepository
 
@@ -141,6 +147,30 @@ class CarrierRecoveryWorkflow:
             self._cases.update_case(sent_case)
             self._cases.link_audit(case_id, AuditEvent(actor=AuditActor.SYSTEM, actor_id="carrier-recovery-workflow", incident_id=case.incident_id, event_type="rta.request_sent", payload={"recovery_case_id": str(case_id), "request_id": str(request.id), "payload_fingerprint": context.payload_fingerprint}, timestamp=now))
         return sent_context
+
+    def simulate_response(
+        self,
+        command: SimulateCarrierResponseCommand,
+    ) -> CarrierSimulationResult:
+        history = self._cases.history(command.case_id)
+        case, request, context = history.case, history.request, history.request_context
+        if (
+            request is None
+            or context is None
+            or case.state is not CarrierRecoveryCaseState.AWAITING_CARRIER
+            or request.status is not RTARequestStatus.SENT
+            or context.sent_at is None
+            or command.effective_at >= context.response_deadline
+        ):
+            raise CarrierRecoveryConflict("carrier simulation is not valid for this request state or deadline")
+        response = DeterministicCarrierSimulator(
+            SyntheticCarrierResponsePlan().load()
+        ).emit(request, command.effective_at)
+        return CarrierSimulationResult(
+            case_id=case.id,
+            carrier_response_id=response.id if response is not None else None,
+            no_response_emitted=response is None,
+        )
 
 
 def build_carrier_recovery_workflow(session: Session) -> CarrierRecoveryWorkflow:

@@ -5,8 +5,8 @@ import pytest
 from sqlmodel import Session
 
 from backend.app.domain.carrier_recovery import PrepareCarrierRecoveryCaseCommand
-from backend.app.domain.carrier_recovery import RequestApprovalCommand
-from backend.app.domain.enums import ApprovalStatus, DecisionAction, DecisionStatus
+from backend.app.domain.carrier_recovery import RequestApprovalCommand, SimulateCarrierResponseCommand
+from backend.app.domain.enums import ApprovalStatus, AuditActor, DecisionAction, DecisionStatus
 from backend.app.orchestration.carrier_recovery import CarrierRecoveryConflict, build_carrier_recovery_workflow
 from backend.app.orchestration.scarce_capacity import build_scarce_capacity_workflow
 from backend.app.storage.repositories import DecisionRepository
@@ -163,3 +163,48 @@ def test_prepare_rejects_service_label_when_connection_id_is_required(
 
     with pytest.raises(CarrierRecoveryConflict, match="unknown connection"):
         workflow.prepare(command(phase_two.incident.id, "JV2"))
+
+
+def approve_and_send(workflow, case) -> None:
+    binding = workflow.history(case.id).bindings[0]
+    workflow.record_request_approval(RequestApprovalCommand(
+        case_id=case.id,
+        proposal_decision_id=binding.proposal_decision_id,
+        request_id=binding.subject_id,
+        expected_payload_fingerprint=binding.payload_fingerprint,
+        operator_id="operator-20",
+        status=ApprovalStatus.APPROVED,
+    ))
+    workflow.send_authorised_request(case.id)
+
+
+def test_silent_plan_returns_no_response_and_persists_no_carrier_event(
+    session: Session,
+) -> None:
+    phase_two = build_scarce_capacity_workflow(session).run()
+    workflow = build_carrier_recovery_workflow(session)
+    case = workflow.prepare(command(phase_two.incident.id, "SYN-CONN-EC3"))
+    approve_and_send(workflow, case)
+
+    result = workflow.simulate_response(SimulateCarrierResponseCommand(
+        case_id=case.id,
+        effective_at="2026-08-22T08:30:00Z",
+    ))
+    history = workflow.history(case.id)
+
+    assert result.no_response_emitted is True
+    assert history.carrier_responses == ()
+    assert AuditActor.CARRIER not in {event.actor for event in history.audit_events}
+
+
+def test_simulator_rejects_effective_at_at_or_after_deadline(session: Session) -> None:
+    phase_two = build_scarce_capacity_workflow(session).run()
+    workflow = build_carrier_recovery_workflow(session)
+    case = workflow.prepare(command(phase_two.incident.id, "SYN-CONN-EC3"))
+    approve_and_send(workflow, case)
+
+    with pytest.raises(CarrierRecoveryConflict):
+        workflow.simulate_response(SimulateCarrierResponseCommand(
+            case_id=case.id,
+            effective_at="2026-08-22T09:00:00Z",
+        ))
