@@ -6,9 +6,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session
 
 from backend.app.domain.carrier_recovery import CarrierRecoveryCase, CarrierRecoveryCaseState
-from backend.app.domain.enums import AuditActor
+from backend.app.domain.enums import ApprovalStatus, AuditActor
 from backend.app.domain.enums import DecisionAction, DecisionStatus
-from backend.app.domain.models import AuditEvent, Decision
+from backend.app.domain.models import Approval, AuditEvent, Decision
 from backend.app.storage.repositories import DecisionRepository
 from backend.app.storage.carrier_recovery import CarrierRecoveryRepository
 
@@ -37,6 +37,25 @@ def test_case_is_unique_per_incident_and_connection(session: Session) -> None:
     with pytest.raises(IntegrityError):
         with repository.transaction():
             repository.create_case(case.model_copy(update={"id": uuid4()}))
+
+
+def test_database_allows_only_one_approval_for_one_bound_proposal(session: Session) -> None:
+    repository = CarrierRecoveryRepository(session)
+    proposal_id = uuid4()
+    repository.add_approval(Approval(
+        decision_id=proposal_id,
+        operator_id="operator-one",
+        status=ApprovalStatus.APPROVED,
+        created_at=at(6),
+    ))
+
+    with pytest.raises(IntegrityError):
+        repository.add_approval(Approval(
+            decision_id=proposal_id,
+            operator_id="operator-two",
+            status=ApprovalStatus.REJECTED,
+            created_at=at(7),
+        ))
 
 
 def test_transaction_rolls_back_case_and_case_audit_link(session: Session) -> None:

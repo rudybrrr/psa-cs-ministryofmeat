@@ -60,7 +60,7 @@ class RTARequestContextRecord(SQLModel, table=True):
 class ApprovalRecord(SQLModel, table=True):
     __tablename__ = "approvals"
     id: str = Field(primary_key=True)
-    decision_id: str = Field(index=True)
+    decision_id: str = Field(index=True, unique=True)
     operator_id: str
     status: str
     reason: str | None = None
