@@ -1,0 +1,143 @@
+{
+  "fixture_id": "SYN-CANONICAL-24-V1",
+  "development_seed": 20260822,
+  "evaluation_seed_manifest_id": "SYN-CANONICAL-24-HOLDOUT-V1",
+  "evaluation_seeds": [
+    3309398482,
+    3951398951,
+    1202677221,
+    163248611,
+    2925917627,
+    662983011,
+    535220416,
+    3712295148,
+    3322287218,
+    4221776994,
+    3583464971,
+    3829961219,
+    2909674732,
+    2930815356,
+    1290524950,
+    221570462,
+    2889484640,
+    2523357292,
+    2651570794,
+    382770434,
+    1949252393,
+    781115299,
+    457021634,
+    2351493851,
+    490788644,
+    1182613177,
+    2570170220,
+    2710911550,
+    2335850418,
+    1110308685,
+    3611131743,
+    2395838459,
+    3958056597,
+    3269696256,
+    3913539575,
+    3217501867,
+    3664687104,
+    655908589,
+    1134109869,
+    710088785,
+    696308748,
+    3159225489,
+    247409133,
+    3144496822,
+    1737969039,
+    2202677500,
+    3504594914,
+    3281786063,
+    488632411,
+    4223942113
+  ],
+  "worlds_per_seed": 50,
+  "baseline": {
+    "allocation": {
+      "strategy": "P50_GREEDY",
+      "allocated_container_ids": [
+        "SYN-CNT-001",
+        "SYN-CNT-002",
+        "SYN-CNT-003",
+        "SYN-CNT-004",
+        "SYN-CNT-005",
+        "SYN-CNT-006",
+        "SYN-CNT-007",
+        "SYN-CNT-010"
+      ]
+    },
+    "world_count": 2500,
+    "preserved_connection_total": 30034,
+    "expected_preserved_connections": 12.0136,
+    "rollover_total": 29966,
+    "expected_rollovers": 11.9864,
+    "p10_preserved_connections": 8,
+    "allocation_slot_count": 8,
+    "capacity_violations": 0,
+    "unsafe_allocations": 0,
+    "runtime_ms": 156.5238,
+    "service_outcomes": [
+      {
+        "service_id": "SF1",
+        "preserved_connection_total": 16535
+      },
+      {
+        "service_id": "JV2",
+        "preserved_connection_total": 6594
+      },
+      {
+        "service_id": "EC3",
+        "preserved_connection_total": 6905
+      }
+    ]
+  },
+  "scenario_aware": [
+    {
+      "evaluation": {
+        "allocation": {
+          "strategy": "SCENARIO_AWARE",
+          "allocated_container_ids": [
+            "SYN-CNT-002",
+            "SYN-CNT-004",
+            "SYN-CNT-005",
+            "SYN-CNT-010",
+            "SYN-CNT-011",
+            "SYN-CNT-012",
+            "SYN-CNT-014",
+            "SYN-CNT-015"
+          ]
+        },
+        "world_count": 2500,
+        "preserved_connection_total": 31272,
+        "expected_preserved_connections": 12.5088,
+        "rollover_total": 28728,
+        "expected_rollovers": 11.4912,
+        "p10_preserved_connections": 8,
+        "allocation_slot_count": 8,
+        "capacity_violations": 0,
+        "unsafe_allocations": 0,
+        "runtime_ms": 156.63320000000002,
+        "service_outcomes": [
+          {
+            "service_id": "SF1",
+            "preserved_connection_total": 10830
+          },
+          {
+            "service_id": "JV2",
+            "preserved_connection_total": 13537
+          },
+          {
+            "service_id": "EC3",
+            "preserved_connection_total": 6905
+          }
+        ]
+      },
+      "observed_expected_preserved_delta_vs_baseline": 0.49520000000000053
+    }
+  ],
+  "reproducibility_key": "d0dc76fb9239f4f77320f4b0a0fd5572d0b9a86a80da0448892d5336f205fe21",
+  "created_at": "2026-08-22T12:33:50.682074Z"
+}
