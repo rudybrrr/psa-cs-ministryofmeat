@@ -157,3 +157,17 @@ Only the Windows Codex agent edits this file.
 - Deliberate deferrals: Phase 2 Task 2 and every later task; fixture loading; scenario generation; evaluation behavior; baseline allocation; OR-Tools/solver behavior; persistence; workflow; API; frontend; RTA/carrier behavior; DG semantic reasoning; and LLM integration.
 - Blockers: None. No frozen Phase 1 contract or enum changed, and no `DECISIONS.md` entry was required.
 - Recommended next step: Review and approve the additive Phase 2 contracts, then authorize Phase 2 Task 2 separately if accepted.
+
+## 2026-08-22T16:19:20.6226409+08:00 — Phase 2 Task 2 completed
+
+- Timestamp: `2026-08-22T16:19:20.6226409+08:00`
+- Task: Phase 2 Task 2 — exact canonical 24-container synthetic incident fixture and read-only loader.
+- Branch: `main`
+- Base SHA: `16c17e6406388ba5baefdad7b81e9d9bba6ebe78`
+- Resulting HEAD SHA: `d5e782b18af3abd97b4ad976a1b346afb6217d06` (Task 2 implementation commit).
+- Files changed: `shared/fixtures/canonical-24-container.json`; `shared/fixtures/README.md`; `backend/app/services/canonical_incident.py`; `backend/tests/test_canonical_incident.py`; `backend/tests/conftest.py`; this authorized `docs/coordination/logs/win-codex.md` handoff entry.
+- Tests run and results: Baseline `uv run --python 3.12 --extra dev pytest -q` passed 97 tests in 0.26s. RED `uv run --python 3.12 --extra dev pytest backend/tests/test_canonical_incident.py -q` failed during collection with the expected `ModuleNotFoundError: No module named 'backend.app.services.canonical_incident'`. GREEN focused command passed 14 tests in 0.06s. Full suite passed 111 tests in 0.34s. A direct read-only loader smoke confirmed service counts 9/8/7, cargo counts 14/6/4, the exact derived 13/5/6 classification partition, and eight slots. `git diff --check`, staged diff check, and frozen-contract diff checks exited 0. TestClient runs retained the existing single Starlette/httpx deprecation warning.
+- Interfaces/contracts changed: Added `SyntheticCanonicalIncidentService.load() -> CanonicalIncidentFixture` and the shared `canonical_fixture` pytest fixture. Added no domain contract or enum. The loader performs only local UTF-8 JSON reading followed by `CanonicalIncidentFixture.model_validate`.
+- Deliberate deferrals: Phase 2 Task 3 and every later task; scenario generation; evaluation behavior; baseline allocation; OR-Tools/solver behavior; persistence; workflow; API; frontend; carrier/RTA behavior; DG semantic reasoning; and LLM integration. The frozen `ScheduleEvent` has no separate inbound-service-code field, so the approved `ASX-17` label is explicit in fixture documentation and synthetic event/call naming while the structured event retains the exact vessel-call ID and vessel name.
+- Blockers: None. `backend/app/domain/scarcity.py` and all frozen Phase 1 contracts/enums are unchanged. The fixture contains no beneficiary/outcome flag and no Pasir Panjang identifier.
+- Recommended next step: Review and approve the canonical fixture, then authorize Phase 2 Task 3 separately if accepted.
