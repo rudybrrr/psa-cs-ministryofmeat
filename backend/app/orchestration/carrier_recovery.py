@@ -120,7 +120,13 @@ class CarrierRecoveryWorkflow:
         approval = Approval(decision_id=command.proposal_decision_id, operator_id=command.operator_id, status=command.status, created_at=now)
         updated_case = case if command.status is ApprovalStatus.APPROVED else case.model_copy(update={"state": CarrierRecoveryCaseState.RECOMPUTING, "updated_at": now})
         with self._cases.transaction():
-            self._cases.add_approval(approval)
+            if not self._cases.try_add_approval(approval):
+                winner = self._cases.get_approval_for_proposal(
+                    command.proposal_decision_id
+                )
+                if winner is not None and winner.operator_id == command.operator_id and winner.status is command.status:
+                    return winner
+                raise CarrierRecoveryConflict("contradictory approval retry")
             if updated_case is not case:
                 if history.request is None or history.request_context is None:
                     raise CarrierRecoveryConflict("rejected request is missing immutable context")
@@ -186,7 +192,13 @@ class CarrierRecoveryWorkflow:
         target_case = case.model_copy(update={"state": CarrierRecoveryCaseState.RECOMPUTING, "updated_at": now})
         timing = EffectiveConnectionTiming(case_id=case.id, request_id=response.request_id, carrier_response_id=response.id, effective_eta_pta=response.counter_eta_pta, created_at=now) if command.status is ApprovalStatus.APPROVED else None
         with self._cases.transaction():
-            self._cases.add_approval(approval)
+            if not self._cases.try_add_approval(approval):
+                winner = self._cases.get_approval_for_proposal(
+                    command.proposal_decision_id
+                )
+                if winner is not None and winner.operator_id == command.operator_id and winner.status is command.status:
+                    return winner
+                raise CarrierRecoveryConflict("contradictory counter approval retry")
             self._cases.update_case(target_case)
             if timing is not None:
                 self._cases.add_effective_timing(timing)

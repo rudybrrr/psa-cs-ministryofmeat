@@ -58,6 +58,17 @@ def test_database_allows_only_one_approval_for_one_bound_proposal(session: Sessi
         ))
 
 
+def test_unique_approval_collision_is_reported_without_aborting_the_session(session: Session) -> None:
+    repository = CarrierRecoveryRepository(session)
+    proposal_id = uuid4()
+    first = Approval(decision_id=proposal_id, operator_id="operator-one", status=ApprovalStatus.APPROVED, created_at=at(6))
+    loser = Approval(decision_id=proposal_id, operator_id="operator-two", status=ApprovalStatus.REJECTED, created_at=at(7))
+
+    assert repository.try_add_approval(first) is True
+    assert repository.try_add_approval(loser) is False
+    assert repository.get_approval_for_proposal(proposal_id) == first
+
+
 def test_transaction_rolls_back_case_and_case_audit_link(session: Session) -> None:
     repository = CarrierRecoveryRepository(session)
     case = make_case()
