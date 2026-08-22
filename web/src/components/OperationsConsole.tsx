@@ -8,6 +8,7 @@ import {
 import type { IncidentSnapshot, TriggerResponse } from "../api/types";
 import { AuditTimeline } from "./AuditTimeline";
 import { ActorLegend } from "./ActorBadge";
+import { CanonicalIncidentView } from "./CanonicalIncidentView";
 import { CurrentDecision } from "./CurrentDecision";
 import { IncidentHeader } from "./IncidentHeader";
 import { SyntheticBanner } from "./SyntheticBanner";
@@ -76,16 +77,19 @@ export function OperationsConsole() {
       <SyntheticBanner />
       <IncidentHeader incident={snapshot?.incident ?? null} loading={loading} />
 
-      <main className="mx-auto max-w-7xl px-4 py-6">
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded border border-slate-800 bg-slate-900/40 px-4 py-4">
+      <main className="mx-auto max-w-7xl space-y-6 px-4 py-6">
+        <CanonicalIncidentView />
+
+        <div className="flex flex-wrap items-center justify-between gap-4 rounded border border-slate-800 bg-slate-900/40 px-4 py-4">
           <div>
             <h2 className="text-sm font-semibold text-slate-100">
               Synthetic scenario control
             </h2>
             <p className="mt-1 max-w-2xl text-sm text-slate-400">
-              Trigger the canonical one-container schedule-delay scenario. The
-              console loads persisted incident, decision, and audit state from
-              the FastAPI backend.
+              Trigger the one-container schedule-delay scenario. The console
+              still loads persisted incident, decision, and audit state from
+              the FastAPI backend. The 24-container view above is the frozen
+              canonical fixture, not an allocation result.
             </p>
           </div>
 
@@ -138,6 +142,9 @@ export function OperationsConsole() {
 
         {snapshot && (
           <div className="space-y-6">
+            <h2 className="text-sm font-semibold text-slate-100">
+              One-container API incident
+            </h2>
             <section className="rounded border border-slate-800 bg-slate-950/60 px-4 py-4">
               <h2 className="text-sm font-semibold text-slate-100">
                 Current incident summary
