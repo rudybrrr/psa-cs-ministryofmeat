@@ -41,3 +41,13 @@ The adapters expose read-only retrieval and feasibility behavior. They do not al
 The fixture deliberately stores no beneficiary or outcome label. P50 classification is derived from ready time, the service boundary, the 30-minute expedite saving, reefer continuity, and structural DG clearance. Those values derive 13 expedite candidates (7 SF1 and 6 JV2), while capacity permits at most eight allocations; five containers need no expedition and six cannot be preserved by expedition alone.
 
 DG information in this Phase 2 fixture is structural synthetic data only. It does not perform semantic mismatch analysis, infer a UN number, negotiate with a carrier, or invoke an LLM. The later RTA phase remains separate, and this fixture does not hard-code a full-demo 18/5/1 result.
+
+## Frozen scarcity evaluation seeds
+
+`scarcity-evaluation-seeds.json` declares 50 synthetic holdout seeds for the
+canonical fixture. They are deterministic SHA-256-derived experimental inputs,
+not PSA data or calibrated operating distributions. Development uses separate
+debug seeds; the frozen holdout seeds must not be used to tune fixture values,
+scenario distributions, allocator behavior, Pareto filtering, or dominance
+policy. A correctness defect after evaluation requires a newly versioned
+manifest and an explicit coordination decision.
