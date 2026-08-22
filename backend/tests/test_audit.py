@@ -246,8 +246,18 @@ def test_database_helpers_create_tables_and_yield_a_usable_session(
 
     assert set(inspect(engine).get_table_names()) == {
         "audit_events",
+        "approval_bindings",
+        "approvals",
+        "carrier_recovery_audit_links",
+        "carrier_recovery_cases",
+        "carrier_recovery_decision_links",
+        "carrier_responses",
+        "container_reconsideration_results",
         "decisions",
+        "effective_connection_timings",
         "incidents",
+        "rta_request_contexts",
+        "rta_requests",
         "scarcity_evaluations",
     }
     assert yielded_session.exec(select(IncidentRecord)).all() == []
@@ -287,3 +297,22 @@ def test_audit_repository_returns_only_the_requested_incident(
     )
 
     assert repository.list_for_incident(incident.id) == [expected]
+
+
+def test_audit_repository_can_add_an_uncommitted_event_for_a_larger_transaction(
+    session: Session,
+    incident: Incident,
+) -> None:
+    IncidentRepository(session).create(incident)
+    repository = AuditRepository(session)
+    event = AuditEvent(
+        actor=AuditActor.SYSTEM,
+        incident_id=incident.id,
+        event_type="carrier_recovery.case_prepared",
+        payload={},
+        timestamp=at(6),
+    )
+    record = repository.add_uncommitted(event)
+
+    assert record.id == str(event.id)
+    assert repository.list_for_incident(incident.id) == [event]

@@ -1,0 +1,71 @@
+from datetime import UTC, datetime
+from uuid import UUID, uuid4
+
+import pytest
+from sqlalchemy.exc import IntegrityError
+from sqlmodel import Session
+
+from backend.app.domain.carrier_recovery import CarrierRecoveryCase, CarrierRecoveryCaseState
+from backend.app.domain.enums import AuditActor
+from backend.app.domain.models import AuditEvent
+from backend.app.storage.carrier_recovery import CarrierRecoveryRepository
+
+
+def at(hour: int) -> datetime:
+    return datetime(2026, 8, 22, hour, tzinfo=UTC)
+
+
+def make_case() -> CarrierRecoveryCase:
+    return CarrierRecoveryCase(
+        id=UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"),
+        incident_id=UUID("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"),
+        connection_id="SYN-CONN-SF1",
+        source_evaluation_id=UUID("cccccccc-cccc-4ccc-8ccc-cccccccccccc"),
+        affected_container_ids=("SYN-CNT-001",),
+        state=CarrierRecoveryCaseState.AWAITING_REQUEST_APPROVAL,
+        created_at=at(6),
+        updated_at=at(6),
+    )
+
+
+def test_case_is_unique_per_incident_and_connection(session: Session) -> None:
+    repository = CarrierRecoveryRepository(session)
+    case = make_case()
+    repository.create_case(case)
+    with pytest.raises(IntegrityError):
+        with repository.transaction():
+            repository.create_case(case.model_copy(update={"id": uuid4()}))
+
+
+def test_transaction_rolls_back_case_and_case_audit_link(session: Session) -> None:
+    repository = CarrierRecoveryRepository(session)
+    case = make_case()
+    event = AuditEvent(
+        actor=AuditActor.SYSTEM,
+        incident_id=case.incident_id,
+        event_type="carrier_recovery.case_prepared",
+        payload={"recovery_case_id": str(case.id)},
+        timestamp=at(6),
+    )
+    with pytest.raises(RuntimeError, match="force rollback"):
+        with repository.transaction():
+            repository.create_case(case)
+            repository.link_audit(case.id, event)
+            raise RuntimeError("force rollback")
+    assert repository.list_cases(case.incident_id) == []
+
+
+def test_history_uses_structured_case_audit_links(session: Session) -> None:
+    repository = CarrierRecoveryRepository(session)
+    case = make_case()
+    repository.create_case(case)
+    event = AuditEvent(
+        actor=AuditActor.SYSTEM,
+        incident_id=case.incident_id,
+        event_type="carrier_recovery.case_prepared",
+        payload={"recovery_case_id": str(case.id)},
+        timestamp=at(6),
+    )
+    with repository.transaction():
+        repository.link_audit(case.id, event)
+    assert repository.history(case.id).audit_events == (event,)

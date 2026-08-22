@@ -196,6 +196,12 @@ class AuditRepository:
         self._session = session
 
     def append(self, event: AuditEvent) -> AuditEvent:
+        record = self.add_uncommitted(event)
+        self._session.commit()
+        self._session.refresh(record)
+        return self._to_domain(record)
+
+    def add_uncommitted(self, event: AuditEvent) -> AuditEventRecord:
         record = AuditEventRecord(
             id=str(event.id),
             actor=event.actor.value,
@@ -206,9 +212,8 @@ class AuditRepository:
             timestamp_utc=to_utc_text(event.timestamp),
         )
         self._session.add(record)
-        self._session.commit()
-        self._session.refresh(record)
-        return self._to_domain(record)
+        self._session.flush()
+        return record
 
     def list_for_incident(self, incident_id: UUID) -> list[AuditEvent]:
         statement = (
