@@ -8,7 +8,23 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy.engine import Engine
 from sqlmodel import Session
 
-from backend.app.domain.models import AuditEvent, Decision, Incident
+from backend.app.domain.carrier_recovery import (
+    CarrierRecoveryCase,
+    CarrierRecoveryHistory,
+    CarrierSimulationResult,
+    CounterApprovalCommand,
+    EvaluateTimeoutCommand,
+    PrepareCarrierRecoveryCaseCommand,
+    RequestApprovalCommand,
+    RTARequestContext,
+    SimulateCarrierResponseCommand,
+)
+from backend.app.domain.enums import ApprovalStatus
+from backend.app.domain.models import Approval, AuditEvent, Decision, Incident
+from backend.app.orchestration.carrier_recovery import (
+    CarrierRecoveryConflict,
+    build_carrier_recovery_workflow,
+)
 from backend.app.domain.scarcity import (
     CanonicalIncidentFixture,
     ScarcityEvaluationReport,
@@ -32,6 +48,7 @@ from backend.app.storage.repositories import (
     RecordNotFound,
     ScarcityEvaluationRepository,
 )
+from backend.app.storage.carrier_recovery import CarrierRecoveryRepository
 
 
 class TriggerResponse(BaseModel):
@@ -48,6 +65,32 @@ class ScarcityTriggerResponse(BaseModel):
     evaluation_id: UUID
     decision_ids: tuple[UUID, ...]
     reproducibility_key: str
+
+
+class PrepareCarrierRecoveryBody(BaseModel):
+    connection_id: str
+    requested_eta_pta: str
+    response_deadline: str
+
+
+class RequestApprovalBody(BaseModel):
+    proposal_decision_id: UUID
+    request_id: UUID
+    expected_payload_fingerprint: str
+    operator_id: str
+    status: ApprovalStatus
+
+
+class CounterApprovalBody(BaseModel):
+    proposal_decision_id: UUID
+    carrier_response_id: UUID
+    expected_payload_fingerprint: str
+    operator_id: str
+    status: ApprovalStatus
+
+
+class EffectiveAtBody(BaseModel):
+    effective_at: str
 
 
 SessionDependency = Annotated[Session, Depends(get_session)]
@@ -166,6 +209,78 @@ def create_app(*, database_engine: Engine | None = None) -> FastAPI:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Scarcity evaluation not found",
             ) from error
+
+    @application.post("/incidents/{incident_id}/carrier-recovery-cases", response_model=CarrierRecoveryCase, status_code=status.HTTP_201_CREATED)
+    def prepare_carrier_recovery_case(incident_id: UUID, body: PrepareCarrierRecoveryBody, session: SessionDependency) -> CarrierRecoveryCase:
+        try:
+            return build_carrier_recovery_workflow(session).prepare(PrepareCarrierRecoveryCaseCommand(incident_id=incident_id, **body.model_dump()))
+        except LookupError as error:
+            raise HTTPException(status_code=404, detail="Incident or dependency not found") from error
+        except CarrierRecoveryConflict as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+
+    @application.post("/carrier-recovery-cases/{case_id}/request-approval", response_model=Approval)
+    def request_carrier_approval(case_id: UUID, body: RequestApprovalBody, session: SessionDependency) -> Approval:
+        try:
+            return build_carrier_recovery_workflow(session).record_request_approval(RequestApprovalCommand(case_id=case_id, **body.model_dump()))
+        except LookupError as error:
+            raise HTTPException(status_code=404, detail="Carrier recovery case or binding not found") from error
+        except CarrierRecoveryConflict as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+
+    @application.post("/carrier-recovery-cases/{case_id}/send", response_model=RTARequestContext)
+    def send_carrier_request(case_id: UUID, session: SessionDependency) -> RTARequestContext:
+        try:
+            return build_carrier_recovery_workflow(session).send_authorised_request(case_id)
+        except LookupError as error:
+            raise HTTPException(status_code=404, detail="Carrier recovery case not found") from error
+        except CarrierRecoveryConflict as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+
+    @application.post("/carrier-recovery-cases/{case_id}/simulate-carrier-response", response_model=CarrierSimulationResult)
+    def simulate_carrier_response(case_id: UUID, body: EffectiveAtBody, session: SessionDependency) -> CarrierSimulationResult:
+        try:
+            return build_carrier_recovery_workflow(session).simulate_response(SimulateCarrierResponseCommand(case_id=case_id, **body.model_dump()))
+        except LookupError as error:
+            raise HTTPException(status_code=404, detail="Carrier recovery case not found") from error
+        except CarrierRecoveryConflict as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+
+    @application.post("/carrier-recovery-cases/{case_id}/counter-approval", response_model=Approval)
+    def counter_carrier_approval(case_id: UUID, body: CounterApprovalBody, session: SessionDependency) -> Approval:
+        try:
+            return build_carrier_recovery_workflow(session).record_counter_approval(CounterApprovalCommand(case_id=case_id, **body.model_dump()))
+        except LookupError as error:
+            raise HTTPException(status_code=404, detail="Carrier recovery case or binding not found") from error
+        except CarrierRecoveryConflict as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+
+    @application.post("/carrier-recovery-cases/{case_id}/evaluate-timeout", response_model=CarrierRecoveryCase)
+    def evaluate_carrier_timeout(case_id: UUID, body: EffectiveAtBody, session: SessionDependency) -> CarrierRecoveryCase:
+        try:
+            return build_carrier_recovery_workflow(session).evaluate_timeout(EvaluateTimeoutCommand(case_id=case_id, **body.model_dump()))
+        except LookupError as error:
+            raise HTTPException(status_code=404, detail="Carrier recovery case not found") from error
+        except CarrierRecoveryConflict as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+
+    @application.get("/incidents/{incident_id}/carrier-recovery-cases", response_model=list[CarrierRecoveryCase])
+    def list_carrier_recovery_cases(incident_id: UUID, session: SessionDependency) -> list[CarrierRecoveryCase]:
+        return CarrierRecoveryRepository(session).list_cases(incident_id)
+
+    @application.get("/carrier-recovery-cases/{case_id}", response_model=CarrierRecoveryCase)
+    def get_carrier_recovery_case(case_id: UUID, session: SessionDependency) -> CarrierRecoveryCase:
+        try:
+            return CarrierRecoveryRepository(session).get_case(case_id)
+        except LookupError as error:
+            raise HTTPException(status_code=404, detail="Carrier recovery case not found") from error
+
+    @application.get("/carrier-recovery-cases/{case_id}/history", response_model=CarrierRecoveryHistory)
+    def get_carrier_recovery_history(case_id: UUID, session: SessionDependency) -> CarrierRecoveryHistory:
+        try:
+            return build_carrier_recovery_workflow(session).history(case_id)
+        except LookupError as error:
+            raise HTTPException(status_code=404, detail="Carrier recovery case not found") from error
 
     return application
 
