@@ -49,7 +49,11 @@ class CarrierRecoveryWorkflow:
         scenarios = self._scenarios.generate(fixture, seed=report.seed, world_count=report.scenario_count)
         evaluator = ScarcityEvaluator()
         allocated = set(report.selected_allocation.allocated_container_ids)
-        profiles = [profile for profile in fixture.profiles if profile.service_id == command.connection_id]
+        profiles = [
+            profile
+            for profile in fixture.profiles
+            if profile.container.onward_connection.id == command.connection_id
+        ]
         if not profiles:
             raise CarrierRecoveryConflict(f"unknown connection {command.connection_id}")
         affected = tuple(profile.container.id for profile in profiles if _is_structurally_eligible(profile) and not any(evaluator.preserves_connection(fixture, profile, world, expedited=profile.container.id in allocated) for world in scenarios.worlds))

@@ -26,15 +26,15 @@ def test_prepare_reuses_resolved_phase_two_evidence_and_freezes_connection_snaps
 ) -> None:
     phase_two = build_scarce_capacity_workflow(session).run()
     workflow = build_carrier_recovery_workflow(session)
-    case = workflow.prepare(command(phase_two.incident.id, "JV2"))
+    case = workflow.prepare(command(phase_two.incident.id, "SYN-CONN-JV2"))
 
     assert case.incident_id == phase_two.incident.id
     assert case.source_evaluation_id == phase_two.report.id
-    assert case.connection_id == "JV2"
-    assert case.affected_container_ids
+    assert case.connection_id == "SYN-CONN-JV2"
+    assert case.affected_container_ids == ("SYN-CNT-017",)
     history = workflow.history(case.id)
     assert history.request is not None
-    assert history.request.connection_id == "JV2"
+    assert history.request.connection_id == "SYN-CONN-JV2"
 
 
 def test_prepare_creates_fallback_rolls_with_explicit_current_decision_lineage(
@@ -42,7 +42,7 @@ def test_prepare_creates_fallback_rolls_with_explicit_current_decision_lineage(
 ) -> None:
     phase_two = build_scarce_capacity_workflow(session).run()
     workflow = build_carrier_recovery_workflow(session)
-    case = workflow.prepare(command(phase_two.incident.id, "JV2"))
+    case = workflow.prepare(command(phase_two.incident.id, "SYN-CONN-JV2"))
     decisions = DecisionRepository(session).list_for_incident(phase_two.incident.id)
     fallbacks = [
         item for item in decisions
@@ -62,7 +62,7 @@ def test_request_approval_requires_exact_proposal_request_and_fingerprint(
 ) -> None:
     phase_two = build_scarce_capacity_workflow(session).run()
     workflow = build_carrier_recovery_workflow(session)
-    case = workflow.prepare(command(phase_two.incident.id, "JV2"))
+    case = workflow.prepare(command(phase_two.incident.id, "SYN-CONN-JV2"))
     history = workflow.history(case.id)
     binding = history.bindings[0]
     exact = RequestApprovalCommand(
@@ -86,7 +86,7 @@ def test_request_approval_rejects_stale_subject_without_creating_approval(
 ) -> None:
     phase_two = build_scarce_capacity_workflow(session).run()
     workflow = build_carrier_recovery_workflow(session)
-    case = workflow.prepare(command(phase_two.incident.id, "JV2"))
+    case = workflow.prepare(command(phase_two.incident.id, "SYN-CONN-JV2"))
     binding = workflow.history(case.id).bindings[0]
     exact = RequestApprovalCommand(
         case_id=case.id,
@@ -104,7 +104,7 @@ def test_request_approval_rejects_stale_subject_without_creating_approval(
 def test_request_rejection_closes_authorization_without_a_dead_end(session: Session) -> None:
     phase_two = build_scarce_capacity_workflow(session).run()
     workflow = build_carrier_recovery_workflow(session)
-    case = workflow.prepare(command(phase_two.incident.id, "JV2"))
+    case = workflow.prepare(command(phase_two.incident.id, "SYN-CONN-JV2"))
     binding = workflow.history(case.id).bindings[0]
 
     workflow.record_request_approval(RequestApprovalCommand(
@@ -122,7 +122,7 @@ def test_request_rejection_closes_authorization_without_a_dead_end(session: Sess
 def test_send_requires_exact_approved_binding(session: Session) -> None:
     phase_two = build_scarce_capacity_workflow(session).run()
     workflow = build_carrier_recovery_workflow(session)
-    case = workflow.prepare(command(phase_two.incident.id, "JV2"))
+    case = workflow.prepare(command(phase_two.incident.id, "SYN-CONN-JV2"))
 
     with pytest.raises(CarrierRecoveryConflict):
         workflow.send_authorised_request(case.id)
@@ -131,7 +131,7 @@ def test_send_requires_exact_approved_binding(session: Session) -> None:
 def test_send_is_idempotent_after_exact_approval(session: Session) -> None:
     phase_two = build_scarce_capacity_workflow(session).run()
     workflow = build_carrier_recovery_workflow(session)
-    case = workflow.prepare(command(phase_two.incident.id, "JV2"))
+    case = workflow.prepare(command(phase_two.incident.id, "SYN-CONN-JV2"))
     binding = workflow.history(case.id).bindings[0]
     workflow.record_request_approval(RequestApprovalCommand(
         case_id=case.id,
@@ -153,3 +153,13 @@ def test_send_is_idempotent_after_exact_approval(session: Session) -> None:
     assert history.request_context is not None
     assert history.request_context.sent_at is not None
     assert [event.event_type for event in history.audit_events].count("rta.request_sent") == 1
+
+
+def test_prepare_rejects_service_label_when_connection_id_is_required(
+    session: Session,
+) -> None:
+    phase_two = build_scarce_capacity_workflow(session).run()
+    workflow = build_carrier_recovery_workflow(session)
+
+    with pytest.raises(CarrierRecoveryConflict, match="unknown connection"):
+        workflow.prepare(command(phase_two.incident.id, "JV2"))
