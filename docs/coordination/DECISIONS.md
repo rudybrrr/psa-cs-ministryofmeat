@@ -31,3 +31,15 @@ This document is append-only. Add entries only for approved or proposed changes 
 - Status: Approved
 - Decision: `DecisionAction` contains exactly `EXPEDITE`, `REQUEST_RTA`, `ROLL`, and `ESCALATE` at the Task 2 base.
 - Consequence: The two additional actions are frozen contract vocabulary only. Task 2 does not implement roll, escalation workflow behavior, carrier negotiation, or any optimizer.
+
+## 2026-08-22 — Human authority over genuine recovery trade-offs
+
+- Status: Approved
+- Decision: The solver produces feasible, Pareto-efficient alternatives. An established deterministic dominance policy may select only when one alternative clearly dominates. If alternatives retain a genuine business trade-off, a human operator decides. The agent gathers information, manages the evolving exception, handles authorised tools and counterparties, and explains the trade-off; an LLM does not replace arbitrary numerical weights with arbitrary prose judgment.
+- Consequence: No agent workflow may silently rank or select business trade-offs that deterministic policy cannot resolve. Such alternatives remain visible for operator decision.
+
+## 2026-08-22 — Canonical full-demo outcome decomposition
+
+- Status: Approved
+- Decision: The canonical 18-preserved target is decomposed into 5 preserved without intervention, 8 preserved through scarce yard expedition, and 5 intended to be preserved through the later carrier/RTA recovery phase. The remaining target outcomes are 5 rolled and 1 escalated.
+- Consequence: Phase 2 proves only the 13-beneficiary/eight-slot scarce-capacity portion. The later RTA phase must empirically establish its intended five recoveries, and the implementation must report observed evidence rather than hard-code an 18/5/1 result when evidence differs.

@@ -12,11 +12,11 @@ This is decided, not proposed. Reading it should take five minutes.
 
 ## The idea in one paragraph
 
-A mainline vessel arrives late at Tuas. Containers booked onto three onward services can no longer make their connections. Our system decides, container by container, which are saved and which are sacrificed: it hurries some through the yard, asks an onward carrier to arrive later, rolls the ones that cannot make it, and stops and asks a human when the call is genuinely close or unsafe. It does not predict the delay, replace the TOS, or optimise the berth plan. Those systems exist. It handles what happens to the box after the plan has already broken.
+A mainline vessel arrives late at Tuas. Containers booked onto three onward services can no longer make their connections. Our system manages the recovery exception container by container: deterministic systems establish what is feasible, a dominance policy may select a clearly dominant recovery, and a human operator decides when the feasible alternatives contain a genuine business trade-off. The agent gathers the changing evidence, handles authorised tools and counterparties, and explains the options. It does not predict the delay, replace the TOS, or optimise the berth plan. Those systems exist. It handles what happens to the box after the plan has already broken.
 
 ## The pitch line
 
-> 24 transhipment containers are at risk. Thirteen can still be saved through expedited handling. The terminal has capacity for eight. The onward carrier has not agreed to adjust its timing.
+> 24 transhipment containers are at risk. Thirteen could benefit from expedited handling. The terminal has capacity for eight. The onward carrier has not agreed to adjust its timing.
 
 Never open with "a vessel has been delayed by three hours." Everyone will have that.
 
@@ -26,7 +26,7 @@ Never open with "a vessel has been delayed by three hours." Everyone will have t
 
 Four things, and all four must be built. If any is dropped, this becomes an if-statement with a language model attached and it loses.
 
-**Scarce capacity, allocated under uncertainty.** Thirteen containers could benefit from expedited yard handling. Equipment supports eight during the critical overlap. The allocation does not run on median ready times: it maximises the *expected* number of preserved connections given each container's forecast distribution, subject to equipment, block, reefer and DG constraints. A box whose median makes the boundary but whose p90 does not is worth less than a box with a tighter band, and the solver reflects that. Choosing among the resulting feasible sets still weighs cargo priority and downstream consequence, which is where the agent and the operator come in.
+**Scarce capacity, allocated under uncertainty.** Thirteen containers could benefit from expedited yard handling. Equipment supports eight during the critical overlap. The allocation does not run on median ready times: it maximises the *expected* number of preserved connections given each container's forecast distribution, subject to equipment, block, reefer and DG constraints. A box whose median makes the boundary but whose p90 does not is worth less than a box with a tighter band, and the solver reflects that. The solver produces feasible, Pareto-efficient alternatives. An established deterministic dominance policy may select only when one alternative clearly dominates; if the alternatives retain a genuine cargo-priority or downstream-consequence trade-off, a human operator decides. The agent gathers and explains the evidence but does not convert those business trade-offs into arbitrary prose judgment.
 
 **Uncertainty.** Ready times are forecasts, not facts. Before discharge starts the yard returns a band (p10 12:58 / p50 13:08 / p90 13:23), not a number. Once discharge begins the bands tighten and the agent must revisit earlier recommendations, because containers that were marginal under a wide band may no longer be.
 
@@ -48,18 +48,17 @@ A model cannot hallucinate an authority it has no tool for. Most teams will buil
 
 ---
 
-## What the agent does vs what it must not
+## What the agent does vs deterministic systems and the human operator
 
-| The agent decides | Deterministic systems decide |
-|---|---|
-| Which containers matter and why | Whether a move is physically feasible |
-| Which information to gather next | Earliest safe ready time |
-| Which of the solver's feasible options to take | DG segregation and handling rules |
-| When a trade-off needs a human | Reefer plug continuity and cold-chain buffer |
-| How to explain the case to the operator | Connection feasibility arithmetic |
-| What to do when a tool fails or a carrier goes silent | Expedite capacity limits |
+| The agent handles | Deterministic systems decide | The human operator decides |
+|---|---|---|
+| Which information to gather next and why it matters | Whether a move is physically feasible | Which Pareto-efficient alternative to take when a genuine business trade-off remains |
+| The evolving exception as forecasts, tool results and counterparty responses change | Earliest safe ready time and connection feasibility arithmetic | How cargo priority and downstream consequence resolve that trade-off |
+| Authorised tool calls and communication with external counterparties | DG segregation, reefer continuity and other hard safety constraints | Whether to approve externally directed actions that require operator authority |
+| Detecting missing evidence, failures and silence, then recomputing or escalating | Expedite capacity limits and feasible allocations | Unsafe or exceptional calls escalated beyond deterministic authority |
+| Explaining evidence, alternatives and consequences | Whether one alternative clearly dominates under established deterministic policy | Any choice for which no alternative clearly dominates |
 
-The solver returns feasible *sets* under a stochastic objective, not a single ranked answer. The agent reasons over that small set. We deliberately avoid a hand-weighted scoring formula over priority and cargo type, because that hides the policy inside arbitrary numbers; the only thing the objective optimises is expected preserved connections, and everything else is either a hard constraint or a human judgement.
+The solver returns feasible, Pareto-efficient *sets* under a stochastic objective, not a business-preference ranking. A deterministic dominance policy may select only when one alternative clearly dominates under established policy. If the frontier contains a genuine trade-off, the human operator chooses; the agent gathers information, manages the evolving exception, handles tools and counterparties, and explains the alternatives. We deliberately avoid a hand-weighted scoring formula over priority and cargo type because that hides policy inside arbitrary numbers, and the LLM must not replace those arbitrary numerical weights with equally arbitrary prose judgment. The optimization objective is expected preserved connections; the remaining dimensions are hard constraints, established deterministic policy, or explicit human judgment.
 
 ---
 
@@ -75,7 +74,7 @@ Inbound service ASX-17 slips 3h15m. 24 containers at risk across three onward se
 | Rolled deliberately | 5 |
 | Escalated (DG, cannot be decided safely) | 1 |
 
-Without intervention only 5 of 24 survive. Of the 18 preserved, 13 need expedited handling, 5 of those depend on the carrier negotiation, and 5 need nothing once feasibility is recomputed.
+The canonical full-demo target uses disjoint outcome buckets: 5 containers are preserved without intervention, 8 are preserved through scarce yard expedition, and 5 are intended to be preserved through the later carrier/RTA recovery phase, for a total target of 18 preserved; 5 are rolled and 1 is escalated. Phase 2 proves only the scarce-capacity portion: 13 containers could benefit from expedition, but only 8 expedite slots exist. The later RTA phase must empirically establish its intended five recoveries. If later implementation evidence differs, report the observed outcome rather than hard-coding the 18/5/1 target.
 
 **Two demo peaks.** The scarce-capacity allocation is the intellectual peak. The DG semantic catch is the emotional peak. Build the video around both.
 
