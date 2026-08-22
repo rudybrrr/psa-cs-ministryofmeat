@@ -12,6 +12,7 @@ from backend.app.domain.enums import (
     IncidentState,
 )
 from backend.app.domain.models import AuditEvent, Decision, Incident
+from backend.app.domain.scarcity import ScarcityEvaluationReport
 
 
 def to_utc_text(value: datetime) -> str:
@@ -58,6 +59,15 @@ class AuditEventRecord(SQLModel, table=True):
         sa_column=Column(JSON, nullable=False)
     )
     timestamp_utc: str
+
+
+class ScarcityEvaluationRecord(SQLModel, table=True):
+    __tablename__ = "scarcity_evaluations"
+
+    id: str = Field(primary_key=True)
+    incident_id: str = Field(index=True, unique=True)
+    report: dict[str, Any] = Field(sa_column=Column(JSON, nullable=False))
+    created_at_utc: str
 
 
 class RecordNotFound(LookupError):
@@ -116,7 +126,37 @@ class DecisionRepository:
         self._session = session
 
     def add(self, decision: Decision) -> Decision:
-        record = DecisionRecord(
+        return self.add_many((decision,))[0]
+
+    def add_many(
+        self,
+        decisions: tuple[Decision, ...],
+    ) -> tuple[Decision, ...]:
+        records = tuple(self._to_record(decision) for decision in decisions)
+        try:
+            self._session.add_all(records)
+            self._session.commit()
+        except Exception:
+            self._session.rollback()
+            raise
+        for record in records:
+            self._session.refresh(record)
+        return tuple(self._to_domain(record) for record in records)
+
+    def list_for_incident(self, incident_id: UUID) -> list[Decision]:
+        statement = (
+            select(DecisionRecord)
+            .where(DecisionRecord.incident_id == str(incident_id))
+            .order_by(DecisionRecord.created_at_utc, DecisionRecord.id)
+        )
+        return [
+            self._to_domain(record)
+            for record in self._session.exec(statement).all()
+        ]
+
+    @staticmethod
+    def _to_record(decision: Decision) -> DecisionRecord:
+        return DecisionRecord(
             id=str(decision.id),
             incident_id=str(decision.incident_id),
             container_id=decision.container_id,
@@ -131,21 +171,6 @@ class DecisionRepository:
             supersession_reason=decision.supersession_reason,
             created_at_utc=to_utc_text(decision.created_at),
         )
-        self._session.add(record)
-        self._session.commit()
-        self._session.refresh(record)
-        return self._to_domain(record)
-
-    def list_for_incident(self, incident_id: UUID) -> list[Decision]:
-        statement = (
-            select(DecisionRecord)
-            .where(DecisionRecord.incident_id == str(incident_id))
-            .order_by(DecisionRecord.created_at_utc, DecisionRecord.id)
-        )
-        return [
-            self._to_domain(record)
-            for record in self._session.exec(statement).all()
-        ]
 
     @staticmethod
     def _to_domain(record: DecisionRecord) -> Decision:
@@ -207,3 +232,43 @@ class AuditRepository:
             payload=record.payload,
             timestamp=from_utc_text(record.timestamp_utc),
         )
+
+
+class ScarcityEvaluationRepository:
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def add(
+        self,
+        report: ScarcityEvaluationReport,
+    ) -> ScarcityEvaluationReport:
+        record = ScarcityEvaluationRecord(
+            id=str(report.id),
+            incident_id=str(report.incident_id),
+            report=report.model_dump(mode="json"),
+            created_at_utc=to_utc_text(report.created_at),
+        )
+        self._session.add(record)
+        self._session.commit()
+        self._session.refresh(record)
+        return self._to_domain(record)
+
+    def get_for_incident(
+        self,
+        incident_id: UUID,
+    ) -> ScarcityEvaluationReport:
+        statement = select(ScarcityEvaluationRecord).where(
+            ScarcityEvaluationRecord.incident_id == str(incident_id)
+        )
+        record = self._session.exec(statement).one_or_none()
+        if record is None:
+            raise RecordNotFound(
+                f"Scarcity evaluation for incident {incident_id} not found"
+            )
+        return self._to_domain(record)
+
+    @staticmethod
+    def _to_domain(
+        record: ScarcityEvaluationRecord,
+    ) -> ScarcityEvaluationReport:
+        return ScarcityEvaluationReport.model_validate(record.report)

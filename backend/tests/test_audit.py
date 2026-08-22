@@ -15,6 +15,12 @@ from backend.app.domain.enums import (
     IncidentState,
 )
 from backend.app.domain.models import AuditEvent, Decision, Incident
+from backend.app.domain.scarcity import (
+    CanonicalIncidentFixture,
+    ScenarioSet,
+    ScarcityEvaluationReport,
+)
+from backend.app.evaluation.scarcity import ScarcityComparisonService
 from backend.app.storage import database
 from backend.app.storage.repositories import (
     AuditRepository,
@@ -22,6 +28,7 @@ from backend.app.storage.repositories import (
     IncidentRecord,
     IncidentRepository,
     RecordNotFound,
+    ScarcityEvaluationRepository,
 )
 
 
@@ -99,6 +106,66 @@ def test_decision_repository_persists_supersession_fields_and_utc(
         == "Forecast moved beyond the connection cutoff."
     )
     assert observed[1].created_at.tzinfo is UTC
+
+
+def test_decision_repository_add_many_is_atomic_and_preserves_input_order(
+    session: Session,
+    incident: Incident,
+) -> None:
+    IncidentRepository(session).create(incident)
+    first = Decision(
+        id=ORIGINAL_DECISION_ID,
+        incident_id=incident.id,
+        container_id="SYN-CNT-002",
+        action=DecisionAction.EXPEDITE,
+        status=DecisionStatus.APPROVED,
+        rationale="Synthetic scarce-capacity allocation.",
+        created_at=at(6, 30),
+    )
+    second = Decision(
+        id=SUPERSEDING_DECISION_ID,
+        incident_id=incident.id,
+        container_id="SYN-CNT-004",
+        action=DecisionAction.EXPEDITE,
+        status=DecisionStatus.APPROVED,
+        rationale="Synthetic scarce-capacity allocation.",
+        created_at=at(6, 31),
+    )
+    repository = DecisionRepository(session)
+
+    persisted = repository.add_many((first, second))
+
+    assert persisted == (first, second)
+    assert repository.list_for_incident(incident.id) == [first, second]
+
+
+def test_scarcity_report_repository_round_trips_exact_json(
+    session: Session,
+    incident: Incident,
+    canonical_fixture: CanonicalIncidentFixture,
+    canonical_scenarios: ScenarioSet,
+) -> None:
+    IncidentRepository(session).create(incident)
+    report = ScarcityComparisonService().compare(
+        incident_id=incident.id,
+        fixture=canonical_fixture,
+        scenarios=canonical_scenarios,
+    )
+    repository = ScarcityEvaluationRepository(session)
+
+    persisted = repository.add(report)
+
+    assert persisted == report
+    assert repository.get_for_incident(incident.id) == report
+
+
+def test_scarcity_report_repository_raises_for_unknown_incident(
+    session: Session,
+) -> None:
+    unknown_id = UUID("eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee")
+
+    with pytest.raises(RecordNotFound, match=str(unknown_id)):
+        ScarcityEvaluationRepository(session).get_for_incident(unknown_id)
 
 
 def test_audit_events_are_append_only_ordered_and_preserve_actor_identity(
@@ -181,6 +248,7 @@ def test_database_helpers_create_tables_and_yield_a_usable_session(
         "audit_events",
         "decisions",
         "incidents",
+        "scarcity_evaluations",
     }
     assert yielded_session.exec(select(IncidentRecord)).all() == []
 
