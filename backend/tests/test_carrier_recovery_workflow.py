@@ -1,11 +1,13 @@
 from datetime import UTC, datetime
+from uuid import uuid4
 
 import pytest
 from sqlmodel import Session
 
 from backend.app.domain.carrier_recovery import PrepareCarrierRecoveryCaseCommand
-from backend.app.domain.enums import DecisionAction, DecisionStatus
-from backend.app.orchestration.carrier_recovery import build_carrier_recovery_workflow
+from backend.app.domain.carrier_recovery import RequestApprovalCommand
+from backend.app.domain.enums import ApprovalStatus, DecisionAction, DecisionStatus
+from backend.app.orchestration.carrier_recovery import CarrierRecoveryConflict, build_carrier_recovery_workflow
 from backend.app.orchestration.scarce_capacity import build_scarce_capacity_workflow
 from backend.app.storage.repositories import DecisionRepository
 
@@ -53,3 +55,65 @@ def test_prepare_creates_fallback_rolls_with_explicit_current_decision_lineage(
     assert all("zero preserved worlds" in (item.supersession_reason or "") or item.supersedes is None for item in fallbacks)
     assert len(proposal) == 1
     assert proposal[0].container_id is None
+
+
+def test_request_approval_requires_exact_proposal_request_and_fingerprint(
+    session: Session,
+) -> None:
+    phase_two = build_scarce_capacity_workflow(session).run()
+    workflow = build_carrier_recovery_workflow(session)
+    case = workflow.prepare(command(phase_two.incident.id, "JV2"))
+    history = workflow.history(case.id)
+    binding = history.bindings[0]
+    exact = RequestApprovalCommand(
+        case_id=case.id,
+        proposal_decision_id=binding.proposal_decision_id,
+        request_id=binding.subject_id,
+        expected_payload_fingerprint=binding.payload_fingerprint,
+        operator_id="operator-17",
+        status=ApprovalStatus.APPROVED,
+    )
+
+    approval = workflow.record_request_approval(exact)
+
+    assert approval.decision_id == exact.proposal_decision_id
+    assert approval.operator_id == "operator-17"
+    assert workflow.record_request_approval(exact) == approval
+
+
+def test_request_approval_rejects_stale_subject_without_creating_approval(
+    session: Session,
+) -> None:
+    phase_two = build_scarce_capacity_workflow(session).run()
+    workflow = build_carrier_recovery_workflow(session)
+    case = workflow.prepare(command(phase_two.incident.id, "JV2"))
+    binding = workflow.history(case.id).bindings[0]
+    exact = RequestApprovalCommand(
+        case_id=case.id,
+        proposal_decision_id=binding.proposal_decision_id,
+        request_id=binding.subject_id,
+        expected_payload_fingerprint=binding.payload_fingerprint,
+        operator_id="operator-17",
+        status=ApprovalStatus.APPROVED,
+    )
+
+    with pytest.raises(CarrierRecoveryConflict):
+        workflow.record_request_approval(exact.model_copy(update={"request_id": uuid4()}))
+
+
+def test_request_rejection_closes_authorization_without_a_dead_end(session: Session) -> None:
+    phase_two = build_scarce_capacity_workflow(session).run()
+    workflow = build_carrier_recovery_workflow(session)
+    case = workflow.prepare(command(phase_two.incident.id, "JV2"))
+    binding = workflow.history(case.id).bindings[0]
+
+    workflow.record_request_approval(RequestApprovalCommand(
+        case_id=case.id,
+        proposal_decision_id=binding.proposal_decision_id,
+        request_id=binding.subject_id,
+        expected_payload_fingerprint=binding.payload_fingerprint,
+        operator_id="operator-18",
+        status=ApprovalStatus.REJECTED,
+    ))
+
+    assert workflow.history(case.id).case.state.value == "RECOMPUTING"

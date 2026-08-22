@@ -15,9 +15,10 @@ from backend.app.domain.carrier_recovery import (
     CarrierRecoveryDecisionLink,
     CarrierRecoveryHistory,
     PrepareCarrierRecoveryCaseCommand,
+    RequestApprovalCommand,
 )
-from backend.app.domain.enums import AuditActor, DecisionAction, DecisionStatus, IncidentState, RTARequestStatus
-from backend.app.domain.models import AuditEvent, Decision, RTARequest, utc_now
+from backend.app.domain.enums import ApprovalStatus, AuditActor, DecisionAction, DecisionStatus, IncidentState, RTARequestStatus
+from backend.app.domain.models import Approval, AuditEvent, Decision, RTARequest, utc_now
 from backend.app.evaluation.scarcity import ScarcityEvaluator, _is_structurally_eligible
 from backend.app.services.canonical_incident import SyntheticCanonicalIncidentService
 from backend.app.services.scenarios import SeededScenarioGenerator
@@ -82,6 +83,28 @@ class CarrierRecoveryWorkflow:
 
     def history(self, case_id: UUID) -> CarrierRecoveryHistory:
         return self._cases.history(case_id)
+
+    def record_request_approval(self, command: RequestApprovalCommand) -> Approval:
+        case = self._cases.get_case(command.case_id)
+        binding = self._cases.get_binding_for_proposal(command.proposal_decision_id)
+        existing = self._cases.get_approval_for_proposal(command.proposal_decision_id)
+        if existing is not None:
+            if (binding.case_id == command.case_id and binding.subject_kind is AuthorizationSubjectKind.OUTBOUND_REQUEST and binding.subject_id == command.request_id and binding.payload_fingerprint == command.expected_payload_fingerprint and existing.operator_id == command.operator_id and existing.status is command.status):
+                return existing
+            raise CarrierRecoveryConflict("contradictory approval retry")
+        if case.state is not CarrierRecoveryCaseState.AWAITING_REQUEST_APPROVAL:
+            raise CarrierRecoveryConflict("case is not awaiting request approval")
+        if (binding.case_id != command.case_id or binding.subject_kind is not AuthorizationSubjectKind.OUTBOUND_REQUEST or binding.subject_id != command.request_id or binding.payload_fingerprint != command.expected_payload_fingerprint or not command.operator_id.strip()):
+            raise CarrierRecoveryConflict("approval command does not match its immutable authorization subject")
+        now = utc_now()
+        approval = Approval(decision_id=command.proposal_decision_id, operator_id=command.operator_id, status=command.status, created_at=now)
+        updated_case = case if command.status is ApprovalStatus.APPROVED else case.model_copy(update={"state": CarrierRecoveryCaseState.RECOMPUTING, "updated_at": now})
+        with self._cases.transaction():
+            self._cases.add_approval(approval)
+            if updated_case is not case:
+                self._cases.update_case(updated_case)
+            self._cases.link_audit(case.id, AuditEvent(actor=AuditActor.OPERATOR, actor_id=command.operator_id, incident_id=case.incident_id, event_type="carrier_recovery.request_approval_recorded", payload={"recovery_case_id": str(case.id), "proposal_decision_id": str(command.proposal_decision_id), "subject_id": str(command.request_id), "payload_fingerprint": command.expected_payload_fingerprint, "status": command.status.value}, timestamp=now))
+        return approval
 
 
 def build_carrier_recovery_workflow(session: Session) -> CarrierRecoveryWorkflow:
