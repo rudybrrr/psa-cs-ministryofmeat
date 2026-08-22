@@ -66,6 +66,26 @@ def test_prepare_creates_fallback_rolls_with_explicit_current_decision_lineage(
     assert proposal[0].container_id is None
 
 
+def test_prepare_rolls_back_staged_decisions_when_case_artifacts_fail(
+    session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    phase_two = build_scarce_capacity_workflow(session).run()
+    workflow = build_carrier_recovery_workflow(session)
+    before = DecisionRepository(session).list_for_incident(phase_two.incident.id)
+
+    def fail_after_decisions(*_args, **_kwargs) -> None:
+        raise RuntimeError("force preparation rollback")
+
+    monkeypatch.setattr(workflow._cases, "add_approval_binding", fail_after_decisions)
+
+    with pytest.raises(RuntimeError, match="force preparation rollback"):
+        workflow.prepare(command(phase_two.incident.id, "SYN-CONN-JV2"))
+
+    assert DecisionRepository(session).list_for_incident(phase_two.incident.id) == before
+    assert workflow._cases.list_cases(phase_two.incident.id) == []
+
+
 def test_request_approval_requires_exact_proposal_request_and_fingerprint(
     session: Session,
 ) -> None:
@@ -108,6 +128,42 @@ def test_request_approval_rejects_stale_subject_without_creating_approval(
 
     with pytest.raises(CarrierRecoveryConflict):
         workflow.record_request_approval(exact.model_copy(update={"request_id": uuid4()}))
+
+
+def test_counter_simulation_rolls_back_proposal_when_binding_fails(
+    session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    phase_two = build_scarce_capacity_workflow(session).run()
+    workflow = build_carrier_recovery_workflow(session)
+    case = workflow.prepare(command(phase_two.incident.id, "SYN-CONN-JV2"))
+    binding = workflow.history(case.id).bindings[0]
+    workflow.record_request_approval(RequestApprovalCommand(
+        case_id=case.id,
+        proposal_decision_id=binding.proposal_decision_id,
+        request_id=binding.subject_id,
+        expected_payload_fingerprint=binding.payload_fingerprint,
+        operator_id="operator-transaction",
+        status=ApprovalStatus.APPROVED,
+    ))
+    workflow.send_authorised_request(case.id)
+    before = DecisionRepository(session).list_for_incident(phase_two.incident.id)
+
+    def fail_counter_binding(*_args, **_kwargs) -> None:
+        raise RuntimeError("force counter rollback")
+
+    monkeypatch.setattr(workflow._cases, "add_approval_binding", fail_counter_binding)
+
+    with pytest.raises(RuntimeError, match="force counter rollback"):
+        workflow.simulate_response(SimulateCarrierResponseCommand(
+            case_id=case.id,
+            effective_at="2026-08-22T08:30:00Z",
+        ))
+
+    assert DecisionRepository(session).list_for_incident(phase_two.incident.id) == before
+    history = workflow.history(case.id)
+    assert history.carrier_responses == ()
+    assert history.case.state.value == "AWAITING_CARRIER"
 
 
 def test_request_rejection_closes_authorization_without_a_dead_end(session: Session) -> None:

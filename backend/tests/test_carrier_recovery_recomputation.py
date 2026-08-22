@@ -1,3 +1,5 @@
+import pytest
+
 from backend.app.domain.carrier_recovery import (
     CounterApprovalCommand,
     EvaluateTimeoutCommand,
@@ -8,6 +10,7 @@ from backend.app.domain.carrier_recovery import (
 from backend.app.domain.enums import ApprovalStatus, DecisionAction
 from backend.app.orchestration.carrier_recovery import build_carrier_recovery_workflow
 from backend.app.orchestration.scarce_capacity import build_scarce_capacity_workflow
+from backend.app.storage.repositories import DecisionRepository
 
 
 def prepare_command(incident_id, connection_id: str):
@@ -79,6 +82,41 @@ def test_timeout_recompute_keeps_fallback_roll_without_external_timing(session) 
     assert all(result.disposition.value == "STILL_ROLL" for result in history.results)
     assert all(result.replacement_decision_id is None for result in history.results)
     assert all(link.role != "PRESERVE_VIA_RTA" for link in history.decision_links)
+
+
+def test_recompute_rolls_back_replacement_decisions_when_results_fail(
+    session,
+    monkeypatch,
+) -> None:
+    phase_two = build_scarce_capacity_workflow(session).run()
+    workflow = build_carrier_recovery_workflow(session)
+    case = workflow.prepare(prepare_command(phase_two.incident.id, "SYN-CONN-JV2"))
+    approve_and_send(workflow, case)
+    workflow.simulate_response(SimulateCarrierResponseCommand(
+        case_id=case.id,
+        effective_at="2026-08-22T08:30:00Z",
+    ))
+    binding = workflow.history(case.id).bindings[-1]
+    workflow.record_counter_approval(CounterApprovalCommand(
+        case_id=case.id,
+        proposal_decision_id=binding.proposal_decision_id,
+        carrier_response_id=binding.subject_id,
+        expected_payload_fingerprint=binding.payload_fingerprint,
+        operator_id="operator-31",
+        status=ApprovalStatus.APPROVED,
+    ))
+    before = DecisionRepository(session).list_for_incident(phase_two.incident.id)
+
+    def fail_result(*_args, **_kwargs) -> None:
+        raise RuntimeError("force recomputation rollback")
+
+    monkeypatch.setattr(workflow._cases, "add_result", fail_result)
+
+    with pytest.raises(RuntimeError, match="force recomputation rollback"):
+        workflow.recompute(case.id)
+
+    assert DecisionRepository(session).list_for_incident(phase_two.incident.id) == before
+    assert workflow.history(case.id).results == ()
 
 
 def test_history_is_case_scoped_ordered_and_includes_linked_decisions(session) -> None:

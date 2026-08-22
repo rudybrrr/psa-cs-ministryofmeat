@@ -132,9 +132,8 @@ class DecisionRepository:
         self,
         decisions: tuple[Decision, ...],
     ) -> tuple[Decision, ...]:
-        records = tuple(self._to_record(decision) for decision in decisions)
+        records = self.add_many_uncommitted(decisions)
         try:
-            self._session.add_all(records)
             self._session.commit()
         except Exception:
             self._session.rollback()
@@ -142,6 +141,16 @@ class DecisionRepository:
         for record in records:
             self._session.refresh(record)
         return tuple(self._to_domain(record) for record in records)
+
+    def add_many_uncommitted(
+        self,
+        decisions: tuple[Decision, ...],
+    ) -> tuple[DecisionRecord, ...]:
+        """Stage decisions in the caller-owned unit of work."""
+        records = tuple(self._to_record(decision) for decision in decisions)
+        self._session.add_all(records)
+        self._session.flush()
+        return records
 
     def list_for_incident(self, incident_id: UUID) -> list[Decision]:
         statement = (

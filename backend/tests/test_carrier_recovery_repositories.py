@@ -7,7 +7,9 @@ from sqlmodel import Session
 
 from backend.app.domain.carrier_recovery import CarrierRecoveryCase, CarrierRecoveryCaseState
 from backend.app.domain.enums import AuditActor
-from backend.app.domain.models import AuditEvent
+from backend.app.domain.enums import DecisionAction, DecisionStatus
+from backend.app.domain.models import AuditEvent, Decision
+from backend.app.storage.repositories import DecisionRepository
 from backend.app.storage.carrier_recovery import CarrierRecoveryRepository
 
 
@@ -69,3 +71,27 @@ def test_history_uses_structured_case_audit_links(session: Session) -> None:
     with repository.transaction():
         repository.link_audit(case.id, event)
     assert repository.history(case.id).audit_events == (event,)
+
+
+def test_shared_transaction_rolls_back_uncommitted_decision_with_case_artifacts(
+    session: Session,
+) -> None:
+    repository = CarrierRecoveryRepository(session)
+    case = make_case()
+    decision = Decision(
+        incident_id=case.incident_id,
+        container_id="SYN-CNT-001",
+        action=DecisionAction.ROLL,
+        status=DecisionStatus.APPROVED,
+        rationale="rollback probe",
+        created_at=at(6),
+    )
+
+    with pytest.raises(RuntimeError, match="force rollback"):
+        with repository.transaction():
+            DecisionRepository(session).add_many_uncommitted((decision,))
+            repository.create_case(case)
+            raise RuntimeError("force rollback")
+
+    assert DecisionRepository(session).list_for_incident(case.incident_id) == []
+    assert repository.list_cases(case.incident_id) == []

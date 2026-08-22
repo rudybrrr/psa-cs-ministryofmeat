@@ -86,15 +86,17 @@ class CarrierRecoveryWorkflow:
             prior = current[0] if current else None
             fallback_decisions.append(Decision(incident_id=command.incident_id, container_id=container_id, action=DecisionAction.ROLL, status=DecisionStatus.APPROVED, rationale="Fallback pending connection-level carrier recovery.", supersedes=prior.id if prior else None, supersession_reason="Phase 3 preparation found zero preserved worlds under original timing with the frozen Phase 2 allocation." if prior else None, created_at=now))
         proposal = Decision(incident_id=command.incident_id, container_id=None, action=DecisionAction.REQUEST_RTA, status=DecisionStatus.PROPOSED, rationale="Connection-level request authorization proposal.", created_at=now)
-        persisted = self._decisions.add_many(tuple(fallback_decisions + [proposal]))
-        binding = ApprovalBinding(case_id=case.id, proposal_decision_id=persisted[-1].id, subject_kind=AuthorizationSubjectKind.OUTBOUND_REQUEST, subject_id=request.id, payload_fingerprint=payload_fingerprint, created_at=now)
+        binding = ApprovalBinding(case_id=case.id, proposal_decision_id=proposal.id, subject_kind=AuthorizationSubjectKind.OUTBOUND_REQUEST, subject_id=request.id, payload_fingerprint=payload_fingerprint, created_at=now)
         with self._cases.transaction():
+            self._decisions.add_many_uncommitted(
+                tuple(fallback_decisions + [proposal])
+            )
             self._cases.create_case(case)
             from backend.app.domain.carrier_recovery import RTARequestContext
             self._cases.add_request(request, RTARequestContext(case_id=case.id, request_id=request.id, payload_fingerprint=payload_fingerprint, response_deadline=command.response_deadline))
             self._cases.add_approval_binding(binding)
-            for decision in persisted[:-1]: self._cases.add_decision_link(CarrierRecoveryDecisionLink(case_id=case.id, decision_id=decision.id, role="FALLBACK_ROLL", created_at=now))
-            self._cases.add_decision_link(CarrierRecoveryDecisionLink(case_id=case.id, decision_id=persisted[-1].id, role="REQUEST_RTA_PROPOSAL", created_at=now))
+            for decision in fallback_decisions: self._cases.add_decision_link(CarrierRecoveryDecisionLink(case_id=case.id, decision_id=decision.id, role="FALLBACK_ROLL", created_at=now))
+            self._cases.add_decision_link(CarrierRecoveryDecisionLink(case_id=case.id, decision_id=proposal.id, role="REQUEST_RTA_PROPOSAL", created_at=now))
             self._cases.link_audit(case.id, AuditEvent(actor=AuditActor.SYSTEM, actor_id="carrier-recovery-workflow", incident_id=case.incident_id, event_type="carrier_recovery.case_prepared", payload={"recovery_case_id": str(case.id), "connection_id": case.connection_id, "affected_container_ids": list(affected)}, timestamp=now))
         return case
 
@@ -271,17 +273,17 @@ class CarrierRecoveryWorkflow:
                 replacement = Decision(incident_id=case.incident_id, container_id=container_id, action=action, status=DecisionStatus.APPROVED, rationale="Frozen-evidence Phase 3 p90 carrier recovery recomputation.", supersedes=fallback.id, supersession_reason=f"Phase 3 frozen-evidence result: {disposition.value}; preserved worlds {preserved}/{len(scenarios.worlds)}." if timing is not None else "Phase 3 frozen-evidence hard-constraint escalation.", created_at=created_at)
                 replacements.append(replacement)
             pending_results.append((container_id, disposition, preserved, hard_safe, fallback, replacement))
-        persisted_replacements = {item.id: item for item in self._decisions.add_many(tuple(replacements))} if replacements else {}
         has_escalation = any(item[1] is CarrierRecoveryDisposition.ESCALATE for item in pending_results)
         terminal = CarrierRecoveryCaseState.ESCALATED if has_escalation else CarrierRecoveryCaseState.COMPLETED
         completed_case = case.model_copy(update={"state": terminal, "updated_at": created_at})
         with self._cases.transaction():
+            if replacements:
+                self._decisions.add_many_uncommitted(tuple(replacements))
             for container_id, disposition, preserved, hard_safe, fallback, replacement in pending_results:
-                persisted_replacement = persisted_replacements.get(replacement.id) if replacement else None
-                result = ContainerReconsiderationResult(case_id=case.id, container_id=container_id, disposition=disposition, prior_decision_id=fallback.id, replacement_decision_id=persisted_replacement.id if persisted_replacement else None, preserved_world_count=preserved, world_count=len(scenarios.worlds), hard_constraints_satisfied=hard_safe, created_at=created_at)
+                result = ContainerReconsiderationResult(case_id=case.id, container_id=container_id, disposition=disposition, prior_decision_id=fallback.id, replacement_decision_id=replacement.id if replacement else None, preserved_world_count=preserved, world_count=len(scenarios.worlds), hard_constraints_satisfied=hard_safe, created_at=created_at)
                 self._cases.add_result(result)
-                if persisted_replacement is not None:
-                    self._cases.add_decision_link(CarrierRecoveryDecisionLink(case_id=case.id, decision_id=persisted_replacement.id, role=disposition.value, created_at=created_at))
+                if replacement is not None:
+                    self._cases.add_decision_link(CarrierRecoveryDecisionLink(case_id=case.id, decision_id=replacement.id, role=disposition.value, created_at=created_at))
             self._cases.update_case(completed_case)
             self._cases.link_audit(case.id, AuditEvent(actor=AuditActor.SYSTEM, actor_id="carrier-recovery-workflow", incident_id=case.incident_id, event_type="carrier_recovery.recomputation_completed", payload={"recovery_case_id": str(case.id), "seed": report.seed, "world_count": report.scenario_count, "selected_allocation": list(report.selected_allocation.allocated_container_ids)}, timestamp=created_at))
             self._cases.link_audit(case.id, AuditEvent(actor=AuditActor.POLICY, actor_id="synthetic-p90-policy", incident_id=case.incident_id, event_type="carrier_recovery.disposition_recorded", payload={"recovery_case_id": str(case.id), "state": terminal.value}, timestamp=created_at))
@@ -327,12 +329,13 @@ class CarrierRecoveryWorkflow:
             if response.counter_eta_pta is None:
                 raise CarrierRecoveryConflict("counter response requires explicit counter timing")
             proposal = Decision(incident_id=case.incident_id, container_id=None, action=DecisionAction.REQUEST_RTA, status=DecisionStatus.PROPOSED, rationale="Connection-level counter timing authorization proposal.", created_at=now)
-            proposal = self._decisions.add(proposal)
             fingerprint = hashlib.sha256(json.dumps({"carrier_response_id": str(response.id), "counter_eta_pta": response.counter_eta_pta.astimezone(UTC).isoformat()}, sort_keys=True).encode()).hexdigest()
             binding = ApprovalBinding(case_id=case.id, proposal_decision_id=proposal.id, subject_kind=AuthorizationSubjectKind.COUNTER_PROPOSAL, subject_id=response.id, payload_fingerprint=fingerprint, created_at=now)
             effective_timing = None
             target_case = case.model_copy(update={"state": CarrierRecoveryCaseState.AWAITING_COUNTER_APPROVAL, "updated_at": now})
         with self._cases.transaction():
+            if proposal is not None:
+                self._decisions.add_many_uncommitted((proposal,))
             self._cases.add_carrier_response(response)
             self._cases.update_request(closed_request)
             self._cases.update_request_context(closed_context)
