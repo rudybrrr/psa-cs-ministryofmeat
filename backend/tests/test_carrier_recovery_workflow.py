@@ -339,6 +339,30 @@ def test_counter_requires_fresh_exact_approval_before_effective_timing(
     assert history.bindings[-1].subject_kind.value == "COUNTER_PROPOSAL"
 
 
+def test_exact_counter_simulation_retry_returns_durable_outcome_without_duplicates(
+    session: Session,
+) -> None:
+    phase_two = build_scarce_capacity_workflow(session).run()
+    workflow = build_carrier_recovery_workflow(session)
+    case = workflow.prepare(command(phase_two.incident.id, "SYN-CONN-JV2"))
+    approve_and_send(workflow, case)
+    simulation = SimulateCarrierResponseCommand(
+        case_id=case.id,
+        effective_at="2026-08-22T08:30:00Z",
+    )
+
+    first = workflow.simulate_response(simulation)
+    before = workflow.history(case.id)
+    retry = workflow.simulate_response(simulation)
+    after = workflow.history(case.id)
+
+    assert retry == first
+    assert len(after.carrier_responses) == len(before.carrier_responses) == 1
+    assert len(after.bindings) == len(before.bindings) == 2
+    assert len(after.decision_links) == len(before.decision_links)
+    assert [event.id for event in after.audit_events] == [event.id for event in before.audit_events]
+
+
 def test_approved_counter_creates_exact_effective_timing_idempotently(
     session: Session,
 ) -> None:
