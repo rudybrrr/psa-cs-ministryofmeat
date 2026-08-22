@@ -4,6 +4,8 @@ from collections import Counter
 from datetime import datetime, timedelta
 from math import ceil
 from statistics import median
+from time import perf_counter_ns
+from uuid import UUID
 
 from backend.app.domain.scarcity import (
     AllocationPlan,
@@ -13,6 +15,7 @@ from backend.app.domain.scarcity import (
     NamedFactor,
     ScenarioSet,
     ScenarioWorld,
+    ScarcityEvaluationReport,
     ServiceOutcome,
     StrategyEvaluation,
 )
@@ -320,3 +323,105 @@ def semantic_reproducibility_key(
         separators=(",", ":"),
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def _comparison_reproducibility_key(
+    fixture: CanonicalIncidentFixture,
+    scenarios: ScenarioSet,
+    baseline: StrategyEvaluation,
+    scenario_aware_evaluations: tuple[StrategyEvaluation, ...],
+    pareto_evaluations: tuple[StrategyEvaluation, ...],
+    selected_allocation: AllocationPlan | None,
+) -> str:
+    payload = {
+        "fixture_id": fixture.fixture_id,
+        "scenario_assumptions": scenarios.assumptions.model_dump(mode="json"),
+        "baseline": semantic_reproducibility_key(
+            fixture,
+            scenarios,
+            baseline,
+        ),
+        "scenario_aware": [
+            semantic_reproducibility_key(fixture, scenarios, evaluation)
+            for evaluation in scenario_aware_evaluations
+        ],
+        "pareto_allocations": [
+            evaluation.allocation.model_dump(mode="json")
+            for evaluation in pareto_evaluations
+        ],
+        "selected_allocation": (
+            selected_allocation.model_dump(mode="json")
+            if selected_allocation is not None
+            else None
+        ),
+    }
+    encoded = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+class ScarcityComparisonService:
+    def compare(
+        self,
+        *,
+        incident_id: UUID,
+        fixture: CanonicalIncidentFixture,
+        scenarios: ScenarioSet,
+    ) -> ScarcityEvaluationReport:
+        from backend.app.optimization.scarcity import ScenarioAwareAllocator
+        from backend.app.policies.allocation_dominance import (
+            AllocationDominancePolicy,
+            pareto_front,
+        )
+        from backend.app.policies.baseline import P50GreedyAllocator
+
+        evaluator = ScarcityEvaluator()
+
+        baseline_started = perf_counter_ns()
+        baseline_plan = P50GreedyAllocator().allocate(fixture, scenarios)
+        baseline_runtime_ms = (perf_counter_ns() - baseline_started) / 1_000_000
+        baseline = evaluator.evaluate(
+            fixture,
+            scenarios,
+            baseline_plan,
+            runtime_ms=baseline_runtime_ms,
+        )
+
+        optimizer_started = perf_counter_ns()
+        scenario_plans = ScenarioAwareAllocator().solve(fixture, scenarios)
+        optimizer_runtime_ms = (perf_counter_ns() - optimizer_started) / 1_000_000
+        scenario_aware_evaluations = tuple(
+            evaluator.evaluate(
+                fixture,
+                scenarios,
+                plan,
+                runtime_ms=optimizer_runtime_ms,
+            )
+            for plan in scenario_plans
+        )
+        pareto_evaluations = pareto_front(scenario_aware_evaluations)
+        selected_allocation = AllocationDominancePolicy().select(
+            pareto_evaluations
+        )
+        reproducibility_key = _comparison_reproducibility_key(
+            fixture,
+            scenarios,
+            baseline,
+            scenario_aware_evaluations,
+            pareto_evaluations,
+            selected_allocation,
+        )
+        return ScarcityEvaluationReport(
+            incident_id=incident_id,
+            fixture_id=fixture.fixture_id,
+            seed=scenarios.assumptions.seed,
+            scenario_count=len(scenarios.worlds),
+            baseline=baseline,
+            scenario_aware_evaluations=scenario_aware_evaluations,
+            pareto_evaluations=pareto_evaluations,
+            selected_allocation=selected_allocation,
+            reproducibility_key=reproducibility_key,
+        )

@@ -1,4 +1,5 @@
 from datetime import timedelta
+from uuid import UUID
 
 import pytest
 
@@ -13,6 +14,7 @@ from backend.app.domain.scarcity import (
     ServiceOutcome,
 )
 from backend.app.evaluation.scarcity import (
+    ScarcityComparisonService,
     ScarcityEvaluator,
     semantic_reproducibility_key,
 )
@@ -362,4 +364,109 @@ def test_semantic_reproducibility_key_changes_with_semantic_results(
         canonical_fixture,
         canonical_scenarios,
         second,
+    )
+
+
+def test_comparison_keeps_baseline_visible_and_selects_the_sole_safe_optimum(
+    canonical_fixture: CanonicalIncidentFixture,
+    canonical_scenarios: ScenarioSet,
+) -> None:
+    report = ScarcityComparisonService().compare(
+        incident_id=UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"),
+        fixture=canonical_fixture,
+        scenarios=canonical_scenarios,
+    )
+
+    assert report.baseline.allocation.strategy is AllocationStrategy.P50_GREEDY
+    assert len(report.scenario_aware_evaluations) == 1
+    assert report.pareto_evaluations == report.scenario_aware_evaluations
+    assert report.selected_allocation == report.scenario_aware_evaluations[0].allocation
+    assert report.baseline.capacity_violations == 0
+    assert report.baseline.unsafe_allocations == 0
+    assert all(
+        evaluation.capacity_violations == 0
+        and evaluation.unsafe_allocations == 0
+        for evaluation in report.scenario_aware_evaluations
+    )
+
+
+def test_comparison_reports_observed_metrics_without_an_expected_winner(
+    canonical_fixture: CanonicalIncidentFixture,
+    canonical_scenarios: ScenarioSet,
+) -> None:
+    report = ScarcityComparisonService().compare(
+        incident_id=UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"),
+        fixture=canonical_fixture,
+        scenarios=canonical_scenarios,
+    )
+    candidate = report.scenario_aware_evaluations[0]
+    observed_delta = (
+        candidate.expected_preserved_connections
+        - report.baseline.expected_preserved_connections
+    )
+
+    assert candidate.expected_preserved_connections == pytest.approx(
+        candidate.preserved_connection_total / candidate.world_count
+    )
+    assert observed_delta == pytest.approx(
+        (
+            candidate.preserved_connection_total
+            - report.baseline.preserved_connection_total
+        )
+        / candidate.world_count
+    )
+
+
+def test_canonical_comparison_is_semantically_reproducible(
+    canonical_fixture: CanonicalIncidentFixture,
+    canonical_scenarios: ScenarioSet,
+) -> None:
+    service = ScarcityComparisonService()
+    incident_id = UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+
+    first = service.compare(
+        incident_id=incident_id,
+        fixture=canonical_fixture,
+        scenarios=canonical_scenarios,
+    )
+    second = service.compare(
+        incident_id=incident_id,
+        fixture=canonical_fixture,
+        scenarios=canonical_scenarios,
+    )
+
+    assert first.id != second.id
+    assert first.created_at != second.created_at
+    assert first.reproducibility_key == second.reproducibility_key
+    assert first.baseline.model_copy(update={"runtime_ms": 0}) == (
+        second.baseline.model_copy(update={"runtime_ms": 0})
+    )
+    assert tuple(
+        evaluation.model_copy(update={"runtime_ms": 0})
+        for evaluation in first.scenario_aware_evaluations
+    ) == tuple(
+        evaluation.model_copy(update={"runtime_ms": 0})
+        for evaluation in second.scenario_aware_evaluations
+    )
+    assert first.pareto_evaluations == first.scenario_aware_evaluations
+    assert first.selected_allocation == second.selected_allocation
+    assert first.baseline.runtime_ms > 0
+    assert first.scenario_aware_evaluations[0].runtime_ms > 0
+    print(
+        {
+            "baseline_expected_preserved": (
+                first.baseline.expected_preserved_connections
+            ),
+            "scenario_expected_preserved": (
+                first.scenario_aware_evaluations[0].expected_preserved_connections
+            ),
+            "observed_development_delta": (
+                first.scenario_aware_evaluations[0].expected_preserved_connections
+                - first.baseline.expected_preserved_connections
+            ),
+            "baseline_runtime_ms": first.baseline.runtime_ms,
+            "scenario_runtime_ms": (
+                first.scenario_aware_evaluations[0].runtime_ms
+            ),
+        }
     )
