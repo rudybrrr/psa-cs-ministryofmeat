@@ -1,0 +1,821 @@
+{
+  "fixture_id": "SYN-CANONICAL-24-V1",
+  "event": {
+    "id": "SYN-EVT-ASX17-20260822-001",
+    "vessel_call_id": "SYN-ASX17-TUAS-001",
+    "vessel_name": "M/V Synthetic Meridian",
+    "terminal_id": "SYN-TUAS-TERMINAL",
+    "scheduled_arrival": "2026-08-22T01:00:00Z",
+    "estimated_arrival": "2026-08-22T04:15:00Z",
+    "delay_minutes": 195,
+    "occurred_at": "2026-08-22T04:15:00Z"
+  },
+  "services": [
+    {
+      "service_id": "SF1",
+      "connection": {
+        "id": "SYN-CONN-SF1",
+        "outbound_vessel_name": "M/V Synthetic Feeder One",
+        "outbound_voyage": "SYN-SF1-0822",
+        "destination_port": "MYPKG",
+        "cutoff_at": "2026-08-22T05:35:00Z",
+        "departure_at": "2026-08-22T06:30:00Z",
+        "minimum_transfer_minutes": 90,
+        "expedited_transfer_minutes": 60
+      },
+      "planned_time_of_arrival": "2026-08-22T05:00:00Z",
+      "ready_boundary": "2026-08-22T05:35:00Z"
+    },
+    {
+      "service_id": "JV2",
+      "connection": {
+        "id": "SYN-CONN-JV2",
+        "outbound_vessel_name": "M/V Synthetic Java Venture",
+        "outbound_voyage": "SYN-JV2-0822",
+        "destination_port": "IDJKT",
+        "cutoff_at": "2026-08-22T05:55:00Z",
+        "departure_at": "2026-08-22T07:00:00Z",
+        "minimum_transfer_minutes": 90,
+        "expedited_transfer_minutes": 60
+      },
+      "planned_time_of_arrival": "2026-08-22T05:20:00Z",
+      "ready_boundary": "2026-08-22T05:55:00Z"
+    },
+    {
+      "service_id": "EC3",
+      "connection": {
+        "id": "SYN-CONN-EC3",
+        "outbound_vessel_name": "M/V Synthetic Eastern Connector",
+        "outbound_voyage": "SYN-EC3-0822",
+        "destination_port": "CNSHA",
+        "cutoff_at": "2026-08-22T07:35:00Z",
+        "departure_at": "2026-08-22T09:00:00Z",
+        "minimum_transfer_minutes": 90,
+        "expedited_transfer_minutes": 60
+      },
+      "planned_time_of_arrival": "2026-08-22T07:00:00Z",
+      "ready_boundary": "2026-08-22T07:35:00Z"
+    }
+  ],
+  "profiles": [
+    {
+      "container": {
+        "id": "SYN-CNT-001",
+        "origin_port": "NLRTM",
+        "destination_port": "MYPKG",
+        "cargo": {
+          "commodity": "Synthetic dry cargo",
+          "gross_weight_kg": 12100,
+          "dangerous_goods": false,
+          "un_number": null
+        },
+        "inbound_vessel_call_id": "SYN-ASX17-TUAS-001",
+        "onward_connection": {
+          "id": "SYN-CONN-SF1",
+          "outbound_vessel_name": "M/V Synthetic Feeder One",
+          "outbound_voyage": "SYN-SF1-0822",
+          "destination_port": "MYPKG",
+          "cutoff_at": "2026-08-22T05:35:00Z",
+          "departure_at": "2026-08-22T06:30:00Z",
+          "minimum_transfer_minutes": 90,
+          "expedited_transfer_minutes": 60
+        }
+      },
+      "service_id": "SF1",
+      "handling_group_id": "SYN-A-EQ1",
+      "cargo_kind": "DRY",
+      "base_ready_at": "2026-08-22T05:37:00Z",
+      "expedite_minutes_saved": 30,
+      "reefer_continuity_available": true,
+      "dg_structurally_cleared": true
+    },
+    {
+      "container": {
+        "id": "SYN-CNT-002",
+        "origin_port": "NLRTM",
+        "destination_port": "MYPKG",
+        "cargo": {
+          "commodity": "Synthetic chilled cargo",
+          "gross_weight_kg": 12200,
+          "dangerous_goods": false,
+          "un_number": null
+        },
+        "inbound_vessel_call_id": "SYN-ASX17-TUAS-001",
+        "onward_connection": {
+          "id": "SYN-CONN-SF1",
+          "outbound_vessel_name": "M/V Synthetic Feeder One",
+          "outbound_voyage": "SYN-SF1-0822",
+          "destination_port": "MYPKG",
+          "cutoff_at": "2026-08-22T05:35:00Z",
+          "departure_at": "2026-08-22T06:30:00Z",
+          "minimum_transfer_minutes": 90,
+          "expedited_transfer_minutes": 60
+        }
+      },
+      "service_id": "SF1",
+      "handling_group_id": "SYN-A-EQ1",
+      "cargo_kind": "REEFER",
+      "base_ready_at": "2026-08-22T05:39:00Z",
+      "expedite_minutes_saved": 30,
+      "reefer_continuity_available": true,
+      "dg_structurally_cleared": true
+    },
+    {
+      "container": {
+        "id": "SYN-CNT-003",
+        "origin_port": "NLRTM",
+        "destination_port": "MYPKG",
+        "cargo": {
+          "commodity": "Synthetic dry cargo",
+          "gross_weight_kg": 12300,
+          "dangerous_goods": false,
+          "un_number": null
+        },
+        "inbound_vessel_call_id": "SYN-ASX17-TUAS-001",
+        "onward_connection": {
+          "id": "SYN-CONN-SF1",
+          "outbound_vessel_name": "M/V Synthetic Feeder One",
+          "outbound_voyage": "SYN-SF1-0822",
+          "destination_port": "MYPKG",
+          "cutoff_at": "2026-08-22T05:35:00Z",
+          "departure_at": "2026-08-22T06:30:00Z",
+          "minimum_transfer_minutes": 90,
+          "expedited_transfer_minutes": 60
+        }
+      },
+      "service_id": "SF1",
+      "handling_group_id": "SYN-B-EQ2",
+      "cargo_kind": "DRY",
+      "base_ready_at": "2026-08-22T05:41:00Z",
+      "expedite_minutes_saved": 30,
+      "reefer_continuity_available": true,
+      "dg_structurally_cleared": true
+    },
+    {
+      "container": {
+        "id": "SYN-CNT-004",
+        "origin_port": "NLRTM",
+        "destination_port": "MYPKG",
+        "cargo": {
+          "commodity": "Synthetic declared DG cargo",
+          "gross_weight_kg": 12400,
+          "dangerous_goods": true,
+          "un_number": "UN1993"
+        },
+        "inbound_vessel_call_id": "SYN-ASX17-TUAS-001",
+        "onward_connection": {
+          "id": "SYN-CONN-SF1",
+          "outbound_vessel_name": "M/V Synthetic Feeder One",
+          "outbound_voyage": "SYN-SF1-0822",
+          "destination_port": "MYPKG",
+          "cutoff_at": "2026-08-22T05:35:00Z",
+          "departure_at": "2026-08-22T06:30:00Z",
+          "minimum_transfer_minutes": 90,
+          "expedited_transfer_minutes": 60
+        }
+      },
+      "service_id": "SF1",
+      "handling_group_id": "SYN-B-EQ2",
+      "cargo_kind": "DG",
+      "base_ready_at": "2026-08-22T05:49:00Z",
+      "expedite_minutes_saved": 30,
+      "reefer_continuity_available": true,
+      "dg_structurally_cleared": true
+    },
+    {
+      "container": {
+        "id": "SYN-CNT-005",
+        "origin_port": "NLRTM",
+        "destination_port": "MYPKG",
+        "cargo": {
+          "commodity": "Synthetic dry cargo",
+          "gross_weight_kg": 12500,
+          "dangerous_goods": false,
+          "un_number": null
+        },
+        "inbound_vessel_call_id": "SYN-ASX17-TUAS-001",
+        "onward_connection": {
+          "id": "SYN-CONN-SF1",
+          "outbound_vessel_name": "M/V Synthetic Feeder One",
+          "outbound_voyage": "SYN-SF1-0822",
+          "destination_port": "MYPKG",
+          "cutoff_at": "2026-08-22T05:35:00Z",
+          "departure_at": "2026-08-22T06:30:00Z",
+          "minimum_transfer_minutes": 90,
+          "expedited_transfer_minutes": 60
+        }
+      },
+      "service_id": "SF1",
+      "handling_group_id": "SYN-A-EQ1",
+      "cargo_kind": "DRY",
+      "base_ready_at": "2026-08-22T05:59:00Z",
+      "expedite_minutes_saved": 30,
+      "reefer_continuity_available": true,
+      "dg_structurally_cleared": true
+    },
+    {
+      "container": {
+        "id": "SYN-CNT-006",
+        "origin_port": "NLRTM",
+        "destination_port": "MYPKG",
+        "cargo": {
+          "commodity": "Synthetic chilled cargo",
+          "gross_weight_kg": 12600,
+          "dangerous_goods": false,
+          "un_number": null
+        },
+        "inbound_vessel_call_id": "SYN-ASX17-TUAS-001",
+        "onward_connection": {
+          "id": "SYN-CONN-SF1",
+          "outbound_vessel_name": "M/V Synthetic Feeder One",
+          "outbound_voyage": "SYN-SF1-0822",
+          "destination_port": "MYPKG",
+          "cutoff_at": "2026-08-22T05:35:00Z",
+          "departure_at": "2026-08-22T06:30:00Z",
+          "minimum_transfer_minutes": 90,
+          "expedited_transfer_minutes": 60
+        }
+      },
+      "service_id": "SF1",
+      "handling_group_id": "SYN-C-EQ3",
+      "cargo_kind": "REEFER",
+      "base_ready_at": "2026-08-22T06:01:00Z",
+      "expedite_minutes_saved": 30,
+      "reefer_continuity_available": true,
+      "dg_structurally_cleared": true
+    },
+    {
+      "container": {
+        "id": "SYN-CNT-007",
+        "origin_port": "NLRTM",
+        "destination_port": "MYPKG",
+        "cargo": {
+          "commodity": "Synthetic dry cargo",
+          "gross_weight_kg": 12700,
+          "dangerous_goods": false,
+          "un_number": null
+        },
+        "inbound_vessel_call_id": "SYN-ASX17-TUAS-001",
+        "onward_connection": {
+          "id": "SYN-CONN-SF1",
+          "outbound_vessel_name": "M/V Synthetic Feeder One",
+          "outbound_voyage": "SYN-SF1-0822",
+          "destination_port": "MYPKG",
+          "cutoff_at": "2026-08-22T05:35:00Z",
+          "departure_at": "2026-08-22T06:30:00Z",
+          "minimum_transfer_minutes": 90,
+          "expedited_transfer_minutes": 60
+        }
+      },
+      "service_id": "SF1",
+      "handling_group_id": "SYN-C-EQ3",
+      "cargo_kind": "DRY",
+      "base_ready_at": "2026-08-22T06:03:00Z",
+      "expedite_minutes_saved": 30,
+      "reefer_continuity_available": true,
+      "dg_structurally_cleared": true
+    },
+    {
+      "container": {
+        "id": "SYN-CNT-008",
+        "origin_port": "NLRTM",
+        "destination_port": "MYPKG",
+        "cargo": {
+          "commodity": "Synthetic dry cargo",
+          "gross_weight_kg": 12800,
+          "dangerous_goods": false,
+          "un_number": null
+        },
+        "inbound_vessel_call_id": "SYN-ASX17-TUAS-001",
+        "onward_connection": {
+          "id": "SYN-CONN-SF1",
+          "outbound_vessel_name": "M/V Synthetic Feeder One",
+          "outbound_voyage": "SYN-SF1-0822",
+          "destination_port": "MYPKG",
+          "cutoff_at": "2026-08-22T05:35:00Z",
+          "departure_at": "2026-08-22T06:30:00Z",
+          "minimum_transfer_minutes": 90,
+          "expedited_transfer_minutes": 60
+        }
+      },
+      "service_id": "SF1",
+      "handling_group_id": "SYN-A-EQ1",
+      "cargo_kind": "DRY",
+      "base_ready_at": "2026-08-22T05:15:00Z",
+      "expedite_minutes_saved": 30,
+      "reefer_continuity_available": true,
+      "dg_structurally_cleared": true
+    },
+    {
+      "container": {
+        "id": "SYN-CNT-009",
+        "origin_port": "NLRTM",
+        "destination_port": "MYPKG",
+        "cargo": {
+          "commodity": "Synthetic declared DG cargo",
+          "gross_weight_kg": 12900,
+          "dangerous_goods": true,
+          "un_number": "UN1993"
+        },
+        "inbound_vessel_call_id": "SYN-ASX17-TUAS-001",
+        "onward_connection": {
+          "id": "SYN-CONN-SF1",
+          "outbound_vessel_name": "M/V Synthetic Feeder One",
+          "outbound_voyage": "SYN-SF1-0822",
+          "destination_port": "MYPKG",
+          "cutoff_at": "2026-08-22T05:35:00Z",
+          "departure_at": "2026-08-22T06:30:00Z",
+          "minimum_transfer_minutes": 90,
+          "expedited_transfer_minutes": 60
+        }
+      },
+      "service_id": "SF1",
+      "handling_group_id": "SYN-B-EQ2",
+      "cargo_kind": "DG",
+      "base_ready_at": "2026-08-22T06:20:00Z",
+      "expedite_minutes_saved": 30,
+      "reefer_continuity_available": true,
+      "dg_structurally_cleared": false
+    },
+    {
+      "container": {
+        "id": "SYN-CNT-010",
+        "origin_port": "NLRTM",
+        "destination_port": "IDJKT",
+        "cargo": {
+          "commodity": "Synthetic dry cargo",
+          "gross_weight_kg": 13000,
+          "dangerous_goods": false,
+          "un_number": null
+        },
+        "inbound_vessel_call_id": "SYN-ASX17-TUAS-001",
+        "onward_connection": {
+          "id": "SYN-CONN-JV2",
+          "outbound_vessel_name": "M/V Synthetic Java Venture",
+          "outbound_voyage": "SYN-JV2-0822",
+          "destination_port": "IDJKT",
+          "cutoff_at": "2026-08-22T05:55:00Z",
+          "departure_at": "2026-08-22T07:00:00Z",
+          "minimum_transfer_minutes": 90,
+          "expedited_transfer_minutes": 60
+        }
+      },
+      "service_id": "JV2",
+      "handling_group_id": "SYN-A-EQ1",
+      "cargo_kind": "DRY",
+      "base_ready_at": "2026-08-22T06:03:00Z",
+      "expedite_minutes_saved": 30,
+      "reefer_continuity_available": true,
+      "dg_structurally_cleared": true
+    },
+    {
+      "container": {
+        "id": "SYN-CNT-011",
+        "origin_port": "NLRTM",
+        "destination_port": "IDJKT",
+        "cargo": {
+          "commodity": "Synthetic chilled cargo",
+          "gross_weight_kg": 13100,
+          "dangerous_goods": false,
+          "un_number": null
+        },
+        "inbound_vessel_call_id": "SYN-ASX17-TUAS-001",
+        "onward_connection": {
+          "id": "SYN-CONN-JV2",
+          "outbound_vessel_name": "M/V Synthetic Java Venture",
+          "outbound_voyage": "SYN-JV2-0822",
+          "destination_port": "IDJKT",
+          "cutoff_at": "2026-08-22T05:55:00Z",
+          "departure_at": "2026-08-22T07:00:00Z",
+          "minimum_transfer_minutes": 90,
+          "expedited_transfer_minutes": 60
+        }
+      },
+      "service_id": "JV2",
+      "handling_group_id": "SYN-A-EQ1",
+      "cargo_kind": "REEFER",
+      "base_ready_at": "2026-08-22T06:05:00Z",
+      "expedite_minutes_saved": 30,
+      "reefer_continuity_available": true,
+      "dg_structurally_cleared": true
+    },
+    {
+      "container": {
+        "id": "SYN-CNT-012",
+        "origin_port": "NLRTM",
+        "destination_port": "IDJKT",
+        "cargo": {
+          "commodity": "Synthetic dry cargo",
+          "gross_weight_kg": 13200,
+          "dangerous_goods": false,
+          "un_number": null
+        },
+        "inbound_vessel_call_id": "SYN-ASX17-TUAS-001",
+        "onward_connection": {
+          "id": "SYN-CONN-JV2",
+          "outbound_vessel_name": "M/V Synthetic Java Venture",
+          "outbound_voyage": "SYN-JV2-0822",
+          "destination_port": "IDJKT",
+          "cutoff_at": "2026-08-22T05:55:00Z",
+          "departure_at": "2026-08-22T07:00:00Z",
+          "minimum_transfer_minutes": 90,
+          "expedited_transfer_minutes": 60
+        }
+      },
+      "service_id": "JV2",
+      "handling_group_id": "SYN-B-EQ2",
+      "cargo_kind": "DRY",
+      "base_ready_at": "2026-08-22T06:07:00Z",
+      "expedite_minutes_saved": 30,
+      "reefer_continuity_available": true,
+      "dg_structurally_cleared": true
+    },
+    {
+      "container": {
+        "id": "SYN-CNT-013",
+        "origin_port": "NLRTM",
+        "destination_port": "IDJKT",
+        "cargo": {
+          "commodity": "Synthetic declared DG cargo",
+          "gross_weight_kg": 13300,
+          "dangerous_goods": true,
+          "un_number": "UN1993"
+        },
+        "inbound_vessel_call_id": "SYN-ASX17-TUAS-001",
+        "onward_connection": {
+          "id": "SYN-CONN-JV2",
+          "outbound_vessel_name": "M/V Synthetic Java Venture",
+          "outbound_voyage": "SYN-JV2-0822",
+          "destination_port": "IDJKT",
+          "cutoff_at": "2026-08-22T05:55:00Z",
+          "departure_at": "2026-08-22T07:00:00Z",
+          "minimum_transfer_minutes": 90,
+          "expedited_transfer_minutes": 60
+        }
+      },
+      "service_id": "JV2",
+      "handling_group_id": "SYN-B-EQ2",
+      "cargo_kind": "DG",
+      "base_ready_at": "2026-08-22T06:11:00Z",
+      "expedite_minutes_saved": 30,
+      "reefer_continuity_available": true,
+      "dg_structurally_cleared": true
+    },
+    {
+      "container": {
+        "id": "SYN-CNT-014",
+        "origin_port": "NLRTM",
+        "destination_port": "IDJKT",
+        "cargo": {
+          "commodity": "Synthetic dry cargo",
+          "gross_weight_kg": 13400,
+          "dangerous_goods": false,
+          "un_number": null
+        },
+        "inbound_vessel_call_id": "SYN-ASX17-TUAS-001",
+        "onward_connection": {
+          "id": "SYN-CONN-JV2",
+          "outbound_vessel_name": "M/V Synthetic Java Venture",
+          "outbound_voyage": "SYN-JV2-0822",
+          "destination_port": "IDJKT",
+          "cutoff_at": "2026-08-22T05:55:00Z",
+          "departure_at": "2026-08-22T07:00:00Z",
+          "minimum_transfer_minutes": 90,
+          "expedited_transfer_minutes": 60
+        }
+      },
+      "service_id": "JV2",
+      "handling_group_id": "SYN-C-EQ3",
+      "cargo_kind": "DRY",
+      "base_ready_at": "2026-08-22T06:13:00Z",
+      "expedite_minutes_saved": 30,
+      "reefer_continuity_available": true,
+      "dg_structurally_cleared": true
+    },
+    {
+      "container": {
+        "id": "SYN-CNT-015",
+        "origin_port": "NLRTM",
+        "destination_port": "IDJKT",
+        "cargo": {
+          "commodity": "Synthetic chilled cargo",
+          "gross_weight_kg": 13500,
+          "dangerous_goods": false,
+          "un_number": null
+        },
+        "inbound_vessel_call_id": "SYN-ASX17-TUAS-001",
+        "onward_connection": {
+          "id": "SYN-CONN-JV2",
+          "outbound_vessel_name": "M/V Synthetic Java Venture",
+          "outbound_voyage": "SYN-JV2-0822",
+          "destination_port": "IDJKT",
+          "cutoff_at": "2026-08-22T05:55:00Z",
+          "departure_at": "2026-08-22T07:00:00Z",
+          "minimum_transfer_minutes": 90,
+          "expedited_transfer_minutes": 60
+        }
+      },
+      "service_id": "JV2",
+      "handling_group_id": "SYN-C-EQ3",
+      "cargo_kind": "REEFER",
+      "base_ready_at": "2026-08-22T06:15:00Z",
+      "expedite_minutes_saved": 30,
+      "reefer_continuity_available": true,
+      "dg_structurally_cleared": true
+    },
+    {
+      "container": {
+        "id": "SYN-CNT-016",
+        "origin_port": "NLRTM",
+        "destination_port": "IDJKT",
+        "cargo": {
+          "commodity": "Synthetic dry cargo",
+          "gross_weight_kg": 13600,
+          "dangerous_goods": false,
+          "un_number": null
+        },
+        "inbound_vessel_call_id": "SYN-ASX17-TUAS-001",
+        "onward_connection": {
+          "id": "SYN-CONN-JV2",
+          "outbound_vessel_name": "M/V Synthetic Java Venture",
+          "outbound_voyage": "SYN-JV2-0822",
+          "destination_port": "IDJKT",
+          "cutoff_at": "2026-08-22T05:55:00Z",
+          "departure_at": "2026-08-22T07:00:00Z",
+          "minimum_transfer_minutes": 90,
+          "expedited_transfer_minutes": 60
+        }
+      },
+      "service_id": "JV2",
+      "handling_group_id": "SYN-A-EQ1",
+      "cargo_kind": "DRY",
+      "base_ready_at": "2026-08-22T05:37:00Z",
+      "expedite_minutes_saved": 30,
+      "reefer_continuity_available": true,
+      "dg_structurally_cleared": true
+    },
+    {
+      "container": {
+        "id": "SYN-CNT-017",
+        "origin_port": "NLRTM",
+        "destination_port": "IDJKT",
+        "cargo": {
+          "commodity": "Synthetic dry cargo",
+          "gross_weight_kg": 13700,
+          "dangerous_goods": false,
+          "un_number": null
+        },
+        "inbound_vessel_call_id": "SYN-ASX17-TUAS-001",
+        "onward_connection": {
+          "id": "SYN-CONN-JV2",
+          "outbound_vessel_name": "M/V Synthetic Java Venture",
+          "outbound_voyage": "SYN-JV2-0822",
+          "destination_port": "IDJKT",
+          "cutoff_at": "2026-08-22T05:55:00Z",
+          "departure_at": "2026-08-22T07:00:00Z",
+          "minimum_transfer_minutes": 90,
+          "expedited_transfer_minutes": 60
+        }
+      },
+      "service_id": "JV2",
+      "handling_group_id": "SYN-B-EQ2",
+      "cargo_kind": "DRY",
+      "base_ready_at": "2026-08-22T06:40:00Z",
+      "expedite_minutes_saved": 30,
+      "reefer_continuity_available": true,
+      "dg_structurally_cleared": true
+    },
+    {
+      "container": {
+        "id": "SYN-CNT-018",
+        "origin_port": "NLRTM",
+        "destination_port": "CNSHA",
+        "cargo": {
+          "commodity": "Synthetic dry cargo",
+          "gross_weight_kg": 13800,
+          "dangerous_goods": false,
+          "un_number": null
+        },
+        "inbound_vessel_call_id": "SYN-ASX17-TUAS-001",
+        "onward_connection": {
+          "id": "SYN-CONN-EC3",
+          "outbound_vessel_name": "M/V Synthetic Eastern Connector",
+          "outbound_voyage": "SYN-EC3-0822",
+          "destination_port": "CNSHA",
+          "cutoff_at": "2026-08-22T07:35:00Z",
+          "departure_at": "2026-08-22T09:00:00Z",
+          "minimum_transfer_minutes": 90,
+          "expedited_transfer_minutes": 60
+        }
+      },
+      "service_id": "EC3",
+      "handling_group_id": "SYN-A-EQ1",
+      "cargo_kind": "DRY",
+      "base_ready_at": "2026-08-22T07:10:00Z",
+      "expedite_minutes_saved": 30,
+      "reefer_continuity_available": true,
+      "dg_structurally_cleared": true
+    },
+    {
+      "container": {
+        "id": "SYN-CNT-019",
+        "origin_port": "NLRTM",
+        "destination_port": "CNSHA",
+        "cargo": {
+          "commodity": "Synthetic chilled cargo",
+          "gross_weight_kg": 13900,
+          "dangerous_goods": false,
+          "un_number": null
+        },
+        "inbound_vessel_call_id": "SYN-ASX17-TUAS-001",
+        "onward_connection": {
+          "id": "SYN-CONN-EC3",
+          "outbound_vessel_name": "M/V Synthetic Eastern Connector",
+          "outbound_voyage": "SYN-EC3-0822",
+          "destination_port": "CNSHA",
+          "cutoff_at": "2026-08-22T07:35:00Z",
+          "departure_at": "2026-08-22T09:00:00Z",
+          "minimum_transfer_minutes": 90,
+          "expedited_transfer_minutes": 60
+        }
+      },
+      "service_id": "EC3",
+      "handling_group_id": "SYN-B-EQ2",
+      "cargo_kind": "REEFER",
+      "base_ready_at": "2026-08-22T07:15:00Z",
+      "expedite_minutes_saved": 30,
+      "reefer_continuity_available": true,
+      "dg_structurally_cleared": true
+    },
+    {
+      "container": {
+        "id": "SYN-CNT-020",
+        "origin_port": "NLRTM",
+        "destination_port": "CNSHA",
+        "cargo": {
+          "commodity": "Synthetic dry cargo",
+          "gross_weight_kg": 14000,
+          "dangerous_goods": false,
+          "un_number": null
+        },
+        "inbound_vessel_call_id": "SYN-ASX17-TUAS-001",
+        "onward_connection": {
+          "id": "SYN-CONN-EC3",
+          "outbound_vessel_name": "M/V Synthetic Eastern Connector",
+          "outbound_voyage": "SYN-EC3-0822",
+          "destination_port": "CNSHA",
+          "cutoff_at": "2026-08-22T07:35:00Z",
+          "departure_at": "2026-08-22T09:00:00Z",
+          "minimum_transfer_minutes": 90,
+          "expedited_transfer_minutes": 60
+        }
+      },
+      "service_id": "EC3",
+      "handling_group_id": "SYN-C-EQ3",
+      "cargo_kind": "DRY",
+      "base_ready_at": "2026-08-22T07:20:00Z",
+      "expedite_minutes_saved": 30,
+      "reefer_continuity_available": true,
+      "dg_structurally_cleared": true
+    },
+    {
+      "container": {
+        "id": "SYN-CNT-021",
+        "origin_port": "NLRTM",
+        "destination_port": "CNSHA",
+        "cargo": {
+          "commodity": "Synthetic dry cargo",
+          "gross_weight_kg": 14100,
+          "dangerous_goods": false,
+          "un_number": null
+        },
+        "inbound_vessel_call_id": "SYN-ASX17-TUAS-001",
+        "onward_connection": {
+          "id": "SYN-CONN-EC3",
+          "outbound_vessel_name": "M/V Synthetic Eastern Connector",
+          "outbound_voyage": "SYN-EC3-0822",
+          "destination_port": "CNSHA",
+          "cutoff_at": "2026-08-22T07:35:00Z",
+          "departure_at": "2026-08-22T09:00:00Z",
+          "minimum_transfer_minutes": 90,
+          "expedited_transfer_minutes": 60
+        }
+      },
+      "service_id": "EC3",
+      "handling_group_id": "SYN-A-EQ1",
+      "cargo_kind": "DRY",
+      "base_ready_at": "2026-08-22T08:20:00Z",
+      "expedite_minutes_saved": 30,
+      "reefer_continuity_available": true,
+      "dg_structurally_cleared": true
+    },
+    {
+      "container": {
+        "id": "SYN-CNT-022",
+        "origin_port": "NLRTM",
+        "destination_port": "CNSHA",
+        "cargo": {
+          "commodity": "Synthetic declared DG cargo",
+          "gross_weight_kg": 14200,
+          "dangerous_goods": true,
+          "un_number": "UN1993"
+        },
+        "inbound_vessel_call_id": "SYN-ASX17-TUAS-001",
+        "onward_connection": {
+          "id": "SYN-CONN-EC3",
+          "outbound_vessel_name": "M/V Synthetic Eastern Connector",
+          "outbound_voyage": "SYN-EC3-0822",
+          "destination_port": "CNSHA",
+          "cutoff_at": "2026-08-22T07:35:00Z",
+          "departure_at": "2026-08-22T09:00:00Z",
+          "minimum_transfer_minutes": 90,
+          "expedited_transfer_minutes": 60
+        }
+      },
+      "service_id": "EC3",
+      "handling_group_id": "SYN-B-EQ2",
+      "cargo_kind": "DG",
+      "base_ready_at": "2026-08-22T08:25:00Z",
+      "expedite_minutes_saved": 30,
+      "reefer_continuity_available": true,
+      "dg_structurally_cleared": false
+    },
+    {
+      "container": {
+        "id": "SYN-CNT-023",
+        "origin_port": "NLRTM",
+        "destination_port": "CNSHA",
+        "cargo": {
+          "commodity": "Synthetic chilled cargo",
+          "gross_weight_kg": 14300,
+          "dangerous_goods": false,
+          "un_number": null
+        },
+        "inbound_vessel_call_id": "SYN-ASX17-TUAS-001",
+        "onward_connection": {
+          "id": "SYN-CONN-EC3",
+          "outbound_vessel_name": "M/V Synthetic Eastern Connector",
+          "outbound_voyage": "SYN-EC3-0822",
+          "destination_port": "CNSHA",
+          "cutoff_at": "2026-08-22T07:35:00Z",
+          "departure_at": "2026-08-22T09:00:00Z",
+          "minimum_transfer_minutes": 90,
+          "expedited_transfer_minutes": 60
+        }
+      },
+      "service_id": "EC3",
+      "handling_group_id": "SYN-C-EQ3",
+      "cargo_kind": "REEFER",
+      "base_ready_at": "2026-08-22T08:30:00Z",
+      "expedite_minutes_saved": 30,
+      "reefer_continuity_available": false,
+      "dg_structurally_cleared": true
+    },
+    {
+      "container": {
+        "id": "SYN-CNT-024",
+        "origin_port": "NLRTM",
+        "destination_port": "CNSHA",
+        "cargo": {
+          "commodity": "Synthetic dry cargo",
+          "gross_weight_kg": 14400,
+          "dangerous_goods": false,
+          "un_number": null
+        },
+        "inbound_vessel_call_id": "SYN-ASX17-TUAS-001",
+        "onward_connection": {
+          "id": "SYN-CONN-EC3",
+          "outbound_vessel_name": "M/V Synthetic Eastern Connector",
+          "outbound_voyage": "SYN-EC3-0822",
+          "destination_port": "CNSHA",
+          "cutoff_at": "2026-08-22T07:35:00Z",
+          "departure_at": "2026-08-22T09:00:00Z",
+          "minimum_transfer_minutes": 90,
+          "expedited_transfer_minutes": 60
+        }
+      },
+      "service_id": "EC3",
+      "handling_group_id": "SYN-A-EQ1",
+      "cargo_kind": "DRY",
+      "base_ready_at": "2026-08-22T08:35:00Z",
+      "expedite_minutes_saved": 30,
+      "reefer_continuity_available": true,
+      "dg_structurally_cleared": true
+    }
+  ],
+  "capacity": {
+    "id": "SYN-CAPACITY-SF1-JV2-V1",
+    "terminal_id": "SYN-TUAS-TERMINAL",
+    "window_start": "2026-08-22T05:00:00Z",
+    "window_end": "2026-08-22T05:55:00Z",
+    "overlap_service_ids": ["SF1", "JV2"],
+    "total_slots": 8,
+    "handling_group_limits": [
+      {"handling_group_id": "SYN-A-EQ1", "slots": 4},
+      {"handling_group_id": "SYN-B-EQ2", "slots": 3},
+      {"handling_group_id": "SYN-C-EQ3", "slots": 3}
+    ],
+    "max_reefer_slots": 3,
+    "max_dg_slots": 1
+  }
+}

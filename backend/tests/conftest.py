@@ -10,6 +10,7 @@ from sqlmodel.pool import StaticPool
 
 from backend.app.domain.enums import IncidentState
 from backend.app.domain.models import Incident
+from backend.app.domain.scarcity import CanonicalIncidentFixture
 
 
 @pytest.fixture
@@ -66,3 +67,12 @@ def incident() -> Incident:
         state=IncidentState.INCIDENT_RECEIVED,
         created_at=datetime(2026, 8, 21, 5, 0, tzinfo=UTC),
     )
+
+
+@pytest.fixture
+def canonical_fixture() -> CanonicalIncidentFixture:
+    from backend.app.services.canonical_incident import (
+        SyntheticCanonicalIncidentService,
+    )
+
+    return SyntheticCanonicalIncidentService().load()
