@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sqlite3
 from datetime import UTC, timedelta
 from uuid import UUID
 
 from sqlmodel import Session
+from sqlalchemy.exc import IntegrityError
 
 from backend.app.domain.carrier_recovery import (
     ApprovalBinding,
@@ -104,6 +106,17 @@ class CarrierRecoveryWorkflow:
         return self._cases.history(case_id)
 
     def record_request_approval(self, command: RequestApprovalCommand) -> Approval:
+        try:
+            return self._record_request_approval_once(command)
+        except IntegrityError as error:
+            if not self._is_approval_uniqueness_race(error):
+                raise
+            with Session(self._cases.session_bind()) as fresh_session:
+                return build_carrier_recovery_workflow(
+                    fresh_session, simulator=self._simulator
+                ).record_request_approval(command)
+
+    def _record_request_approval_once(self, command: RequestApprovalCommand) -> Approval:
         case = self._cases.get_case(command.case_id)
         history = self._cases.history(command.case_id)
         binding = self._cases.get_binding_for_proposal(command.proposal_decision_id)
@@ -135,6 +148,13 @@ class CarrierRecoveryWorkflow:
             if command.status is ApprovalStatus.REJECTED:
                 self.recompute(case.id)
         return approval
+
+    @staticmethod
+    def _is_approval_uniqueness_race(error: IntegrityError) -> bool:
+        return (
+            isinstance(error.orig, sqlite3.IntegrityError)
+            and "UNIQUE constraint failed: approvals.decision_id" in str(error.orig)
+        )
 
     def send_authorised_request(self, case_id: UUID) -> RTARequestContext:
         case = self._cases.get_case(case_id)
@@ -168,6 +188,17 @@ class CarrierRecoveryWorkflow:
         return sent_context
 
     def record_counter_approval(self, command: CounterApprovalCommand) -> Approval:
+        try:
+            return self._record_counter_approval_once(command)
+        except IntegrityError as error:
+            if not self._is_approval_uniqueness_race(error):
+                raise
+            with Session(self._cases.session_bind()) as fresh_session:
+                return build_carrier_recovery_workflow(
+                    fresh_session, simulator=self._simulator
+                ).record_counter_approval(command)
+
+    def _record_counter_approval_once(self, command: CounterApprovalCommand) -> Approval:
         history = self._cases.history(command.case_id)
         case = history.case
         binding = self._cases.get_binding_for_proposal(command.proposal_decision_id)

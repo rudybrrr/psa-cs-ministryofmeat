@@ -140,6 +140,9 @@ class CarrierRecoveryRepository:
         self._session = session
         self._transaction_depth = 0
 
+    def session_bind(self):
+        return self._session.get_bind()
+
     @contextmanager
     def transaction(self) -> Iterator[None]:
         outermost = self._transaction_depth == 0
