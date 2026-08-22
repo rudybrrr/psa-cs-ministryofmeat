@@ -9,7 +9,17 @@ from sqlalchemy.engine import Engine
 from sqlmodel import Session
 
 from backend.app.domain.models import AuditEvent, Decision, Incident
+from backend.app.domain.scarcity import (
+    CanonicalIncidentFixture,
+    ScarcityEvaluationReport,
+)
+from backend.app.orchestration.scarce_capacity import (
+    build_scarce_capacity_workflow,
+)
 from backend.app.orchestration.state_machine import build_workflow
+from backend.app.services.canonical_incident import (
+    SyntheticCanonicalIncidentService,
+)
 from backend.app.storage.database import (
     create_db_and_tables,
     engine,
@@ -20,6 +30,7 @@ from backend.app.storage.repositories import (
     DecisionRepository,
     IncidentRepository,
     RecordNotFound,
+    ScarcityEvaluationRepository,
 )
 
 
@@ -28,6 +39,15 @@ class TriggerResponse(BaseModel):
 
     incident_id: UUID
     decision_id: UUID
+
+
+class ScarcityTriggerResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    incident_id: UUID
+    evaluation_id: UUID
+    decision_ids: tuple[UUID, ...]
+    reproducibility_key: str
 
 
 SessionDependency = Annotated[Session, Depends(get_session)]
@@ -65,6 +85,34 @@ def create_app(*, database_engine: Engine | None = None) -> FastAPI:
             decision_id=result.decision.id,
         )
 
+    @application.post(
+        "/synthetic/scenarios/canonical-scarcity",
+        response_model=ScarcityTriggerResponse,
+        status_code=status.HTTP_201_CREATED,
+    )
+    def trigger_canonical_scarcity(
+        session: SessionDependency,
+    ) -> ScarcityTriggerResponse:
+        result = build_scarce_capacity_workflow(session).run(
+            seed=20260822,
+            world_count=50,
+        )
+        return ScarcityTriggerResponse(
+            incident_id=result.incident.id,
+            evaluation_id=result.report.id,
+            decision_ids=tuple(
+                decision.id for decision in result.decisions
+            ),
+            reproducibility_key=result.report.reproducibility_key,
+        )
+
+    @application.get(
+        "/synthetic/scenarios/canonical-scarcity/fixture",
+        response_model=CanonicalIncidentFixture,
+    )
+    def get_canonical_scarcity_fixture() -> CanonicalIncidentFixture:
+        return SyntheticCanonicalIncidentService().load()
+
     @application.get(
         "/incidents/{incident_id}",
         response_model=Incident,
@@ -100,6 +148,24 @@ def create_app(*, database_engine: Engine | None = None) -> FastAPI:
         session: SessionDependency,
     ) -> list[AuditEvent]:
         return AuditRepository(session).list_for_incident(incident_id)
+
+    @application.get(
+        "/incidents/{incident_id}/scarcity-evaluation",
+        response_model=ScarcityEvaluationReport,
+    )
+    def get_scarcity_evaluation(
+        incident_id: UUID,
+        session: SessionDependency,
+    ) -> ScarcityEvaluationReport:
+        try:
+            return ScarcityEvaluationRepository(session).get_for_incident(
+                incident_id
+            )
+        except RecordNotFound as error:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Scarcity evaluation not found",
+            ) from error
 
     return application
 

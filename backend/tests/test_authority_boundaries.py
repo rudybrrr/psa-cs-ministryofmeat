@@ -1,9 +1,17 @@
 import inspect
 from types import ModuleType
 
-from backend.app.orchestration import state_machine
-from backend.app.policies import dominance
-from backend.app.services import manifest, schedule, yard
+from backend.app.evaluation import benchmark, scarcity
+from backend.app.optimization import scarcity as optimization
+from backend.app.orchestration import scarce_capacity, state_machine
+from backend.app.policies import allocation_dominance, baseline, dominance
+from backend.app.services import (
+    canonical_incident,
+    manifest,
+    scenarios,
+    schedule,
+    yard,
+)
 from backend.app.main import app
 
 
@@ -42,6 +50,14 @@ def test_api_and_domain_do_not_expose_external_control_operations() -> None:
         yard,
         dominance,
         state_machine,
+        canonical_incident,
+        scenarios,
+        baseline,
+        allocation_dominance,
+        scarcity,
+        optimization,
+        scarce_capacity,
+        benchmark,
     )
     exposed = public_callables | {
         route.name for route in app.routes
