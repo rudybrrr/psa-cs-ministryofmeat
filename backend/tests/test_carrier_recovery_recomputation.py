@@ -97,14 +97,6 @@ def test_recompute_rolls_back_replacement_decisions_when_results_fail(
         effective_at="2026-08-22T08:30:00Z",
     ))
     binding = workflow.history(case.id).bindings[-1]
-    workflow.record_counter_approval(CounterApprovalCommand(
-        case_id=case.id,
-        proposal_decision_id=binding.proposal_decision_id,
-        carrier_response_id=binding.subject_id,
-        expected_payload_fingerprint=binding.payload_fingerprint,
-        operator_id="operator-31",
-        status=ApprovalStatus.APPROVED,
-    ))
     before = DecisionRepository(session).list_for_incident(phase_two.incident.id)
 
     def fail_result(*_args, **_kwargs) -> None:
@@ -113,10 +105,23 @@ def test_recompute_rolls_back_replacement_decisions_when_results_fail(
     monkeypatch.setattr(workflow._cases, "add_result", fail_result)
 
     with pytest.raises(RuntimeError, match="force recomputation rollback"):
-        workflow.recompute(case.id)
+        workflow.record_counter_approval(CounterApprovalCommand(
+            case_id=case.id,
+            proposal_decision_id=binding.proposal_decision_id,
+            carrier_response_id=binding.subject_id,
+            expected_payload_fingerprint=binding.payload_fingerprint,
+            operator_id="operator-31",
+            status=ApprovalStatus.APPROVED,
+        ))
 
     assert DecisionRepository(session).list_for_incident(phase_two.incident.id) == before
-    assert workflow.history(case.id).results == ()
+    history = workflow.history(case.id)
+    assert history.results == ()
+    assert {approval.decision_id for approval in history.approvals} == {
+        workflow.history(case.id).bindings[0].proposal_decision_id
+    }
+    assert history.effective_timings == ()
+    assert history.case.state.value == "AWAITING_COUNTER_APPROVAL"
 
 
 def test_history_is_case_scoped_ordered_and_includes_linked_decisions(session) -> None:

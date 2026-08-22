@@ -105,6 +105,7 @@ class CarrierRecoveryWorkflow:
 
     def record_request_approval(self, command: RequestApprovalCommand) -> Approval:
         case = self._cases.get_case(command.case_id)
+        history = self._cases.history(command.case_id)
         binding = self._cases.get_binding_for_proposal(command.proposal_decision_id)
         existing = self._cases.get_approval_for_proposal(command.proposal_decision_id)
         if existing is not None:
@@ -121,8 +122,18 @@ class CarrierRecoveryWorkflow:
         with self._cases.transaction():
             self._cases.add_approval(approval)
             if updated_case is not case:
+                if history.request is None or history.request_context is None:
+                    raise CarrierRecoveryConflict("rejected request is missing immutable context")
+                self._cases.update_request(
+                    history.request.model_copy(update={"status": RTARequestStatus.CLOSED})
+                )
+                self._cases.update_request_context(
+                    history.request_context.model_copy(update={"closed_at": now})
+                )
                 self._cases.update_case(updated_case)
             self._cases.link_audit(case.id, AuditEvent(actor=AuditActor.OPERATOR, actor_id=command.operator_id, incident_id=case.incident_id, event_type="carrier_recovery.request_approval_recorded", payload={"recovery_case_id": str(case.id), "proposal_decision_id": str(command.proposal_decision_id), "subject_id": str(command.request_id), "payload_fingerprint": command.expected_payload_fingerprint, "status": command.status.value}, timestamp=now))
+            if command.status is ApprovalStatus.REJECTED:
+                self.recompute(case.id)
         return approval
 
     def send_authorised_request(self, case_id: UUID) -> RTARequestContext:
@@ -181,6 +192,7 @@ class CarrierRecoveryWorkflow:
                 self._cases.add_effective_timing(timing)
                 self._cases.link_audit(case.id, AuditEvent(actor=AuditActor.SYSTEM, actor_id="carrier-recovery-workflow", incident_id=case.incident_id, event_type="carrier.timing_effective", payload={"recovery_case_id": str(case.id), "carrier_response_id": str(response.id), "effective_eta_pta": response.counter_eta_pta.astimezone(UTC).isoformat()}, timestamp=now))
             self._cases.link_audit(case.id, AuditEvent(actor=AuditActor.OPERATOR, actor_id=command.operator_id, incident_id=case.incident_id, event_type="carrier.counter_approval_recorded", payload={"recovery_case_id": str(case.id), "proposal_decision_id": str(command.proposal_decision_id), "carrier_response_id": str(response.id), "payload_fingerprint": command.expected_payload_fingerprint, "status": command.status.value}, timestamp=now))
+            self.recompute(case.id)
         return approval
 
     def evaluate_timeout(
@@ -222,7 +234,8 @@ class CarrierRecoveryWorkflow:
             self._cases.update_request_context(closed_context)
             self._cases.update_case(timed_out_case)
             self._cases.link_audit(case.id, AuditEvent(actor=AuditActor.SYSTEM, actor_id="carrier-recovery-workflow", incident_id=case.incident_id, event_type="carrier.response_timed_out", payload={"recovery_case_id": str(case.id), "request_id": str(request.id), "effective_at": effective_at.isoformat()}, timestamp=effective_at))
-        return timed_out_case
+            self.recompute(case.id)
+        return self._cases.get_case(case.id)
 
     def recompute(self, case_id: UUID) -> CarrierRecoveryCase:
         history = self._cases.history(case_id)
@@ -348,6 +361,8 @@ class CarrierRecoveryWorkflow:
                 self._cases.add_decision_link(CarrierRecoveryDecisionLink(case_id=case.id, decision_id=proposal.id, role="COUNTER_RTA_PROPOSAL", created_at=now))
                 self._cases.link_audit(case.id, AuditEvent(actor=AuditActor.SYSTEM, actor_id="carrier-recovery-workflow", incident_id=case.incident_id, event_type="carrier.counter_awaiting_approval", payload={"recovery_case_id": str(case.id), "proposal_decision_id": str(proposal.id), "carrier_response_id": str(response.id)}, timestamp=now))
             self._cases.link_audit(case.id, AuditEvent(actor=AuditActor.CARRIER, actor_id=response.carrier_id, incident_id=case.incident_id, event_type="carrier.response_received", payload={"recovery_case_id": str(case.id), "request_id": str(request.id), "carrier_response_id": str(response.id), "response": response.response.value}, timestamp=now))
+            if response.response.value == "ACCEPT":
+                self.recompute(case.id)
         return CarrierSimulationResult(
             case_id=case.id,
             carrier_response_id=response.id,

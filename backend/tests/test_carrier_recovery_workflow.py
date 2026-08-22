@@ -166,7 +166,7 @@ def test_counter_simulation_rolls_back_proposal_when_binding_fails(
     assert history.case.state.value == "AWAITING_CARRIER"
 
 
-def test_request_rejection_closes_authorization_without_a_dead_end(session: Session) -> None:
+def test_request_rejection_closes_authorization_and_recomputes_without_a_dead_end(session: Session) -> None:
     phase_two = build_scarce_capacity_workflow(session).run()
     workflow = build_carrier_recovery_workflow(session)
     case = workflow.prepare(command(phase_two.incident.id, "SYN-CONN-JV2"))
@@ -181,7 +181,13 @@ def test_request_rejection_closes_authorization_without_a_dead_end(session: Sess
         status=ApprovalStatus.REJECTED,
     ))
 
-    assert workflow.history(case.id).case.state.value == "RECOMPUTING"
+    history = workflow.history(case.id)
+    assert history.case.state.value in {"COMPLETED", "ESCALATED"}
+    assert history.request is not None
+    assert history.request.status.value == "CLOSED"
+    assert history.request_context is not None
+    assert history.request_context.closed_at is not None
+    assert history.results
 
 
 def test_send_requires_exact_approved_binding(session: Session) -> None:
@@ -303,7 +309,7 @@ def test_accept_creates_effective_requested_timing_without_second_approval(
     assert result.carrier_response_id is not None
     assert history.carrier_responses[0].response.value == "ACCEPT"
     assert history.effective_timings[0].effective_eta_pta == history.request.requested_eta_pta
-    assert history.case.state.value == "RECOMPUTING"
+    assert history.case.state.value in {"COMPLETED", "ESCALATED"}
 
 
 def test_counter_requires_fresh_exact_approval_before_effective_timing(
@@ -353,7 +359,7 @@ def test_approved_counter_creates_exact_effective_timing_idempotently(
 
     assert first == second
     assert history.effective_timings[0].effective_eta_pta == history.carrier_responses[0].counter_eta_pta
-    assert history.case.state.value == "RECOMPUTING"
+    assert history.case.state.value in {"COMPLETED", "ESCALATED"}
 
 
 def test_rejected_counter_uses_no_counter_effective_timing(session: Session) -> None:
@@ -378,7 +384,7 @@ def test_rejected_counter_uses_no_counter_effective_timing(session: Session) -> 
     history = workflow.history(case.id)
 
     assert history.effective_timings == ()
-    assert history.case.state.value == "RECOMPUTING"
+    assert history.case.state.value in {"COMPLETED", "ESCALATED"}
 
 
 def test_timeout_at_deadline_observes_absence_once_and_retries_idempotently(
@@ -398,7 +404,7 @@ def test_timeout_at_deadline_observes_absence_once_and_retries_idempotently(
     history = workflow.history(case.id)
 
     assert second == first
-    assert history.case.state.value == "RECOMPUTING"
+    assert history.case.state.value in {"COMPLETED", "ESCALATED"}
     assert history.carrier_responses == ()
     assert [event.event_type for event in history.audit_events].count("carrier.response_timed_out") == 1
     assert AuditActor.CARRIER not in {event.actor for event in history.audit_events}
