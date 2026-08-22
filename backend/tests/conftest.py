@@ -10,7 +10,7 @@ from sqlmodel.pool import StaticPool
 
 from backend.app.domain.enums import IncidentState
 from backend.app.domain.models import Incident
-from backend.app.domain.scarcity import CanonicalIncidentFixture
+from backend.app.domain.scarcity import CanonicalIncidentFixture, ScenarioSet
 
 
 @pytest.fixture
@@ -76,3 +76,16 @@ def canonical_fixture() -> CanonicalIncidentFixture:
     )
 
     return SyntheticCanonicalIncidentService().load()
+
+
+@pytest.fixture
+def canonical_scenarios(
+    canonical_fixture: CanonicalIncidentFixture,
+) -> ScenarioSet:
+    from backend.app.services.scenarios import SeededScenarioGenerator
+
+    return SeededScenarioGenerator().generate(
+        canonical_fixture,
+        seed=20260822,
+        world_count=50,
+    )
