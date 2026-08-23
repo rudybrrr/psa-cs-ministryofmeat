@@ -158,14 +158,14 @@ class CarrierRecoveryRepository:
         self._transaction_depth += 1
         try:
             yield
-            self._transaction_depth -= 1
             if outermost:
                 self._session.commit()
         except Exception:
-            self._transaction_depth -= 1
             if outermost:
                 self._session.rollback()
             raise
+        finally:
+            self._transaction_depth -= 1
 
     def _persist(self, record: SQLModel) -> None:
         self._session.add(record)

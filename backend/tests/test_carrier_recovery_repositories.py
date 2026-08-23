@@ -84,6 +84,22 @@ def test_transaction_rolls_back_case_and_case_audit_link(session: Session) -> No
     assert repository.list_cases(case.incident_id) == []
 
 
+def test_transaction_restores_depth_when_outer_commit_fails(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repository = CarrierRecoveryRepository(session)
+
+    def fail_commit() -> None:
+        raise RuntimeError("commit failed")
+
+    monkeypatch.setattr(session, "commit", fail_commit)
+    with pytest.raises(RuntimeError, match="commit failed"):
+        with repository.transaction():
+            pass
+
+    assert repository._transaction_depth == 0
+
+
 def test_history_uses_structured_case_audit_links(session: Session) -> None:
     repository = CarrierRecoveryRepository(session)
     case = make_case()
