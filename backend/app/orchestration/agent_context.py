@@ -7,7 +7,9 @@ from sqlmodel import Session
 
 from backend.app.domain.agent_runtime import AgentRun, AgentRunState, AgentToolDefinition, AgentTurnContext
 from backend.app.domain.carrier_recovery import CarrierRecoveryCaseState
+from backend.app.domain.cargo_safety import CargoSafetyReviewState
 from backend.app.storage.carrier_recovery import CarrierRecoveryRepository
+from backend.app.storage.cargo_safety import CargoSafetyRepository
 from backend.app.storage.repositories import DecisionRepository, ScarcityEvaluationRepository
 
 
@@ -46,6 +48,8 @@ class AgentToolRegistry:
                     tools.append(_tool("evaluate_carrier_timeout", "Evaluate a due carrier timeout using the trusted clock.", ("case_id",)))
         if not cases:
             tools.append(_tool("prepare_rta_request", "Prepare configured RTA recovery for a connection.", ("connection_id",)))
+        if any(review.state is CargoSafetyReviewState.PENDING_CHECK for review in CargoSafetyRepository(session).list_reviews(run.incident_id)):
+            tools.append(_tool("request_cargo_safety_review", "Evaluate an existing pending cargo safety review.", ("container_id",)))
         return tuple({tool.name: tool for tool in tools}.values())
 
 

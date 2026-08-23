@@ -12,10 +12,14 @@ from backend.app.domain.carrier_recovery import EvaluateTimeoutCommand, CarrierR
 from backend.app.domain.models import utc_now
 from backend.app.orchestration.agent_context import AgentToolRegistry, build_agent_turn_context
 from backend.app.services.agent_model import AgentModel, AgentModelProviderFailure
-from backend.app.storage.agent_runtime import AgentRuntimeRepository
+from backend.app.storage.agent_runtime import AgentRuntimeConflict, AgentRuntimeRepository
 from backend.app.storage.repositories import IncidentRepository
 from backend.app.orchestration.carrier_recovery import CarrierRecoveryConflict, build_carrier_recovery_workflow
 from backend.app.storage.carrier_recovery import CarrierRecoveryRepository
+from backend.app.domain.enums import ApprovalStatus
+from backend.app.domain.cargo_safety import CargoSafetyReviewState
+from backend.app.orchestration.cargo_safety import CargoSafetyWorkflow
+from backend.app.storage.cargo_safety import CargoSafetyRepository
 
 
 class AgentRuntimeClock(Protocol):
@@ -60,13 +64,14 @@ class CanonicalAgentRuntimeConfiguration:
 
 
 class AgentRuntimeCoordinator:
-    def __init__(self, *, session, model: AgentModel, clock: AgentRuntimeClock, configuration: CanonicalAgentRuntimeConfiguration) -> None:
+    def __init__(self, *, session, model: AgentModel, clock: AgentRuntimeClock, configuration: CanonicalAgentRuntimeConfiguration, cargo_safety_checker=None) -> None:
         self._session = session
         self._model = model
         self._clock = clock
         self._configuration = configuration
         self._repository = AgentRuntimeRepository(session)
         self._registry = AgentToolRegistry(clock=clock)
+        self._cargo_safety_checker = cargo_safety_checker
 
     def create_run(self, incident_id: UUID) -> AgentRun:
         IncidentRepository(self._session).get(incident_id)
@@ -80,7 +85,10 @@ class AgentRuntimeCoordinator:
         if run.state in {AgentRunState.COMPLETED, AgentRunState.ESCALATED, AgentRunState.FAILED}:
             return run
         if run.state is AgentRunState.WAITING:
-            raise AgentRuntimeConflict("agent wait condition remains unresolved")
+            resolved = self._resolve_wait(run)
+            if resolved is None:
+                raise AgentRuntimeConflict("agent wait condition remains unresolved")
+            run = resolved
         running = run.model_copy(update={"state": AgentRunState.RUNNING, "updated_at": utc_now()})
         self._repository.update_run(running)
         for _ in range(min(8, running.max_steps - running.step_count)):
@@ -131,6 +139,30 @@ class AgentRuntimeCoordinator:
                 build_carrier_recovery_workflow(self._session).evaluate_timeout(EvaluateTimeoutCommand(case_id=case_id, effective_at=self._clock.now().isoformat().replace("+00:00", "Z")))
                 updated = run.model_copy(update={"step_count": step.step_number, "updated_at": utc_now()})
                 result = "Carrier timeout evaluated using trusted clock."
+            elif tool_name == "request_cargo_safety_review":
+                review = next((item for item in CargoSafetyRepository(self._session).list_reviews(run.incident_id) if item.container_id == str(arguments["container_id"]) and item.state is CargoSafetyReviewState.PENDING_CHECK), None)
+                if review is None:
+                    raise ValueError("no pending persisted cargo safety review")
+                outcome = CargoSafetyWorkflow.for_session(self._session, checker=self._cargo_safety_checker).evaluate(review.id)
+                if outcome.policy_result.automation_blocked:
+                    complete = invocation.model_copy(update={"status": AgentToolInvocationStatus.SUCCEEDED, "result_summary": "Phase 4 blocked automation.", "completed_at": utc_now()})
+                    self._repository.complete_invocation(complete)
+                    return self._escalate(run.model_copy(update={"step_count": step.step_number}), AgentEscalationReason.SAFETY_REVIEW_REQUIRED, "Phase 4 cargo safety policy requires human review.")
+                updated = run.model_copy(update={"step_count": step.step_number, "updated_at": utc_now()})
+                result = "Cargo safety review completed without automation block."
+            elif tool_name == "complete_agent_run":
+                if self._actionable_work_remains(run):
+                    raise ValueError("actionable recovery work remains")
+                complete = invocation.model_copy(update={"status": AgentToolInvocationStatus.SUCCEEDED, "result_summary": "Run completed.", "completed_at": utc_now()})
+                self._repository.complete_invocation(complete)
+                terminal = run.model_copy(update={"state": AgentRunState.COMPLETED, "step_count": step.step_number, "updated_at": utc_now(), "completed_at": utc_now()})
+                return self._repository.update_run(terminal)
+            elif tool_name == "escalate_agent_run":
+                complete = invocation.model_copy(update={"status": AgentToolInvocationStatus.SUCCEEDED, "result_summary": "Run escalated.", "completed_at": utc_now()})
+                self._repository.complete_invocation(complete)
+                return self._escalate(run.model_copy(update={"step_count": step.step_number}), AgentEscalationReason.UNRESOLVED_TRADEOFF, "Agent requested safe escalation.")
+            elif tool_name == "pause_agent_run":
+                raise ValueError("pause requires a durable external wait condition")
             else:
                 raise ValueError("tool is unavailable")
             complete = invocation.model_copy(update={"status": AgentToolInvocationStatus.SUCCEEDED, "result_summary": result, "completed_at": utc_now()})
@@ -140,6 +172,37 @@ class AgentRuntimeCoordinator:
             complete = invocation.model_copy(update={"status": AgentToolInvocationStatus.REJECTED, "result_summary": "Tool request rejected by durable state.", "error_kind": type(error).__name__, "completed_at": utc_now()})
             self._repository.complete_invocation(complete)
             return self._repository.update_run(run.model_copy(update={"step_count": step.step_number, "updated_at": utc_now()}))
+
+    def _resolve_wait(self, run: AgentRun) -> AgentRun | None:
+        if run.wait_subject_id is None:
+            return None
+        try:
+            history = CarrierRecoveryRepository(self._session).history(UUID(run.wait_subject_id))
+        except (LookupError, ValueError):
+            return None
+        if run.wait_kind is AgentWaitKind.REQUEST_APPROVAL:
+            if history.case.state is CarrierRecoveryCaseState.AWAITING_REQUEST_APPROVAL and any(approval.status is ApprovalStatus.APPROVED for approval in history.approvals):
+                resumed = run.model_copy(update={"state": AgentRunState.RUNNING, "wait_kind": None, "wait_subject_id": None, "updated_at": utc_now()})
+                return self._repository.update_run(resumed)
+            return None
+        if run.wait_kind is AgentWaitKind.CARRIER_RESPONSE_OR_TIMEOUT:
+            if history.case.state is CarrierRecoveryCaseState.AWAITING_COUNTER_APPROVAL:
+                updated = run.model_copy(update={"wait_kind": AgentWaitKind.COUNTER_APPROVAL, "updated_at": utc_now()})
+                self._repository.update_run(updated)
+                return None
+            if history.case.state in {CarrierRecoveryCaseState.COMPLETED, CarrierRecoveryCaseState.ESCALATED, CarrierRecoveryCaseState.RECOMPUTING}:
+                resumed = run.model_copy(update={"state": AgentRunState.RUNNING, "wait_kind": None, "wait_subject_id": None, "updated_at": utc_now()})
+                return self._repository.update_run(resumed)
+            return None
+        if run.wait_kind is AgentWaitKind.COUNTER_APPROVAL:
+            if history.case.state in {CarrierRecoveryCaseState.COMPLETED, CarrierRecoveryCaseState.ESCALATED, CarrierRecoveryCaseState.RECOMPUTING}:
+                resumed = run.model_copy(update={"state": AgentRunState.RUNNING, "wait_kind": None, "wait_subject_id": None, "updated_at": utc_now()})
+                return self._repository.update_run(resumed)
+        return None
+
+    def _actionable_work_remains(self, run: AgentRun) -> bool:
+        cases = CarrierRecoveryRepository(self._session).list_cases(run.incident_id)
+        return any(case.state not in {CarrierRecoveryCaseState.COMPLETED, CarrierRecoveryCaseState.ESCALATED} for case in cases) or any(review.state is CargoSafetyReviewState.PENDING_CHECK for review in CargoSafetyRepository(self._session).list_reviews(run.incident_id))
 
     def _escalate(self, run: AgentRun, reason: AgentEscalationReason, summary: str) -> AgentRun:
         step = AgentStep(run_id=run.id, step_number=run.step_count + 1, kind=AgentStepKind.ESCALATE, action_summary=summary, model_name=run.model_name, prompt_version=run.prompt_version)
