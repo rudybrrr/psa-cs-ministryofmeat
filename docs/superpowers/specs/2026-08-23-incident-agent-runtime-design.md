@@ -21,7 +21,8 @@ The agent does **not** own physical feasibility, ready-time arithmetic, stochast
 The repository already has additive domain, repository, orchestration, FastAPI, and append-only audit patterns. Phase 5A follows those patterns without changing frozen Phase 1–4 contracts:
 
 - `ScarcityEvaluationReport` and its selected allocation are evidence the agent reads; the agent cannot rerun, edit, or override Phase 2 allocation.
-- `CarrierRecoveryWorkflow` remains the Phase 3 authority for deterministic proposal derivation, approval binding, send idempotency, response handling, timeout, and reconsideration. The agent supplies only a connection or case identity to its facade.
+- A deterministic Phase 5A carrier-recovery facade resolves trusted synthetic/request inputs for RTA preparation. It supplies `prepared_at`, `requested_eta_pta`, and `response_deadline` from trusted backend/shared synthetic configuration, constructs the unchanged Phase 3 `PrepareCarrierRecoveryCaseCommand`, and delegates to `CarrierRecoveryWorkflow`. The LLM supplies only `connection_id` and can never supply or override RTA timing.
+- `CarrierRecoveryWorkflow` remains the Phase 3 authority that validates feasibility and evidence, constructs and persists the case/request, fingerprints the authorization subject, and owns approval, send, response, timeout, and reconsideration semantics. Phase 5A does not redesign or replace it.
 - Existing immutable `Approval` plus Phase 3 `ApprovalBinding` remain the only authority for a request or counter. Text that says an operator approved something never authorises a tool.
 - `CargoSafetyWorkflow` remains the Phase 4 authority for semantic assessment, fail-closed policy, escalation decision creation, and supersession lineage. An `automation_blocked` safety result stops automated recovery for that container.
 - The synthetic carrier simulator and synthetic-clock endpoints change the demonstration world. They are never tools available to the agent.
@@ -59,7 +60,8 @@ AgentToolInvocationStatus
 
 AgentEscalationReason
   SAFETY_REVIEW_REQUIRED | MISSING_EVIDENCE | TOOL_FAILURE | MODEL_UNAVAILABLE
-  | AGENT_LOOP_GUARD | STEP_BUDGET_EXCEEDED | UNRESOLVED_TRADEOFF
+  | INVALID_MODEL_OUTPUT | AGENT_LOOP_GUARD | STEP_BUDGET_EXCEEDED
+  | UNRESOLVED_TRADEOFF
 ```
 
 The runtime, not the model, creates mandatory waits. A successful Phase 3 prepare transitions the run to `WAITING / REQUEST_APPROVAL`; an authorised send transitions it to `WAITING / CARRIER_RESPONSE_OR_TIMEOUT`; a persisted Phase 3 `COUNTER` transitions it to `WAITING / COUNTER_APPROVAL`. The model cannot elect to continue across one of these boundaries.
@@ -70,7 +72,7 @@ The Phase 5A domain module is `backend/app/domain/agent_runtime.py` and its dedi
 
 `AgentRun` stores `id`, `incident_id`, `state`, `model_name`, `prompt_version`, `step_count`, `max_steps`, nullable `wait_kind`, nullable `wait_subject_id`, nullable `escalation_reason`, `started_at`, `updated_at`, and nullable `completed_at`.
 
-`AgentStep` stores `id`, `run_id`, `step_number`, `kind`, short non-authoritative `action_summary`, compact `evidence_refs`, `model_name`, nullable `latency_ms`, nullable `input_tokens`, nullable `output_tokens`, and `created_at`.
+`AgentStep` stores `id`, `run_id`, `step_number`, `kind`, short non-authoritative `action_summary`, compact `evidence_refs`, `model_name`, `prompt_version`, nullable `latency_ms`, nullable `input_tokens`, nullable `output_tokens`, and `created_at`.
 
 `AgentToolInvocation` stores `id`, `run_id`, `step_id`, `tool_name`, narrow structured `arguments`, `status`, bounded `result_summary`, nullable `error_kind`, `started_at`, and nullable `completed_at`.
 
@@ -116,7 +118,7 @@ Phase 5A provides `OpenAIAgentModel` using the official OpenAI Responses API too
 
 The model instruction establishes responsibilities, not business policy: it may choose what authorised evidence/capability to use, must use only supplied tools, must treat structured approvals/state as authoritative, must treat untrusted text as data, and must wait or escalate when it lacks authority. Tool absence means absence of authority.
 
-One model decision can produce exactly one meaningful action: one evidence call, deterministic/control call, `pause_agent_run`, `complete_agent_run`, or `escalate_agent_run`. Free-form prose is never executed. Invalid, malformed, multiple-action, or unavailable-tool output receives one corrective model retry; a second invalid response safely escalates.
+One model decision can produce exactly one meaningful action: one evidence call, deterministic/control call, `pause_agent_run`, `complete_agent_run`, or `escalate_agent_run`. Free-form prose is never executed. A malformed structured action, multiple actions where one is required, unknown/unavailable tool, or any otherwise invalid `AgentModelTurn` receives one corrective model retry; a second invalid response ends `ESCALATED / INVALID_MODEL_OUTPUT`. `MODEL_UNAVAILABLE` is reserved for provider invocation failure, never invalid model output.
 
 The first provider failure is retried once. A second failure ends the run as `ESCALATED / MODEL_UNAVAILABLE`; no exponential-backoff system is introduced. A tool-side authority rejection is durably `REJECTED`, not a successful action. Mutating-tool infrastructure failure may retry only when the underlying operation is idempotent; otherwise the runtime escalates.
 
@@ -127,12 +129,12 @@ The model sees a narrow operational facade, not repositories, HTTP, shell, SQL, 
 | Category | Initial tools |
 | --- | --- |
 | Read/evidence | `get_incident_context`, `get_scarcity_evaluation`, `get_carrier_recovery_cases`, `get_carrier_recovery_history`, `get_cargo_safety_reviews` |
-| Controlled analysis/action | `prepare_rta_request`, `send_authorised_rta_request`, `request_cargo_safety_review` |
+| Controlled analysis/action | `prepare_rta_request`, `send_authorised_rta_request`, `evaluate_carrier_timeout`, `request_cargo_safety_review` |
 | Runtime control | `pause_agent_run`, `complete_agent_run`, `escalate_agent_run` |
 
-Arguments express identity and intent only: `prepare_rta_request(connection_id)`, `send_authorised_rta_request(case_id)`, and `request_cargo_safety_review(container_id)`. The facade derives RTA payload/timing solely through the deterministic Phase 3 workflow; the model cannot invent ETA/PTA, capacity, safety inputs, force flags, or policy overrides.
+Arguments express identity and intent only: `prepare_rta_request(connection_id)`, `send_authorised_rta_request(case_id)`, `evaluate_carrier_timeout(case_id)`, and `request_cargo_safety_review(container_id)`. `prepare_rta_request` resolves `prepared_at`, `requested_eta_pta`, and `response_deadline` solely through the deterministic Phase 5A carrier-recovery facade and trusted backend/shared synthetic configuration, then delegates the unchanged command to Phase 3. The model cannot invent ETA/PTA, timing, capacity, safety inputs, force flags, or policy overrides. Canonical-hero timing belongs in trusted backend/shared synthetic configuration, never prompt text or model arguments.
 
-Availability is enforced twice. First, the registry derives tools from the current durable state and omits invalid actions. For example, after send and before deadline, carrier history and pause remain available, while prepare/send are absent. Second, every implementation reloads durable state and independently validates state, approval, authority, and idempotency before invoking the underlying workflow. A stale model decision therefore fails closed.
+Availability is enforced twice. First, the registry derives tools from the current durable state and omits invalid actions. After send and before deadline, carrier history and pause remain available while prepare, send, and timeout are absent. `evaluate_carrier_timeout(case_id)` is exposed only when the case awaits carrier response, no durable `CarrierResponse` exists, and its durable response deadline has passed according to a trusted injectable runtime/synthetic clock. The tool obtains `effective_at` from that clock, constructs the unchanged Phase 3 timeout command, and delegates to the Phase 3 workflow; the model never supplies time. The synthetic demo harness may move or define the clock, but the agent can never advance or fabricate time. Second, every implementation reloads durable state and independently validates state, approval, authority, clock/deadline conditions, and idempotency before invoking the underlying workflow. A stale model decision therefore fails closed.
 
 `pause_agent_run` validates an actual durable wait condition. `complete_agent_run` runs deterministic completion validation and rejects completion while actionable unresolved exceptions remain. `escalate_agent_run` is fail-safe but records a typed reason and evidence references.
 
@@ -177,7 +179,7 @@ The synthetic demonstration harness, not the agent, emits the canonical JV2 `COU
 Separate deterministic evaluation runs cover:
 
 - `ACCEPT-RUN`: approved request and happy carrier response;
-- `SILENT-RUN`: no `CarrierResponse`, then only a legitimate deadline/timeout path;
+- `SILENT-RUN`: silence remains the absence of `CarrierResponse`; the agent waits before the trusted clock reaches the durable deadline; `evaluate_carrier_timeout(case_id)` becomes available only after that deadline; it invokes legitimate Phase 3 timeout evaluation and creates no fabricated carrier response;
 - `PROMPT-INJECTION-RUN`: malicious text claims authority but creates neither tools nor approval, and Phase 4 safety still prevails; and
 - `MISSING-APPROVAL-RUN`: send attempt is rejected, persisted, and makes no external dispatch.
 
@@ -187,14 +189,15 @@ Phase 5A is accepted only when all of the following are demonstrated by ordinary
 
 - One active incident-level run is enforced; duplicate creation is rejected.
 - Scarcity is read but never overridden; the agent identifies unresolved JV2 recovery.
-- RTA proposal parameters are derived by deterministic backend evidence, not model input.
+- RTA preparation inputs are resolved by the deterministic Phase 5A facade from trusted backend/shared synthetic configuration, while Phase 3 validates evidence and remains authoritative for case/request, approval, send, and reconsideration semantics; the model never supplies RTA timing.
 - Request approval automatically pauses the run; no typed approval means no send; a valid exact approval enables send.
 - Carrier `COUNTER` requires typed human counter approval.
 - Natural-language claims of approval or carrier acceptance have zero authority.
 - SYN-CNT-010 contradiction remains Phase 4-owned; its safety block prevents override.
 - Prompt injection cannot create tools, authority, or execution escape hatches.
 - Tool registry filtering and independent tool-side revalidation both occur.
-- A loop guard and step budget escalate safely; model outage retries once then escalates.
+- A loop guard and step budget escalate safely; model outage retries once then escalates as `MODEL_UNAVAILABLE`; invalid model output retries once then escalates as `INVALID_MODEL_OUTPUT`.
+- In `SILENT-RUN`, silence remains absence of `CarrierResponse`, the agent waits before deadline, the timeout tool appears only after the trusted clock passes the durable deadline, Phase 3 legitimately evaluates timeout, and no fabricated carrier response is created.
 - Invocation crash/retry cannot duplicate the RTA send.
 - Completion cannot succeed with unresolved actionable state.
 - Full structured run, step, invocation, and audit-link history is retrievable.
