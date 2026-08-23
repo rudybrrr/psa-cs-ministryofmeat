@@ -53,7 +53,7 @@ class CanonicalAgentRuntimeConfiguration:
             raise ValueError(f"no trusted RTA preparation configuration for {connection_id}") from error
         return PrepareCarrierRecoveryCaseCommand(
             incident_id=incident_id,
-            connection_id=connection_id,
+            connection_id=values.get("connection_id", connection_id),
             prepared_at=values["prepared_at"],
             requested_eta_pta=values["requested_eta_pta"],
             response_deadline=values["response_deadline"],
