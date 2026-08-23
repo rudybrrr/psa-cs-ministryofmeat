@@ -54,6 +54,38 @@ class CarrierRecoveryWorkflow:
         self._simulator = simulator
 
     def prepare(self, command: PrepareCarrierRecoveryCaseCommand) -> CarrierRecoveryCase:
+        existing = self._reconcile_prepare(command)
+        if existing is not None:
+            return existing
+        try:
+            return self._prepare_once(command)
+        except IntegrityError as error:
+            if not self._is_case_uniqueness_race(error):
+                raise
+            existing = self._reconcile_prepare(command)
+            if existing is None:
+                raise
+            return existing
+
+    def _reconcile_prepare(
+        self, command: PrepareCarrierRecoveryCaseCommand
+    ) -> CarrierRecoveryCase | None:
+        existing = self._cases.find_case(
+            command.incident_id, command.connection_id
+        )
+        if existing is None:
+            return None
+        history = self._cases.history(existing.id)
+        if (
+            history.request is not None
+            and history.request_context is not None
+            and history.request.requested_eta_pta == command.requested_eta_pta
+            and history.request_context.response_deadline == command.response_deadline
+        ):
+            return existing
+        raise CarrierRecoveryConflict("contradictory carrier recovery case retry")
+
+    def _prepare_once(self, command: PrepareCarrierRecoveryCaseCommand) -> CarrierRecoveryCase:
         incident = self._incidents.get(command.incident_id)
         if incident.state is not IncidentState.RESOLVED:
             raise CarrierRecoveryConflict("carrier recovery requires a resolved Phase 2 incident")
@@ -157,6 +189,13 @@ class CarrierRecoveryWorkflow:
         return (
             isinstance(error.orig, sqlite3.IntegrityError)
             and "UNIQUE constraint failed: approvals.decision_id" in str(error.orig)
+        )
+
+    @staticmethod
+    def _is_case_uniqueness_race(error: IntegrityError) -> bool:
+        return (
+            isinstance(error.orig, sqlite3.IntegrityError)
+            and "UNIQUE constraint failed: carrier_recovery_cases.incident_id, carrier_recovery_cases.connection_id" in str(error.orig)
         )
 
     def send_authorised_request(self, case_id: UUID) -> RTARequestContext:

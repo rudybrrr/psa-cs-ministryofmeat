@@ -190,6 +190,17 @@ class CarrierRecoveryRepository:
             raise LookupError(f"carrier recovery case {case_id} not found")
         return self._case(record)
 
+    def find_case(
+        self, incident_id: UUID, connection_id: str
+    ) -> CarrierRecoveryCase | None:
+        record = self._session.exec(
+            select(CarrierRecoveryCaseRecord).where(
+                CarrierRecoveryCaseRecord.incident_id == str(incident_id),
+                CarrierRecoveryCaseRecord.connection_id == connection_id,
+            )
+        ).one_or_none()
+        return None if record is None else self._case(record)
+
     def list_cases(self, incident_id: UUID) -> list[CarrierRecoveryCase]:
         records = self._session.exec(select(CarrierRecoveryCaseRecord).where(CarrierRecoveryCaseRecord.incident_id == str(incident_id)).order_by(CarrierRecoveryCaseRecord.created_at_utc)).all()
         return [self._case(record) for record in records]

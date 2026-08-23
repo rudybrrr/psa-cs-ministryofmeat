@@ -217,9 +217,13 @@ def create_app(*, database_engine: Engine | None = None) -> FastAPI:
             ) from error
 
     @application.post("/incidents/{incident_id}/carrier-recovery-cases", response_model=CarrierRecoveryCase, status_code=status.HTTP_201_CREATED)
-    def prepare_carrier_recovery_case(incident_id: UUID, body: PrepareCarrierRecoveryBody, session: SessionDependency) -> CarrierRecoveryCase:
+    def prepare_carrier_recovery_case(incident_id: UUID, body: PrepareCarrierRecoveryBody, response: Response, session: SessionDependency) -> CarrierRecoveryCase:
         try:
-            return build_carrier_recovery_workflow(session).prepare(PrepareCarrierRecoveryCaseCommand(incident_id=incident_id, **body.model_dump()))
+            retry = CarrierRecoveryRepository(session).find_case(incident_id, body.connection_id) is not None
+            result = build_carrier_recovery_workflow(session).prepare(PrepareCarrierRecoveryCaseCommand(incident_id=incident_id, **body.model_dump()))
+            if retry:
+                response.status_code = status.HTTP_200_OK
+            return result
         except LookupError as error:
             raise HTTPException(status_code=404, detail="Incident or dependency not found") from error
         except CarrierRecoveryConflict as error:

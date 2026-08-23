@@ -92,6 +92,15 @@ def test_prepare_accepts_canonical_connection_and_unknown_incident_is_404(client
     assert response.status_code == 409
 
 
+def test_prepare_reconciles_exact_retry_and_rejects_conflicting_intent(client: TestClient) -> None:
+    incident_id = client.post("/synthetic/scenarios/canonical-scarcity").json()["incident_id"]
+    url = f"/incidents/{incident_id}/carrier-recovery-cases"
+    body = {"connection_id": "SYN-CONN-JV2", "requested_eta_pta": PREPARE_TIME, "response_deadline": DEADLINE}
+    assert client.post(url, json=body).status_code == 201
+    assert client.post(url, json=body).status_code == 200
+    assert client.post(url, json={**body, "response_deadline": "2026-08-22T09:01:00Z"}).status_code == 409
+
+
 def test_request_approval_enforces_subjects_conflicts_and_exact_retries(client: TestClient) -> None:
     case = _case(client)
     url = f"/carrier-recovery-cases/{case['id']}/request-approval"
