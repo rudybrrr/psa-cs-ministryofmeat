@@ -91,6 +91,7 @@ def test_binding_and_prepare_command_require_explicit_utc_evidence() -> None:
     command = PrepareCarrierRecoveryCaseCommand(
         incident_id=INCIDENT_ID,
         connection_id="SYN-CONN-SF1",
+        prepared_at="2026-08-22T06:00:00Z",
         requested_eta_pta="2026-08-22T07:00:00Z",
         response_deadline="2026-08-22T08:00:00+00:00",
     )

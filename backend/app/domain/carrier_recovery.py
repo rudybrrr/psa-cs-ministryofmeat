@@ -39,6 +39,11 @@ class ReconsiderationEvidenceKind(StrEnum):
     RESPONSE_TIMEOUT = "RESPONSE_TIMEOUT"
 
 
+class EffectiveTimingSourceKind(StrEnum):
+    ACCEPT = "ACCEPT"
+    APPROVED_COUNTER = "APPROVED_COUNTER"
+
+
 class RequestCloseReason(StrEnum):
     REQUEST_REJECTED = "REQUEST_REJECTED"
     RESPONSE_TIMEOUT = "RESPONSE_TIMEOUT"
@@ -84,6 +89,7 @@ class RTARequestContext(_UtcContract):
     case_id: UUID
     request_id: UUID
     payload_fingerprint: str = Field(min_length=1)
+    prepared_at: AwareDatetime
     response_deadline: AwareDatetime
     sent_at: AwareDatetime | None = None
     closed_at: AwareDatetime | None = None
@@ -105,6 +111,7 @@ class EffectiveConnectionTiming(_UtcContract):
     case_id: UUID
     request_id: UUID
     carrier_response_id: UUID
+    source_kind: EffectiveTimingSourceKind
     effective_eta_pta: AwareDatetime
     created_at: AwareDatetime = Field(default_factory=utc_now)
 
@@ -173,7 +180,7 @@ class CarrierRecoveryHistory(FrozenContract):
 
 
 class _ExplicitUtcCommand(FrozenContract):
-    @field_validator("requested_eta_pta", "response_deadline", "effective_at", mode="before", check_fields=False)
+    @field_validator("prepared_at", "requested_eta_pta", "response_deadline", "effective_at", mode="before", check_fields=False)
     @classmethod
     def _parse_utc(cls, value):
         return parse_explicit_utc(value)
@@ -182,13 +189,14 @@ class _ExplicitUtcCommand(FrozenContract):
 class PrepareCarrierRecoveryCaseCommand(_ExplicitUtcCommand):
     incident_id: UUID
     connection_id: str = Field(min_length=1)
+    prepared_at: AwareDatetime
     requested_eta_pta: AwareDatetime
     response_deadline: AwareDatetime
 
     @model_validator(mode="after")
-    def _deadline_follows_requested_timing(self) -> "PrepareCarrierRecoveryCaseCommand":
-        if self.response_deadline <= self.requested_eta_pta:
-            raise ValueError("response deadline must be later than requested timing")
+    def _deadline_follows_preparation_time(self) -> "PrepareCarrierRecoveryCaseCommand":
+        if self.response_deadline <= self.prepared_at:
+            raise ValueError("response deadline must be later than preparation time")
         return self
 
 

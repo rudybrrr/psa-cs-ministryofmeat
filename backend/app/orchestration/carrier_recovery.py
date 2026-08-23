@@ -22,6 +22,7 @@ from backend.app.domain.carrier_recovery import (
     SimulateCarrierResponseCommand,
     CarrierSimulationResult,
     EffectiveConnectionTiming,
+    EffectiveTimingSourceKind,
     CounterApprovalCommand,
     EvaluateTimeoutCommand,
     CarrierRecoveryDisposition,
@@ -79,6 +80,7 @@ class CarrierRecoveryWorkflow:
         if (
             history.request is not None
             and history.request_context is not None
+            and history.request_context.prepared_at == command.prepared_at
             and history.request.requested_eta_pta == command.requested_eta_pta
             and history.request_context.response_deadline == command.response_deadline
         ):
@@ -93,8 +95,6 @@ class CarrierRecoveryWorkflow:
         fixture = self._fixture_service.load()
         if report.fixture_id != fixture.fixture_id or report.selected_allocation is None:
             raise CarrierRecoveryConflict("persisted scarcity evidence is not eligible for carrier recovery")
-        if command.response_deadline <= command.requested_eta_pta:
-            raise CarrierRecoveryConflict("response deadline must be later than requested timing")
         scenarios = self._scenarios.generate(fixture, seed=report.seed, world_count=report.scenario_count)
         evaluator = ScarcityEvaluator()
         allocated = set(report.selected_allocation.allocated_container_ids)
@@ -108,7 +108,7 @@ class CarrierRecoveryWorkflow:
         affected = tuple(profile.container.id for profile in profiles if _is_structurally_eligible(profile) and not any(evaluator.preserves_connection(fixture, profile, world, expedited=profile.container.id in allocated) for world in scenarios.worlds))
         if not affected:
             raise CarrierRecoveryConflict("requested connection has no structurally safe zero-world containers")
-        now = utc_now()
+        now = command.prepared_at
         case = CarrierRecoveryCase(incident_id=command.incident_id, connection_id=command.connection_id, source_evaluation_id=report.id, affected_container_ids=affected, state=CarrierRecoveryCaseState.AWAITING_REQUEST_APPROVAL, created_at=now, updated_at=now)
         request = RTARequest(incident_id=command.incident_id, connection_id=command.connection_id, requested_eta_pta=command.requested_eta_pta, status=RTARequestStatus.PENDING, created_at=now)
         payload_fingerprint = hashlib.sha256(json.dumps({"connection_id": command.connection_id, "requested_eta_pta": command.requested_eta_pta.astimezone(UTC).isoformat()}, sort_keys=True).encode()).hexdigest()
@@ -130,7 +130,7 @@ class CarrierRecoveryWorkflow:
             )
             self._cases.create_case(case)
             from backend.app.domain.carrier_recovery import RTARequestContext
-            self._cases.add_request(request, RTARequestContext(case_id=case.id, request_id=request.id, payload_fingerprint=payload_fingerprint, response_deadline=command.response_deadline))
+            self._cases.add_request(request, RTARequestContext(case_id=case.id, request_id=request.id, payload_fingerprint=payload_fingerprint, prepared_at=command.prepared_at, response_deadline=command.response_deadline))
             self._cases.add_approval_binding(binding)
             for decision in fallback_decisions: self._cases.add_decision_link(CarrierRecoveryDecisionLink(case_id=case.id, decision_id=decision.id, role="FALLBACK_ROLL", created_at=now))
             self._cases.add_decision_link(CarrierRecoveryDecisionLink(case_id=case.id, decision_id=proposal.id, role="REQUEST_RTA_PROPOSAL", created_at=now))
@@ -257,7 +257,7 @@ class CarrierRecoveryWorkflow:
         now = utc_now()
         approval = Approval(decision_id=command.proposal_decision_id, operator_id=command.operator_id, status=command.status, created_at=now)
         target_case = case.model_copy(update={"state": CarrierRecoveryCaseState.RECOMPUTING, "updated_at": now})
-        timing = EffectiveConnectionTiming(case_id=case.id, request_id=response.request_id, carrier_response_id=response.id, effective_eta_pta=response.counter_eta_pta, created_at=now) if command.status is ApprovalStatus.APPROVED else None
+        timing = EffectiveConnectionTiming(case_id=case.id, request_id=response.request_id, carrier_response_id=response.id, source_kind=EffectiveTimingSourceKind.APPROVED_COUNTER, effective_eta_pta=response.counter_eta_pta, created_at=now) if command.status is ApprovalStatus.APPROVED else None
         with self._cases.transaction():
             self._cases.add_approval(approval)
             self._cases.update_case(target_case)
@@ -346,6 +346,7 @@ class CarrierRecoveryWorkflow:
         has_escalation = any(item[1] is CarrierRecoveryDisposition.ESCALATE for item in pending_results)
         terminal = CarrierRecoveryCaseState.ESCALATED if has_escalation else CarrierRecoveryCaseState.COMPLETED
         completed_case = case.model_copy(update={"state": terminal, "updated_at": created_at})
+        evidence_id = timing_id or approval_id or timeout_context_id
         with self._cases.transaction():
             if replacements:
                 self._decisions.add_many_uncommitted(tuple(replacements))
@@ -354,6 +355,7 @@ class CarrierRecoveryWorkflow:
                 self._cases.add_result(result)
                 if replacement is not None:
                     self._cases.add_decision_link(CarrierRecoveryDecisionLink(case_id=case.id, decision_id=replacement.id, role=disposition.value, created_at=created_at))
+                    self._cases.link_audit(case.id, AuditEvent(actor=AuditActor.POLICY, actor_id="synthetic-p90-policy", incident_id=case.incident_id, event_type="carrier_recovery.replacement_recorded", payload={"recovery_case_id": str(case.id), "container_id": container_id, "prior_decision_id": str(fallback.id), "replacement_decision_id": str(replacement.id), "disposition": disposition.value, "evidence_kind": evidence_kind.value, "evidence_id": str(evidence_id)}, timestamp=created_at))
             self._cases.update_case(completed_case)
             self._cases.link_audit(case.id, AuditEvent(actor=AuditActor.SYSTEM, actor_id="carrier-recovery-workflow", incident_id=case.incident_id, event_type="carrier_recovery.recomputation_completed", payload={"recovery_case_id": str(case.id), "seed": report.seed, "world_count": report.scenario_count, "selected_allocation": list(report.selected_allocation.allocated_container_ids)}, timestamp=created_at))
             self._cases.link_audit(case.id, AuditEvent(actor=AuditActor.POLICY, actor_id="synthetic-p90-policy", incident_id=case.incident_id, event_type="carrier_recovery.disposition_recorded", payload={"recovery_case_id": str(case.id), "state": terminal.value}, timestamp=created_at))
@@ -413,6 +415,7 @@ class CarrierRecoveryWorkflow:
                 case_id=case.id,
                 request_id=request.id,
                 carrier_response_id=response.id,
+                source_kind=EffectiveTimingSourceKind.ACCEPT,
                 effective_eta_pta=request.requested_eta_pta,
                 created_at=now,
             )

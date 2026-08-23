@@ -12,7 +12,11 @@ from backend.app.domain.carrier_recovery import (
     RequestApprovalCommand,
     SimulateCarrierResponseCommand,
 )
-from backend.app.domain.carrier_recovery import ReconsiderationEvidenceKind, RequestCloseReason
+from backend.app.domain.carrier_recovery import (
+    EffectiveTimingSourceKind,
+    ReconsiderationEvidenceKind,
+    RequestCloseReason,
+)
 from backend.app.domain.enums import ApprovalStatus, AuditActor, DecisionAction, DecisionStatus
 from backend.app.orchestration.carrier_recovery import CarrierRecoveryConflict, build_carrier_recovery_workflow
 from backend.app.orchestration.scarce_capacity import build_scarce_capacity_workflow
@@ -27,6 +31,7 @@ def command(incident_id, connection_id: str) -> PrepareCarrierRecoveryCaseComman
     return PrepareCarrierRecoveryCaseCommand(
         incident_id=incident_id,
         connection_id=connection_id,
+        prepared_at="2026-08-22T07:00:00Z",
         requested_eta_pta="2026-08-22T08:00:00Z",
         response_deadline="2026-08-22T09:00:00Z",
     )
@@ -321,6 +326,7 @@ def test_accept_creates_effective_requested_timing_without_second_approval(
         effective_at="2026-08-22T08:30:00Z",
     )) == result
     assert history.effective_timings[0].effective_eta_pta == history.request.requested_eta_pta
+    assert history.effective_timings[0].source_kind is EffectiveTimingSourceKind.ACCEPT
     assert {item.effective_connection_timing_id for item in history.results} == {history.effective_timings[0].id}
     assert all(item.rejected_approval_id is None and item.timeout_request_context_id is None for item in history.results)
     assert history.case.source_evaluation_id == phase_two.report.id
@@ -402,6 +408,7 @@ def test_approved_counter_creates_exact_effective_timing_idempotently(
 
     assert first == second
     assert history.effective_timings[0].effective_eta_pta == history.carrier_responses[0].counter_eta_pta
+    assert history.effective_timings[0].source_kind is EffectiveTimingSourceKind.APPROVED_COUNTER
     assert {item.effective_connection_timing_id for item in history.results} == {history.effective_timings[0].id}
     assert history.case.state.value in {"COMPLETED", "ESCALATED"}
 

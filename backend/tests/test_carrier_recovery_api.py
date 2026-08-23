@@ -17,13 +17,14 @@ from backend.app.storage.carrier_recovery import CarrierRecoveryRepository
 
 
 PREPARE_TIME = "2026-08-22T08:00:00Z"
+PREPARED_AT = "2026-08-22T07:00:00Z"
 DEADLINE = "2026-08-22T09:00:00Z"
 RESPONSE_TIME = "2026-08-22T08:30:00Z"
 
 
 def _case(client: TestClient, connection_id: str = "SYN-CONN-JV2") -> dict:
     incident_id = client.post("/synthetic/scenarios/canonical-scarcity").json()["incident_id"]
-    response = client.post(f"/incidents/{incident_id}/carrier-recovery-cases", json={"connection_id": connection_id, "requested_eta_pta": PREPARE_TIME, "response_deadline": DEADLINE})
+    response = client.post(f"/incidents/{incident_id}/carrier-recovery-cases", json={"connection_id": connection_id, "prepared_at": PREPARED_AT, "requested_eta_pta": PREPARE_TIME, "response_deadline": DEADLINE})
     assert response.status_code == 201, response.text
     return response.json()
 
@@ -77,27 +78,53 @@ def test_carrier_recovery_routes_are_exposed_and_no_recompute_route_exists(clien
     assert all("recompute" not in route for route in routes)
 
 
-@pytest.mark.parametrize(("requested_eta_pta", "response_deadline"), [("2026-08-22T08:00:00", DEADLINE), ("2026-08-22T08:00:00+08:00", DEADLINE), (PREPARE_TIME, "2026-08-22T09:00:00+08:00"), (DEADLINE, PREPARE_TIME)])
+@pytest.mark.parametrize(("requested_eta_pta", "response_deadline"), [("2026-08-22T08:00:00", DEADLINE), ("2026-08-22T08:00:00+08:00", DEADLINE), (PREPARE_TIME, "2026-08-22T09:00:00+08:00")])
 def test_prepare_rejects_invalid_command_timestamps_as_422(client: TestClient, requested_eta_pta: str, response_deadline: str) -> None:
     incident_id = client.post("/synthetic/scenarios/canonical-scarcity").json()["incident_id"]
-    response = client.post(f"/incidents/{incident_id}/carrier-recovery-cases", json={"connection_id": "SYN-CONN-JV2", "requested_eta_pta": requested_eta_pta, "response_deadline": response_deadline})
+    response = client.post(f"/incidents/{incident_id}/carrier-recovery-cases", json={"connection_id": "SYN-CONN-JV2", "prepared_at": PREPARED_AT, "requested_eta_pta": requested_eta_pta, "response_deadline": response_deadline})
+    assert response.status_code == 422
+
+
+@pytest.mark.parametrize(
+    ("prepared_at", "response_deadline"),
+    [
+        ("2026-08-22T07:00:00", DEADLINE),
+        ("2026-08-22T15:00:00+08:00", DEADLINE),
+        (DEADLINE, DEADLINE),
+    ],
+)
+def test_prepare_requires_explicit_utc_preparation_time_before_deadline(
+    client: TestClient, prepared_at: str, response_deadline: str
+) -> None:
+    incident_id = client.post("/synthetic/scenarios/canonical-scarcity").json()["incident_id"]
+    response = client.post(
+        f"/incidents/{incident_id}/carrier-recovery-cases",
+        json={
+            "connection_id": "SYN-CONN-JV2",
+            "prepared_at": prepared_at,
+            "requested_eta_pta": PREPARE_TIME,
+            "response_deadline": response_deadline,
+        },
+    )
     assert response.status_code == 422
 
 
 def test_prepare_accepts_canonical_connection_and_unknown_incident_is_404(client: TestClient) -> None:
     case = _case(client)
-    response = client.post("/incidents/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/carrier-recovery-cases", json={"connection_id": "SYN-CONN-JV2", "requested_eta_pta": PREPARE_TIME, "response_deadline": DEADLINE})
+    assert _history(client, case["id"])["request_context"]["prepared_at"] == PREPARED_AT
+    response = client.post("/incidents/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/carrier-recovery-cases", json={"connection_id": "SYN-CONN-JV2", "prepared_at": PREPARED_AT, "requested_eta_pta": PREPARE_TIME, "response_deadline": DEADLINE})
     assert response.status_code == 404
-    response = client.post(f"/incidents/{case['incident_id']}/carrier-recovery-cases", json={"connection_id": "JV2", "requested_eta_pta": PREPARE_TIME, "response_deadline": DEADLINE})
+    response = client.post(f"/incidents/{case['incident_id']}/carrier-recovery-cases", json={"connection_id": "JV2", "prepared_at": PREPARED_AT, "requested_eta_pta": PREPARE_TIME, "response_deadline": DEADLINE})
     assert response.status_code == 409
 
 
 def test_prepare_reconciles_exact_retry_and_rejects_conflicting_intent(client: TestClient) -> None:
     incident_id = client.post("/synthetic/scenarios/canonical-scarcity").json()["incident_id"]
     url = f"/incidents/{incident_id}/carrier-recovery-cases"
-    body = {"connection_id": "SYN-CONN-JV2", "requested_eta_pta": PREPARE_TIME, "response_deadline": DEADLINE}
+    body = {"connection_id": "SYN-CONN-JV2", "prepared_at": PREPARED_AT, "requested_eta_pta": PREPARE_TIME, "response_deadline": DEADLINE}
     assert client.post(url, json=body).status_code == 201
     assert client.post(url, json=body).status_code == 200
+    assert client.post(url, json={**body, "prepared_at": "2026-08-22T07:01:00Z"}).status_code == 409
     assert client.post(url, json={**body, "response_deadline": "2026-08-22T09:01:00Z"}).status_code == 409
 
 
@@ -231,7 +258,7 @@ def test_effective_at_commands_reject_non_explicit_utc(client: TestClient, path:
 
 def test_case_list_detail_and_history_are_scoped_and_404_unknown_resources(client: TestClient) -> None:
     first = _case(client, "SYN-CONN-JV2")
-    second_response = client.post(f"/incidents/{first['incident_id']}/carrier-recovery-cases", json={"connection_id": "SYN-CONN-EC3", "requested_eta_pta": PREPARE_TIME, "response_deadline": DEADLINE})
+    second_response = client.post(f"/incidents/{first['incident_id']}/carrier-recovery-cases", json={"connection_id": "SYN-CONN-EC3", "prepared_at": PREPARED_AT, "requested_eta_pta": PREPARE_TIME, "response_deadline": DEADLINE})
     assert second_response.status_code == 201
     second = second_response.json()
     listed = client.get(f"/incidents/{first['incident_id']}/carrier-recovery-cases")
@@ -290,3 +317,52 @@ def test_approval_uniqueness_race_is_http_success_or_conflict_not_500(
     assert client.post(url, json=body).status_code == 201
     assert client.post(url, json=body).status_code == 200
     assert client.post(url, json={**body, "status": "REJECTED"}).status_code == 409
+
+
+def test_phase_three_demo_exercises_accept_counter_and_silent_timeout(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Canonical Phase 2 evidence makes JV2 and EC3 preparable, but SF1 has no
+    # eligible zero-world container. The additive versioned demo plan therefore
+    # exercises ACCEPT on the canonical JV2 identifier without altering Phase 2.
+    with monkeypatch.context() as accept_patch:
+        _use_accept_simulator(accept_patch)
+        accept_case = _case(client, "SYN-CONN-JV2")
+        _approve_and_send(client, accept_case["id"])
+        assert client.post(
+            f"/carrier-recovery-cases/{accept_case['id']}/simulate-carrier-response",
+            json={"effective_at": RESPONSE_TIME},
+        ).status_code == 201
+        accept_history = _history(client, accept_case["id"])
+
+    counter_case = _counter_case(client)
+    counter_history = _history(client, counter_case["id"])
+    counter_body = _counter_approval(counter_history)
+    assert client.post(
+        f"/carrier-recovery-cases/{counter_case['id']}/counter-approval",
+        json=counter_body,
+    ).status_code == 201
+    counter_history = _history(client, counter_case["id"])
+
+    silent_case = _case(client, "SYN-CONN-EC3")
+    _approve_and_send(client, silent_case["id"])
+    assert client.post(
+        f"/carrier-recovery-cases/{silent_case['id']}/simulate-carrier-response",
+        json={"effective_at": RESPONSE_TIME},
+    ).status_code == 201
+    assert client.post(
+        f"/carrier-recovery-cases/{silent_case['id']}/evaluate-timeout",
+        json={"effective_at": DEADLINE},
+    ).status_code == 201
+    silent_history = _history(client, silent_case["id"])
+
+    assert len(accept_history["carrier_responses"]) == 1
+    assert accept_history["effective_timings"][0]["source_kind"] == "ACCEPT"
+    assert accept_history["results"]
+    assert len(counter_history["carrier_responses"]) == 1
+    assert counter_history["effective_timings"][0]["source_kind"] == "APPROVED_COUNTER"
+    assert counter_history["results"]
+    assert silent_history["carrier_responses"] == []
+    assert all(event["actor"] != "CARRIER" for event in silent_history["audit_events"])
+    assert silent_history["request_context"]["timeout_observed_at"] == DEADLINE
+    assert silent_history["results"]

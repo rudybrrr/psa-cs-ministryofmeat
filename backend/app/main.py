@@ -71,6 +71,7 @@ class ScarcityTriggerResponse(BaseModel):
 
 class PrepareCarrierRecoveryBody(BaseModel):
     connection_id: str
+    prepared_at: str
     requested_eta_pta: str
     response_deadline: str
 

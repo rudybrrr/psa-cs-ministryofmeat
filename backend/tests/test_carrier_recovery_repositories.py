@@ -9,6 +9,7 @@ from backend.app.domain.carrier_recovery import (
     ApprovalBinding, AuthorizationSubjectKind, CarrierRecoveryCase,
     CarrierRecoveryCaseState, CarrierRecoveryDisposition,
     ContainerReconsiderationResult, EffectiveConnectionTiming,
+    EffectiveTimingSourceKind,
     ReconsiderationEvidenceKind,
     RTARequestContext, RequestCloseReason,
 )
@@ -146,7 +147,7 @@ def test_result_rejects_cross_case_timing_provenance(session: Session) -> None:
     case_b = case_a.model_copy(update={"id": uuid4(), "connection_id": "SYN-CONN-JV2"})
     repository.create_case(case_a)
     repository.create_case(case_b)
-    timing = EffectiveConnectionTiming(case_id=case_b.id, request_id=uuid4(), carrier_response_id=uuid4(), effective_eta_pta=at(7), created_at=at(7))
+    timing = EffectiveConnectionTiming(case_id=case_b.id, request_id=uuid4(), carrier_response_id=uuid4(), source_kind=EffectiveTimingSourceKind.ACCEPT, effective_eta_pta=at(7), created_at=at(7))
     repository.add_effective_timing(timing)
 
     with pytest.raises(ValueError, match="timing provenance"):
@@ -201,7 +202,7 @@ def test_result_rejects_cross_case_timeout_context_provenance(session: Session) 
     case_b = case_a.model_copy(update={"id": uuid4(), "connection_id": "SYN-CONN-JV2"})
     repository.create_case(case_a); repository.create_case(case_b)
     request = RTARequest(incident_id=case_b.incident_id, connection_id=case_b.connection_id, requested_eta_pta=at(7), status=RTARequestStatus.CLOSED, created_at=at(6))
-    context = RTARequestContext(case_id=case_b.id, request_id=request.id, payload_fingerprint="f" * 64, response_deadline=at(8), sent_at=at(7), closed_at=at(8), close_reason=RequestCloseReason.RESPONSE_TIMEOUT, timeout_observed_at=at(8))
+    context = RTARequestContext(case_id=case_b.id, request_id=request.id, payload_fingerprint="f" * 64, prepared_at=at(6), response_deadline=at(8), sent_at=at(7), closed_at=at(8), close_reason=RequestCloseReason.RESPONSE_TIMEOUT, timeout_observed_at=at(8))
     repository.add_request(request, context)
     with pytest.raises(ValueError, match="timeout provenance"):
         repository.add_result(ContainerReconsiderationResult(case_id=case_a.id, container_id="SYN-CNT-001", disposition=CarrierRecoveryDisposition.STILL_ROLL, prior_decision_id=uuid4(), preserved_world_count=0, world_count=50, hard_constraints_satisfied=True, reconsideration_evidence_kind=ReconsiderationEvidenceKind.RESPONSE_TIMEOUT, timeout_request_context_id=context.case_id, created_at=at(8)))

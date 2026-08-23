@@ -37,6 +37,7 @@ def _prepare(session: Session):
     case = workflow.prepare(PrepareCarrierRecoveryCaseCommand(
         incident_id=phase_two.incident.id,
         connection_id="SYN-CONN-JV2",
+        prepared_at="2026-08-22T07:00:00Z",
         requested_eta_pta="2026-08-22T08:00:00Z",
         response_deadline="2026-08-22T09:00:00Z",
     ))

@@ -16,6 +16,7 @@ from backend.app.domain.carrier_recovery import (
     CarrierRecoveryDecisionLink,
     CarrierRecoveryHistory,
     ContainerReconsiderationResult,
+    EffectiveTimingSourceKind,
     EffectiveConnectionTiming,
     ReconsiderationEvidenceKind,
     RequestCloseReason,
@@ -55,6 +56,7 @@ class RTARequestContextRecord(SQLModel, table=True):
     case_id: str = Field(primary_key=True)
     request_id: str = Field(unique=True)
     payload_fingerprint: str
+    prepared_at_utc: str
     response_deadline_utc: str
     sent_at_utc: str | None = None
     closed_at_utc: str | None = None
@@ -107,6 +109,7 @@ class EffectiveConnectionTimingRecord(SQLModel, table=True):
     case_id: str = Field(index=True)
     request_id: str
     carrier_response_id: str = Field(unique=True)
+    source_kind: str
     effective_eta_pta_utc: str
     created_at_utc: str
 
@@ -215,13 +218,13 @@ class CarrierRecoveryRepository:
 
     def add_request(self, request: RTARequest, context: RTARequestContext) -> RTARequest:
         self._persist(RTARequestRecord(id=str(request.id), incident_id=str(request.incident_id), connection_id=request.connection_id, requested_eta_pta_utc=to_utc_text(request.requested_eta_pta), status=request.status.value, created_at_utc=to_utc_text(request.created_at)))
-        self._persist(RTARequestContextRecord(case_id=str(context.case_id), request_id=str(context.request_id), payload_fingerprint=context.payload_fingerprint, response_deadline_utc=to_utc_text(context.response_deadline), sent_at_utc=to_utc_text(context.sent_at) if context.sent_at else None, closed_at_utc=to_utc_text(context.closed_at) if context.closed_at else None, close_reason=context.close_reason.value if context.close_reason else None, timeout_observed_at_utc=to_utc_text(context.timeout_observed_at) if context.timeout_observed_at else None))
+        self._persist(RTARequestContextRecord(case_id=str(context.case_id), request_id=str(context.request_id), payload_fingerprint=context.payload_fingerprint, prepared_at_utc=to_utc_text(context.prepared_at), response_deadline_utc=to_utc_text(context.response_deadline), sent_at_utc=to_utc_text(context.sent_at) if context.sent_at else None, closed_at_utc=to_utc_text(context.closed_at) if context.closed_at else None, close_reason=context.close_reason.value if context.close_reason else None, timeout_observed_at_utc=to_utc_text(context.timeout_observed_at) if context.timeout_observed_at else None))
         return request
 
     def get_request_context(self, case_id: UUID) -> RTARequestContext:
         record = self._session.get(RTARequestContextRecord, str(case_id))
         if record is None: raise LookupError(f"request context for {case_id} not found")
-        return RTARequestContext(case_id=UUID(record.case_id), request_id=UUID(record.request_id), payload_fingerprint=record.payload_fingerprint, response_deadline=from_utc_text(record.response_deadline_utc), sent_at=from_utc_text(record.sent_at_utc) if record.sent_at_utc else None, closed_at=from_utc_text(record.closed_at_utc) if record.closed_at_utc else None, close_reason=RequestCloseReason(record.close_reason) if record.close_reason else None, timeout_observed_at=from_utc_text(record.timeout_observed_at_utc) if record.timeout_observed_at_utc else None)
+        return RTARequestContext(case_id=UUID(record.case_id), request_id=UUID(record.request_id), payload_fingerprint=record.payload_fingerprint, prepared_at=from_utc_text(record.prepared_at_utc), response_deadline=from_utc_text(record.response_deadline_utc), sent_at=from_utc_text(record.sent_at_utc) if record.sent_at_utc else None, closed_at=from_utc_text(record.closed_at_utc) if record.closed_at_utc else None, close_reason=RequestCloseReason(record.close_reason) if record.close_reason else None, timeout_observed_at=from_utc_text(record.timeout_observed_at_utc) if record.timeout_observed_at_utc else None)
 
     def update_request(self, request: RTARequest) -> RTARequest:
         record = self._session.get(RTARequestRecord, str(request.id))
@@ -330,7 +333,7 @@ class CarrierRecoveryRepository:
         return tuple(CarrierResponse(id=UUID(record.id), request_id=UUID(record.request_id), carrier_id=record.carrier_id, response=CarrierResponseType(record.response), counter_eta_pta=from_utc_text(record.counter_eta_pta_utc) if record.counter_eta_pta_utc else None, message=record.message, received_at=from_utc_text(record.received_at_utc)) for record in records)
 
     def add_effective_timing(self, timing: EffectiveConnectionTiming) -> EffectiveConnectionTiming:
-        self._persist(EffectiveConnectionTimingRecord(id=str(timing.id), case_id=str(timing.case_id), request_id=str(timing.request_id), carrier_response_id=str(timing.carrier_response_id), effective_eta_pta_utc=to_utc_text(timing.effective_eta_pta), created_at_utc=to_utc_text(timing.created_at)))
+        self._persist(EffectiveConnectionTimingRecord(id=str(timing.id), case_id=str(timing.case_id), request_id=str(timing.request_id), carrier_response_id=str(timing.carrier_response_id), source_kind=timing.source_kind.value, effective_eta_pta_utc=to_utc_text(timing.effective_eta_pta), created_at_utc=to_utc_text(timing.created_at)))
         return timing
 
     def link_audit(self, case_id: UUID, event: AuditEvent) -> AuditEvent:
@@ -351,7 +354,7 @@ class CarrierRecoveryRepository:
         approvals = tuple(item for item in (self.get_approval_for_proposal(binding.proposal_decision_id) for binding in bindings) if item is not None)
         carrier_responses = () if request is None else self.responses_for_request(request.id)
         timing_records = self._session.exec(select(EffectiveConnectionTimingRecord).where(EffectiveConnectionTimingRecord.case_id == str(case_id))).all()
-        effective_timings = tuple(EffectiveConnectionTiming(id=UUID(record.id), case_id=UUID(record.case_id), request_id=UUID(record.request_id), carrier_response_id=UUID(record.carrier_response_id), effective_eta_pta=from_utc_text(record.effective_eta_pta_utc), created_at=from_utc_text(record.created_at_utc)) for record in timing_records)
+        effective_timings = tuple(EffectiveConnectionTiming(id=UUID(record.id), case_id=UUID(record.case_id), request_id=UUID(record.request_id), carrier_response_id=UUID(record.carrier_response_id), source_kind=EffectiveTimingSourceKind(record.source_kind), effective_eta_pta=from_utc_text(record.effective_eta_pta_utc), created_at=from_utc_text(record.created_at_utc)) for record in timing_records)
         result_records = self._session.exec(select(ContainerReconsiderationResultRecord).where(ContainerReconsiderationResultRecord.case_id == str(case_id)).order_by(ContainerReconsiderationResultRecord.container_id)).all()
         results = tuple(ContainerReconsiderationResult(id=UUID(record.id), case_id=UUID(record.case_id), container_id=record.container_id, disposition=record.disposition, prior_decision_id=UUID(record.prior_decision_id), replacement_decision_id=UUID(record.replacement_decision_id) if record.replacement_decision_id else None, preserved_world_count=record.preserved_world_count, world_count=record.world_count, hard_constraints_satisfied=record.hard_constraints_satisfied, reconsideration_evidence_kind=record.reconsideration_evidence_kind, effective_connection_timing_id=UUID(record.effective_connection_timing_id) if record.effective_connection_timing_id else None, rejected_approval_id=UUID(record.rejected_approval_id) if record.rejected_approval_id else None, timeout_request_context_id=UUID(record.timeout_request_context_id) if record.timeout_request_context_id else None, created_at=from_utc_text(record.created_at_utc)) for record in result_records)
         link_records = self._session.exec(select(CarrierRecoveryDecisionLinkRecord).where(CarrierRecoveryDecisionLinkRecord.case_id == str(case_id))).all()
