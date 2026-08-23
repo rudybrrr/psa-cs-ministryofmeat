@@ -64,6 +64,16 @@ an explicit timeout is recorded by `SYSTEM`. The plan is synthetic and intended
 only for deterministic demonstrations and tests; it does not claim hard-coded
 recovery counts.
 
+## Phase 5A runtime configuration
+
+`canonical-agent-runtime-config.json` contains trusted synthetic backend inputs
+for the narrow Phase 5A carrier facade: canonical RTA prepare timestamps and
+injectable clock values before and at a response deadline. The LLM never reads
+or supplies these values. It receives only a connection or case identity; the
+backend constructs the existing Phase 3 command and remains responsible for
+validating it. The synthetic harness may select the clock value, but the agent
+cannot advance or fabricate time.
+
 The RTA interaction is representative of DCSA Estimated / Requested / Planned /
 Actual timing interactions. PSA does not claim to use this exact interaction
 today. Any deployment adapter must map the same authority boundary to PSA's real
