@@ -42,26 +42,33 @@ The fixture deliberately stores no beneficiary or outcome label. P50 classificat
 
 DG information in this Phase 2 fixture is structural synthetic data only. It does not perform semantic mismatch analysis, infer a UN number, negotiate with a carrier, or invoke an LLM. The later RTA phase remains separate, and this fixture does not hard-code a full-demo 18/5/1 result.
 
-## Synthetic carrier response plan
+## Synthetic carrier-demo suite
 
 `canonical-carrier-response-plan.json` is a versioned, deterministic Phase 3
-demo fixture (`SYN-CANONICAL-CARRIER-RTA-V1`). It maps the canonical connection
-IDs to representative outcomes:
+carrier-demo suite (`SYN-CANONICAL-CARRIER-DEMO-V1`). It contains three named,
+independent runs, each against a separate canonical Phase 2 incident instance:
 
-- `SYN-CONN-SF1` → `ACCEPT`
-- `SYN-CONN-JV2` → `COUNTER`
-- `SYN-CONN-EC3` → `SILENT`
+- `ACCEPT-RUN`: `SYN-CONN-JV2` → `ACCEPT`
+- `COUNTER-RUN`: `SYN-CONN-JV2` → `COUNTER`
+- `SILENT-RUN`: `SYN-CONN-EC3` → `SILENT`
+
+The repeated JV2 connection is valid: carrier-recovery case uniqueness is
+`(incident_id, connection_id)`, not connection ID globally. SF1 is deliberately
+absent because frozen Phase 2 evidence provides no preparable zero-world SF1
+carrier-recovery candidate. This suite is a synthetic demo-fixture correction;
+it does not alter the Phase 2 canonical fixture, benchmark, selected allocation,
+or preparation eligibility.
 
 `SILENT` means no `CarrierResponse` is persisted. It becomes evidence only when
 an explicit timeout is recorded by `SYSTEM`. The plan is synthetic and intended
 only for deterministic demonstrations and tests; it does not claim hard-coded
 recovery counts.
 
-The RTA interaction is representative of standards-grounded DCSA timing
-interactions. PSA does not claim to use this exact interaction today. Any
-deployment adapter must map the same authority boundary to PSA's real
-operational interfaces and authority model; this fixture never authorizes a
-local carrier schedule mutation.
+The RTA interaction is representative of DCSA Estimated / Requested / Planned /
+Actual timing interactions. PSA does not claim to use this exact interaction
+today. Any deployment adapter must map the same authority boundary to PSA's real
+operational interfaces and authority model; this fixture never authorizes a local
+carrier schedule mutation.
 
 ## Frozen scarcity evaluation seeds
 

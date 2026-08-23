@@ -1,19 +1,44 @@
 from pathlib import Path
 
-from backend.app.services.carrier_simulator import SyntheticCarrierResponsePlan
+import pytest
+from pydantic import ValidationError
+
+from backend.app.services.carrier_simulator import (
+    CarrierDemoSuite,
+    SyntheticCarrierResponsePlan,
+)
 
 
 def test_canonical_response_plan_is_versioned_and_covers_accept_counter_and_silence() -> None:
-    plan = SyntheticCarrierResponsePlan().load()
+    suite = SyntheticCarrierResponsePlan().load()
 
-    assert plan.plan_id == "SYN-CANONICAL-CARRIER-RTA-V1"
-    assert {
-        entry.connection_id: entry.outcome for entry in plan.responses
-    } == {
-        "SYN-CONN-SF1": "ACCEPT",
-        "SYN-CONN-JV2": "COUNTER",
-        "SYN-CONN-EC3": "SILENT",
-    }
+    assert suite.suite_id == "SYN-CANONICAL-CARRIER-DEMO-V1"
+    assert [
+        (run.run_id, run.connection_id, run.outcome)
+        for run in suite.runs
+    ] == [
+        ("ACCEPT-RUN", "SYN-CONN-JV2", "ACCEPT"),
+        ("COUNTER-RUN", "SYN-CONN-JV2", "COUNTER"),
+        ("SILENT-RUN", "SYN-CONN-EC3", "SILENT"),
+    ]
+
+
+def test_carrier_demo_suite_rejects_a_run_for_a_different_phase_two_fixture() -> None:
+    with pytest.raises(ValidationError, match="fixture_id"):
+        CarrierDemoSuite.model_validate(
+            {
+                "suite_id": "SYN-CANONICAL-CARRIER-DEMO-V1",
+                "fixture_id": "SYN-CANONICAL-24-V1",
+                "runs": [
+                    {
+                        "run_id": "ACCEPT-RUN",
+                        "fixture_id": "SYN-OTHER-FIXTURE-V1",
+                        "connection_id": "SYN-CONN-JV2",
+                        "outcome": "ACCEPT",
+                    }
+                ],
+            }
+        )
 
 
 def test_phase_three_public_modules_expose_no_forbidden_carrier_authority() -> None:

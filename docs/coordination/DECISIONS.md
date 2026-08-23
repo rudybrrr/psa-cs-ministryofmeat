@@ -49,3 +49,9 @@ This document is append-only. Add entries only for approved or proposed changes 
 - Status: Approved
 - Decision: Add `DecisionAction.PRESERVE_VIA_RTA` as the sole frozen Phase 1/2 contract mutation for Phase 3.
 - Consequence: `PRESERVE_VIA_RTA` is container-level recovery semantics only after valid carrier timing and p90 evidence. `REQUEST_RTA` remains connection-level request/authorization semantics and is never container-level.
+
+## 2026-08-23 — Phase 3 carrier-demo suite correction
+
+- Status: Approved
+- Decision: Supersede the Task 12 synthetic SF1→ACCEPT, JV2→COUNTER, EC3→SILENT connection mapping with one checked-in canonical Phase 3 carrier-demo suite of three named independent runs: JV2→ACCEPT, JV2→COUNTER, and EC3→SILENT. Each run uses a separate canonical Phase 2 incident instance.
+- Consequence: Frozen Phase 2 fixture, benchmark, selected allocation, zero-preserved-world preparation eligibility, and `(incident_id, connection_id)` `CarrierRecoveryCase` uniqueness remain unchanged. SF1 is excluded because frozen Phase 2 evidence has no preparable zero-world carrier-recovery candidate. `CarrierResponse` semantics remain ACCEPT, COUNTER, and SILENT-as-absence.

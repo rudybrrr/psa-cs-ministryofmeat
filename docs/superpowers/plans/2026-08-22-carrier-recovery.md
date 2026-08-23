@@ -40,7 +40,7 @@
 | `backend/app/services/carrier_simulator.py` | Versioned deterministic response-plan loader and response emission contract. |
 | `backend/app/evaluation/carrier_recovery.py` | Fixed-evidence recomputer and p90 disposition calculation; it imports no optimizer. |
 | `backend/app/main.py` | Phase 3 FastAPI DTOs/routes and 404/409/422 translation while retaining every current route. |
-| `shared/fixtures/canonical-carrier-response-plan.json` | Versioned fixed ACCEPT/COUNTER/SILENT demo plan keyed by connection; no recovery-count assertion. |
+| `shared/fixtures/canonical-carrier-response-plan.json` | Versioned fixed three-run ACCEPT/COUNTER/SILENT carrier-demo suite; no recovery-count assertion. |
 | `backend/tests/test_carrier_recovery_contracts.py` | Enums, UTC-only parsing, case state machine, and contract validation. |
 | `backend/tests/test_carrier_recovery_repositories.py` | Tables, uniqueness, transaction rollback, and structured audit links. |
 | `backend/tests/test_carrier_recovery_workflow.py` | Preparation, lineage, approvals, send, simulator outcomes, timeout, and idempotency. |
@@ -431,7 +431,7 @@ git commit -m "feat: send authorised carrier requests"
 - Modify: `backend/tests/test_carrier_recovery_workflow.py`
 
 **Interfaces:**
-- `SyntheticCarrierResponsePlan.load() -> CarrierResponsePlan` loads a versioned fixture containing one named outcome per connection: `ACCEPT`, `COUNTER` with UTC counter ETA/PTA, or `SILENT`.
+- `SyntheticCarrierResponsePlan.load() -> CarrierDemoSuite` loads a versioned fixture containing three named independent runs. `load_run(run_id) -> CarrierResponsePlan` selects the run's `ACCEPT`, `COUNTER` with UTC counter ETA/PTA, or `SILENT` outcome.
 - `DeterministicCarrierSimulator.emit(request: RTARequest, effective_at: datetime) -> CarrierSimulationResult` returns `response: CarrierResponse | None`; `None` means command-level no-response-emitted only.
 - Simulation is allowed only for a sent request before deadline, is exact-retry idempotent, and rejects a conflicting second outcome.
 
@@ -439,12 +439,12 @@ The fixture shape is fixed as:
 
 ```json
 {
-  "plan_id": "SYN-CANONICAL-CARRIER-RTA-V1",
+  "suite_id": "SYN-CANONICAL-CARRIER-DEMO-V1",
   "fixture_id": "SYN-CANONICAL-24-V1",
-  "responses": [
-    {"connection_id": "SYN-CONN-SF1", "outcome": "ACCEPT"},
-    {"connection_id": "SYN-CONN-JV2", "outcome": "COUNTER", "counter_eta_pta": "2026-08-22T06:45:00Z"},
-    {"connection_id": "SYN-CONN-EC3", "outcome": "SILENT"}
+  "runs": [
+    {"run_id": "ACCEPT-RUN", "fixture_id": "SYN-CANONICAL-24-V1", "connection_id": "SYN-CONN-JV2", "outcome": "ACCEPT"},
+    {"run_id": "COUNTER-RUN", "fixture_id": "SYN-CANONICAL-24-V1", "connection_id": "SYN-CONN-JV2", "outcome": "COUNTER", "counter_eta_pta": "2026-08-22T06:45:00Z"},
+    {"run_id": "SILENT-RUN", "fixture_id": "SYN-CANONICAL-24-V1", "connection_id": "SYN-CONN-EC3", "outcome": "SILENT"}
   ]
 }
 ```
@@ -470,7 +470,7 @@ Expected: FAIL because no response-plan loader or simulator exists.
 
 - [ ] **Step 3: Implement fixture loader and simulator isolation**
 
-Use a fixture with `plan_id`, `fixture_id`, and a sorted connection mapping. Include one ACCEPT, one COUNTER with explicit UTC counter time, and one SILENT entry, but do not encode preserved-container counts. The simulator only emits the configured response or `None`; it does not mutate `Connection`, `ServiceWindow`, allocation, or request timing. The orchestration layer owns persistence and actor-attributed audit events.
+Use one fixture with `suite_id`, shared `fixture_id`, and three named independent runs: JV2 ACCEPT, JV2 COUNTER with explicit UTC counter time, and EC3 SILENT. Each run's fixture ID must match the suite fixture ID; do not encode preserved-container counts. The simulator only emits the selected configured response or `None`; it does not mutate `Connection`, `ServiceWindow`, allocation, or request timing. The orchestration layer owns persistence and actor-attributed audit events.
 
 - [ ] **Step 4: Run GREEN simulator tests**
 
@@ -753,7 +753,7 @@ Expected: FAIL until the demo orchestration, fixture documentation, and carrier-
 
 - [ ] **Step 3: Complete deterministic demo coverage and documentation**
 
-Drive the existing canonical scarcity endpoint first, prepare independent eligible connection cases, approve/send each exact subject, simulate fixed outcomes, approve or reject the counter, and timeout the silent request with its explicit UTC timestamp. Assert only observed evidence and immutable histories. Extend authority scanning to include `carrier_recovery`, `carrier_simulator`, and `carrier_recovery` evaluation/orchestration modules plus new routes. Document the response-plan format and representative DCSA framing in `shared/fixtures/README.md` without claiming PSA operational integration.
+Drive three independent canonical scarcity incidents, one for each named carrier-demo run: JV2 `ACCEPT`, JV2 `COUNTER`, and EC3 `SILENT`. Prepare only eligible connection cases, approve/send each exact subject, simulate each fixed outcome, approve or reject the counter, and timeout the silent request with its explicit UTC timestamp. Assert only observed evidence and immutable histories. Extend authority scanning to include `carrier_recovery`, `carrier_simulator`, and `carrier_recovery` evaluation/orchestration modules plus new routes. Document the demo-suite format and representative DCSA framing in `shared/fixtures/README.md` without claiming PSA operational integration.
 
 - [ ] **Step 4: Run GREEN focused demo and authority tests**
 

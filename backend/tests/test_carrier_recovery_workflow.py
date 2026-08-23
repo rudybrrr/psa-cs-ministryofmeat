@@ -21,8 +21,8 @@ from backend.app.domain.enums import ApprovalStatus, AuditActor, DecisionAction,
 from backend.app.orchestration.carrier_recovery import CarrierRecoveryConflict, build_carrier_recovery_workflow
 from backend.app.orchestration.scarce_capacity import build_scarce_capacity_workflow
 from backend.app.services.carrier_simulator import (
-    CarrierResponsePlan,
     DeterministicCarrierSimulator,
+    SyntheticCarrierResponsePlan,
 )
 from backend.app.storage.repositories import DecisionRepository
 
@@ -263,7 +263,12 @@ def test_silent_plan_returns_no_response_and_persists_no_carrier_event(
     session: Session,
 ) -> None:
     phase_two = build_scarce_capacity_workflow(session).run()
-    workflow = build_carrier_recovery_workflow(session)
+    workflow = build_carrier_recovery_workflow(
+        session,
+        simulator=DeterministicCarrierSimulator(
+            SyntheticCarrierResponsePlan().load_run("SILENT-RUN")
+        ),
+    )
     case = workflow.prepare(command(phase_two.incident.id, "SYN-CONN-EC3"))
     approve_and_send(workflow, case)
 
@@ -295,11 +300,9 @@ def test_simulator_rejects_effective_at_at_or_after_deadline(session: Session) -
 
 
 def accept_simulator_for_jv2() -> DeterministicCarrierSimulator:
-    return DeterministicCarrierSimulator(CarrierResponsePlan.model_validate({
-        "plan_id": "TEST-ACCEPT-V1",
-        "fixture_id": "SYN-CANONICAL-24-V1",
-        "responses": [{"connection_id": "SYN-CONN-JV2", "outcome": "ACCEPT"}],
-    }))
+    return DeterministicCarrierSimulator(
+        SyntheticCarrierResponsePlan().load_run("ACCEPT-RUN")
+    )
 
 
 def test_accept_creates_effective_requested_timing_without_second_approval(

@@ -462,4 +462,4 @@ def build_carrier_recovery_workflow(
     *,
     simulator: DeterministicCarrierSimulator | None = None,
 ) -> CarrierRecoveryWorkflow:
-    return CarrierRecoveryWorkflow(fixture_service=SyntheticCanonicalIncidentService(), scenarios=SeededScenarioGenerator(), cases=CarrierRecoveryRepository(session), incidents=IncidentRepository(session), evaluations=ScarcityEvaluationRepository(session), decisions=DecisionRepository(session), simulator=simulator or DeterministicCarrierSimulator(SyntheticCarrierResponsePlan().load()))
+    return CarrierRecoveryWorkflow(fixture_service=SyntheticCanonicalIncidentService(), scenarios=SeededScenarioGenerator(), cases=CarrierRecoveryRepository(session), incidents=IncidentRepository(session), evaluations=ScarcityEvaluationRepository(session), decisions=DecisionRepository(session), simulator=simulator or DeterministicCarrierSimulator(SyntheticCarrierResponsePlan().load_run("COUNTER-RUN")))

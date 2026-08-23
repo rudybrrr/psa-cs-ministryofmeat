@@ -10,8 +10,8 @@ from sqlmodel import Session
 
 from backend.app.orchestration.carrier_recovery import build_carrier_recovery_workflow
 from backend.app.services.carrier_simulator import (
-    CarrierResponsePlan,
     DeterministicCarrierSimulator,
+    SyntheticCarrierResponsePlan,
 )
 from backend.app.storage.carrier_recovery import CarrierRecoveryRepository
 
@@ -60,12 +60,10 @@ def _counter_case(client: TestClient) -> dict:
     return case
 
 
-def _use_accept_simulator(monkeypatch: pytest.MonkeyPatch) -> None:
-    simulator = DeterministicCarrierSimulator(CarrierResponsePlan.model_validate({
-        "plan_id": "API-ACCEPT-V1",
-        "fixture_id": "SYN-CANONICAL-24-V1",
-        "responses": [{"connection_id": "SYN-CONN-JV2", "outcome": "ACCEPT"}],
-    }))
+def _use_demo_simulator(monkeypatch: pytest.MonkeyPatch, run_id: str) -> None:
+    simulator = DeterministicCarrierSimulator(
+        SyntheticCarrierResponsePlan().load_run(run_id)
+    )
     monkeypatch.setattr(
         "backend.app.main.build_carrier_recovery_workflow",
         lambda session: build_carrier_recovery_workflow(session, simulator=simulator),
@@ -161,7 +159,7 @@ def test_send_requires_approval_and_is_idempotent(client: TestClient) -> None:
 
 
 def test_accept_simulation_is_durable_and_fail_closed(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
-    _use_accept_simulator(monkeypatch)
+    _use_demo_simulator(monkeypatch, "ACCEPT-RUN")
     case = _case(client)
     _approve_and_send(client, case["id"])
     url = f"/carrier-recovery-cases/{case['id']}/simulate-carrier-response"
@@ -173,7 +171,10 @@ def test_accept_simulation_is_durable_and_fail_closed(client: TestClient, monkey
     assert client.post(url, json={"effective_at": "2026-08-22T08:31:00Z"}).status_code == 409
 
 
-def test_silent_simulation_is_durable_and_persists_no_carrier_evidence(client: TestClient) -> None:
+def test_silent_simulation_is_durable_and_persists_no_carrier_evidence(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _use_demo_simulator(monkeypatch, "SILENT-RUN")
     case = _case(client, "SYN-CONN-EC3")
     _approve_and_send(client, case["id"])
     url = f"/carrier-recovery-cases/{case['id']}/simulate-carrier-response"
@@ -241,7 +242,7 @@ def test_timeout_after_counter_response_is_conflict(client: TestClient) -> None:
 
 
 def test_timeout_after_accept_response_is_conflict(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
-    _use_accept_simulator(monkeypatch)
+    _use_demo_simulator(monkeypatch, "ACCEPT-RUN")
     case = _case(client, "SYN-CONN-JV2")
     _approve_and_send(client, case["id"])
     assert client.post(f"/carrier-recovery-cases/{case['id']}/simulate-carrier-response", json={"effective_at": RESPONSE_TIME}).status_code == 201
@@ -322,11 +323,8 @@ def test_approval_uniqueness_race_is_http_success_or_conflict_not_500(
 def test_phase_three_demo_exercises_accept_counter_and_silent_timeout(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # Canonical Phase 2 evidence makes JV2 and EC3 preparable, but SF1 has no
-    # eligible zero-world container. The additive versioned demo plan therefore
-    # exercises ACCEPT on the canonical JV2 identifier without altering Phase 2.
     with monkeypatch.context() as accept_patch:
-        _use_accept_simulator(accept_patch)
+        _use_demo_simulator(accept_patch, "ACCEPT-RUN")
         accept_case = _case(client, "SYN-CONN-JV2")
         _approve_and_send(client, accept_case["id"])
         assert client.post(
@@ -335,26 +333,30 @@ def test_phase_three_demo_exercises_accept_counter_and_silent_timeout(
         ).status_code == 201
         accept_history = _history(client, accept_case["id"])
 
-    counter_case = _counter_case(client)
-    counter_history = _history(client, counter_case["id"])
-    counter_body = _counter_approval(counter_history)
-    assert client.post(
-        f"/carrier-recovery-cases/{counter_case['id']}/counter-approval",
-        json=counter_body,
-    ).status_code == 201
-    counter_history = _history(client, counter_case["id"])
+    with monkeypatch.context() as counter_patch:
+        _use_demo_simulator(counter_patch, "COUNTER-RUN")
+        counter_case = _counter_case(client)
+        counter_history = _history(client, counter_case["id"])
+        counter_body = _counter_approval(counter_history)
+        assert client.post(
+            f"/carrier-recovery-cases/{counter_case['id']}/counter-approval",
+            json=counter_body,
+        ).status_code == 201
+        counter_history = _history(client, counter_case["id"])
 
-    silent_case = _case(client, "SYN-CONN-EC3")
-    _approve_and_send(client, silent_case["id"])
-    assert client.post(
-        f"/carrier-recovery-cases/{silent_case['id']}/simulate-carrier-response",
-        json={"effective_at": RESPONSE_TIME},
-    ).status_code == 201
-    assert client.post(
-        f"/carrier-recovery-cases/{silent_case['id']}/evaluate-timeout",
-        json={"effective_at": DEADLINE},
-    ).status_code == 201
-    silent_history = _history(client, silent_case["id"])
+    with monkeypatch.context() as silent_patch:
+        _use_demo_simulator(silent_patch, "SILENT-RUN")
+        silent_case = _case(client, "SYN-CONN-EC3")
+        _approve_and_send(client, silent_case["id"])
+        assert client.post(
+            f"/carrier-recovery-cases/{silent_case['id']}/simulate-carrier-response",
+            json={"effective_at": RESPONSE_TIME},
+        ).status_code == 201
+        assert client.post(
+            f"/carrier-recovery-cases/{silent_case['id']}/evaluate-timeout",
+            json={"effective_at": DEADLINE},
+        ).status_code == 201
+        silent_history = _history(client, silent_case["id"])
 
     assert len(accept_history["carrier_responses"]) == 1
     assert accept_history["effective_timings"][0]["source_kind"] == "ACCEPT"
@@ -366,3 +368,10 @@ def test_phase_three_demo_exercises_accept_counter_and_silent_timeout(
     assert all(event["actor"] != "CARRIER" for event in silent_history["audit_events"])
     assert silent_history["request_context"]["timeout_observed_at"] == DEADLINE
     assert silent_history["results"]
+    assert len(
+        {
+            accept_case["incident_id"],
+            counter_case["incident_id"],
+            silent_case["incident_id"],
+        }
+    ) == 3
