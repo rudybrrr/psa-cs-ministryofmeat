@@ -1,4 +1,5 @@
 import pytest
+from uuid import UUID
 
 from backend.app.storage.agent_runtime import AgentRuntimeRepository
 from backend.app.storage.carrier_recovery import CarrierRecoveryRepository
@@ -57,3 +58,40 @@ def test_existing_pending_safety_review_forces_safe_escalation(session, incident
     CargoSafetyWorkflow.for_session(session, checker=checker).create_review(incident.id, "SYN-CNT-010", "Shipment includes UN 3480 lithium-ion batteries packed separately.", "hero")
     result = runtime.advance(run.id)
     assert result.escalation_reason is AgentEscalationReason.SAFETY_REVIEW_REQUIRED
+
+
+def test_counter_hero_prepare_enters_real_request_approval_wait(session) -> None:
+    from backend.app.domain.agent_runtime import AgentModelTurn, AgentToolCall, AgentRunState, AgentWaitKind
+    from backend.app.orchestration.scarce_capacity import build_scarce_capacity_workflow
+
+    scarcity = build_scarce_capacity_workflow(session).run(seed=20260822, world_count=50)
+    runtime = _runtime(session, [AgentModelTurn(tool_call=AgentToolCall(name="prepare_rta_request", arguments={"connection_id": "JV2"}))])
+    run = runtime.create_run(scarcity.incident.id)
+    result = runtime.advance(run.id)
+    assert result.state is AgentRunState.WAITING
+    assert result.wait_kind is AgentWaitKind.REQUEST_APPROVAL
+
+
+def test_real_phase3_request_approval_resumes_and_sends_once(session) -> None:
+    from backend.app.domain.agent_runtime import AgentModelTurn, AgentToolCall, AgentRunState, AgentWaitKind
+    from backend.app.domain.carrier_recovery import RequestApprovalCommand
+    from backend.app.domain.enums import ApprovalStatus
+    from backend.app.orchestration.carrier_recovery import build_carrier_recovery_workflow
+    from backend.app.orchestration.scarce_capacity import build_scarce_capacity_workflow
+
+    scarcity = build_scarce_capacity_workflow(session).run(seed=20260822, world_count=50)
+    runtime = _runtime(session, [
+        AgentModelTurn(tool_call=AgentToolCall(name="prepare_rta_request", arguments={"connection_id": "JV2"})),
+        AgentModelTurn(tool_call=AgentToolCall(name="send_authorised_rta_request", arguments={"case_id": "placeholder"})),
+    ])
+    run = runtime.create_run(scarcity.incident.id)
+    prepared = runtime.advance(run.id)
+    case_id = prepared.wait_subject_id
+    history = build_carrier_recovery_workflow(session).history(UUID(case_id))
+    binding = history.bindings[0]
+    build_carrier_recovery_workflow(session).record_request_approval(RequestApprovalCommand(case_id=UUID(case_id), proposal_decision_id=binding.proposal_decision_id, request_id=history.request.id, expected_payload_fingerprint=binding.payload_fingerprint, operator_id="operator", status=ApprovalStatus.APPROVED))
+    runtime._model._turns[0] = AgentModelTurn(tool_call=AgentToolCall(name="send_authorised_rta_request", arguments={"case_id": case_id}))
+    sent = runtime.advance(run.id)
+    assert sent.state is AgentRunState.WAITING
+    assert sent.wait_kind is AgentWaitKind.CARRIER_RESPONSE_OR_TIMEOUT
+    assert build_carrier_recovery_workflow(session).history(UUID(case_id)).request.status.value == "SENT"
