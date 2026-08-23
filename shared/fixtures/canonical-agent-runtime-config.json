@@ -5,6 +5,12 @@
       "prepared_at": "2026-08-23T00:00:00Z",
       "requested_eta_pta": "2026-08-23T04:00:00Z",
       "response_deadline": "2026-08-23T06:00:00Z"
+    },
+    "EC3": {
+      "connection_id": "SYN-CONN-EC3",
+      "prepared_at": "2026-08-23T00:00:00Z",
+      "requested_eta_pta": "2026-08-23T04:00:00Z",
+      "response_deadline": "2026-08-23T06:00:00Z"
     }
   },
   "synthetic_clock": {

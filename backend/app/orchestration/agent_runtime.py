@@ -84,6 +84,9 @@ class AgentRuntimeCoordinator:
         run = self.get_run(run_id)
         if run.state in {AgentRunState.COMPLETED, AgentRunState.ESCALATED, AgentRunState.FAILED}:
             return run
+        recovered = self._recover_pending_invocation(run)
+        if recovered is not None:
+            return recovered
         if run.state is AgentRunState.WAITING:
             resolved = self._resolve_wait(run)
             if resolved is None:
@@ -100,6 +103,33 @@ class AgentRuntimeCoordinator:
             running = outcome
         return self._escalate(running, AgentEscalationReason.STEP_BUDGET_EXCEEDED, "Agent advance tool-call budget exhausted.")
 
+    def _recover_pending_invocation(self, run: AgentRun) -> AgentRun | None:
+        pending = self._repository.pending_invocations(run.id)
+        if not pending:
+            return None
+        if len(pending) != 1 or pending[0].tool_name != "send_authorised_rta_request":
+            return self._escalate(run, AgentEscalationReason.TOOL_FAILURE, "Unrecoverable pending agent tool invocation.")
+        invocation = pending[0]
+        try:
+            case_id = UUID(str(invocation.arguments["case_id"]))
+            context = build_carrier_recovery_workflow(self._session).send_authorised_request(case_id)
+        except (CarrierRecoveryConflict, ValueError, KeyError, LookupError):
+            return self._escalate(run, AgentEscalationReason.TOOL_FAILURE, "Pending RTA dispatch could not be recovered safely.")
+        self._repository.complete_invocation(invocation.model_copy(update={
+            "status": AgentToolInvocationStatus.SUCCEEDED,
+            "result_summary": f"Recovered authorised request sent at {context.sent_at.isoformat()}.",
+            "completed_at": utc_now(),
+        }))
+        step = next(item for item in self._repository.history(run.id).steps if item.id == invocation.step_id)
+        recovered = run.model_copy(update={
+            "state": AgentRunState.WAITING,
+            "wait_kind": AgentWaitKind.CARRIER_RESPONSE_OR_TIMEOUT,
+            "wait_subject_id": str(case_id),
+            "step_count": max(run.step_count, step.step_number),
+            "updated_at": utc_now(),
+        })
+        return self._repository.update_run(recovered)
+
     def _decide_once(self, running: AgentRun, context, tools) -> AgentRun:
         for attempt in range(2):
             try:
@@ -112,6 +142,10 @@ class AgentRuntimeCoordinator:
                 if attempt == 0:
                     continue
                 return self._escalate(running, AgentEscalationReason.INVALID_MODEL_OUTPUT, "Agent model returned invalid output.")
+            if turn.tool_call is None or turn.tool_call.name not in {tool.name for tool in tools}:
+                if attempt == 0:
+                    continue
+                return self._escalate(running, AgentEscalationReason.INVALID_MODEL_OUTPUT, "Agent model selected an unavailable tool.")
             return self._execute_turn(running, turn.tool_call.name, dict(turn.tool_call.arguments))
         raise AssertionError("unreachable")
 
@@ -190,6 +224,14 @@ class AgentRuntimeCoordinator:
                 updated = run.model_copy(update={"wait_kind": AgentWaitKind.COUNTER_APPROVAL, "updated_at": utc_now()})
                 self._repository.update_run(updated)
                 return None
+            if (
+                history.case.state is CarrierRecoveryCaseState.AWAITING_CARRIER
+                and not history.carrier_responses
+                and history.request_context is not None
+                and self._clock.now() >= history.request_context.response_deadline
+            ):
+                resumed = run.model_copy(update={"state": AgentRunState.RUNNING, "wait_kind": None, "wait_subject_id": None, "updated_at": utc_now()})
+                return self._repository.update_run(resumed)
             if history.case.state in {CarrierRecoveryCaseState.COMPLETED, CarrierRecoveryCaseState.ESCALATED, CarrierRecoveryCaseState.RECOMPUTING}:
                 resumed = run.model_copy(update={"state": AgentRunState.RUNNING, "wait_kind": None, "wait_subject_id": None, "updated_at": utc_now()})
                 return self._repository.update_run(resumed)

@@ -187,6 +187,17 @@ class AgentRuntimeRepository:
         ).all()
         return AgentHistory(run=run, steps=tuple(self._step(record) for record in steps), tool_invocations=tuple(self._invocation(record) for record in invocations))
 
+    def pending_invocations(self, run_id: UUID) -> tuple[AgentToolInvocation, ...]:
+        records = self._session.exec(
+            select(AgentToolInvocationRecord)
+            .where(
+                AgentToolInvocationRecord.run_id == str(run_id),
+                AgentToolInvocationRecord.status == AgentToolInvocationStatus.PENDING.value,
+            )
+            .order_by(AgentToolInvocationRecord.started_at_utc)
+        ).all()
+        return tuple(self._invocation(record) for record in records)
+
     @staticmethod
     def _run_record(run: AgentRun) -> AgentRunRecord:
         return AgentRunRecord(id=str(run.id), incident_id=str(run.incident_id), state=run.state.value, model_name=run.model_name, prompt_version=run.prompt_version, step_count=run.step_count, max_steps=run.max_steps, wait_kind=run.wait_kind.value if run.wait_kind else None, wait_subject_id=run.wait_subject_id, escalation_reason=run.escalation_reason.value if run.escalation_reason else None, started_at_utc=to_utc_text(run.started_at), updated_at_utc=to_utc_text(run.updated_at), completed_at_utc=to_utc_text(run.completed_at) if run.completed_at else None)
