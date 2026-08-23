@@ -51,6 +51,10 @@ from backend.app.storage.repositories import (
     ScarcityEvaluationRepository,
 )
 from backend.app.storage.carrier_recovery import CarrierRecoveryRepository
+from backend.app.domain.cargo_safety import CargoSafetyEvaluationResult, CargoSafetyReview
+from backend.app.orchestration.cargo_safety import CargoSafetyConflict, CargoSafetyWorkflow
+from backend.app.services.semantic_safety import SemanticSafetyChecker
+from backend.app.storage.cargo_safety import CargoSafetyHistory
 
 
 class TriggerResponse(BaseModel):
@@ -96,10 +100,22 @@ class EffectiveAtBody(BaseModel):
     effective_at: str
 
 
+class CargoSafetyNoteBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    text: str
+    source: str
+
+
+class CreateCargoSafetyReviewBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    container_id: str
+    note: CargoSafetyNoteBody
+
+
 SessionDependency = Annotated[Session, Depends(get_session)]
 
 
-def create_app(*, database_engine: Engine | None = None) -> FastAPI:
+def create_app(*, database_engine: Engine | None = None, cargo_safety_checker: SemanticSafetyChecker | None = None) -> FastAPI:
     active_engine = database_engine if database_engine is not None else engine
 
     @asynccontextmanager
@@ -163,6 +179,9 @@ def create_app(*, database_engine: Engine | None = None) -> FastAPI:
     def get_canonical_scarcity_fixture() -> CanonicalIncidentFixture:
         return SyntheticCanonicalIncidentService().load()
 
+    def cargo_safety_workflow(session: Session) -> CargoSafetyWorkflow:
+        return CargoSafetyWorkflow.for_session(session, checker=cargo_safety_checker)
+
     @application.get(
         "/incidents/{incident_id}",
         response_model=Incident,
@@ -198,6 +217,43 @@ def create_app(*, database_engine: Engine | None = None) -> FastAPI:
         session: SessionDependency,
     ) -> list[AuditEvent]:
         return AuditRepository(session).list_for_incident(incident_id)
+
+    @application.post("/incidents/{incident_id}/cargo-safety-reviews", response_model=CargoSafetyReview, status_code=status.HTTP_201_CREATED)
+    def create_cargo_safety_review(incident_id: UUID, body: CreateCargoSafetyReviewBody, session: SessionDependency) -> CargoSafetyReview:
+        try:
+            return cargo_safety_workflow(session).create_review(incident_id, body.container_id, body.note.text, body.note.source)
+        except RecordNotFound as error:
+            raise HTTPException(status_code=404, detail="Incident not found") from error
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+
+    @application.post("/cargo-safety-reviews/{review_id}/evaluate", response_model=CargoSafetyEvaluationResult, status_code=status.HTTP_201_CREATED)
+    def evaluate_cargo_safety_review(review_id: UUID, response: Response, session: SessionDependency) -> CargoSafetyEvaluationResult:
+        workflow = cargo_safety_workflow(session)
+        try:
+            retry = workflow.get(review_id).state.value == "COMPLETED"
+            result = workflow.evaluate(review_id)
+            if retry: response.status_code = status.HTTP_200_OK
+            return result
+        except LookupError as error:
+            raise HTTPException(status_code=404, detail="Cargo safety review not found") from error
+        except CargoSafetyConflict as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+
+    @application.get("/incidents/{incident_id}/cargo-safety-reviews", response_model=list[CargoSafetyReview])
+    def list_cargo_safety_reviews(incident_id: UUID, session: SessionDependency) -> list[CargoSafetyReview]:
+        try: return cargo_safety_workflow(session).list(incident_id)
+        except RecordNotFound as error: raise HTTPException(status_code=404, detail="Incident not found") from error
+
+    @application.get("/cargo-safety-reviews/{review_id}", response_model=CargoSafetyReview)
+    def get_cargo_safety_review(review_id: UUID, session: SessionDependency) -> CargoSafetyReview:
+        try: return cargo_safety_workflow(session).get(review_id)
+        except LookupError as error: raise HTTPException(status_code=404, detail="Cargo safety review not found") from error
+
+    @application.get("/cargo-safety-reviews/{review_id}/history", response_model=CargoSafetyHistory)
+    def get_cargo_safety_history(review_id: UUID, session: SessionDependency) -> CargoSafetyHistory:
+        try: return cargo_safety_workflow(session).history(review_id)
+        except LookupError as error: raise HTTPException(status_code=404, detail="Cargo safety review not found") from error
 
     @application.get(
         "/incidents/{incident_id}/scarcity-evaluation",

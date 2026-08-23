@@ -249,7 +249,10 @@ def test_database_helpers_create_tables_and_yield_a_usable_session(
         "approval_bindings",
         "approvals",
         "carrier_recovery_audit_links",
-        "carrier_recovery_cases",
+            "carrier_recovery_cases",
+            "cargo_notes",
+            "cargo_safety_audit_links",
+            "cargo_safety_reviews",
             "carrier_recovery_decision_links",
             "carrier_responses",
             "carrier_simulation_receipts",
@@ -258,7 +261,9 @@ def test_database_helpers_create_tables_and_yield_a_usable_session(
         "effective_connection_timings",
         "incidents",
         "rta_request_contexts",
-        "rta_requests",
+            "rta_requests",
+            "semantic_safety_assessments",
+            "semantic_safety_policy_results",
         "scarcity_evaluations",
     }
     assert yielded_session.exec(select(IncidentRecord)).all() == []
