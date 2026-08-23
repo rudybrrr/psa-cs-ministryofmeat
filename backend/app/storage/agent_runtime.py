@@ -133,6 +133,22 @@ class AgentRuntimeRepository:
         ).all()
         return [self._run(record) for record in records]
 
+    def update_run(self, run: AgentRun) -> AgentRun:
+        record = self._session.get(AgentRunRecord, str(run.id))
+        if record is None:
+            raise LookupError("agent run not found")
+        values = self._run_record(run)
+        with self.transaction():
+            record.state = values.state
+            record.step_count = values.step_count
+            record.wait_kind = values.wait_kind
+            record.wait_subject_id = values.wait_subject_id
+            record.escalation_reason = values.escalation_reason
+            record.updated_at_utc = values.updated_at_utc
+            record.completed_at_utc = values.completed_at_utc
+            self._session.add(record)
+        return run
+
     def add_step(self, step: AgentStep) -> AgentStep:
         with self.transaction():
             self._session.add(self._step_record(step))

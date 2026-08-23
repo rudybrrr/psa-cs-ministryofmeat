@@ -1,12 +1,18 @@
 from __future__ import annotations
 
+from datetime import datetime
+from typing import Protocol
+
 from sqlmodel import Session
 
 from backend.app.domain.agent_runtime import AgentRun, AgentRunState, AgentToolDefinition, AgentTurnContext
 from backend.app.domain.carrier_recovery import CarrierRecoveryCaseState
-from backend.app.orchestration.agent_runtime import AgentRuntimeClock
 from backend.app.storage.carrier_recovery import CarrierRecoveryRepository
 from backend.app.storage.repositories import DecisionRepository, ScarcityEvaluationRepository
+
+
+class _Clock(Protocol):
+    def now(self) -> datetime: ...
 
 
 def _tool(name: str, description: str, required: tuple[str, ...] = ()) -> AgentToolDefinition:
@@ -14,7 +20,7 @@ def _tool(name: str, description: str, required: tuple[str, ...] = ()) -> AgentT
 
 
 class AgentToolRegistry:
-    def __init__(self, *, clock: AgentRuntimeClock) -> None:
+    def __init__(self, *, clock: _Clock) -> None:
         self._clock = clock
 
     def available_tools(self, session: Session, run: AgentRun) -> tuple[AgentToolDefinition, ...]:
@@ -65,3 +71,5 @@ def build_agent_turn_context(session: Session, run: AgentRun, registry: AgentToo
         },
         evidence_refs=tuple(str(decision.id) for decision in decisions[-10:]),
     )
+class _Clock(Protocol):
+    def now(self) -> datetime: ...
