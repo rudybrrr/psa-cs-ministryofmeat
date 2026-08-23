@@ -246,6 +246,10 @@ def test_database_helpers_create_tables_and_yield_a_usable_session(
 
     assert set(inspect(engine).get_table_names()) == {
         "audit_events",
+        "agent_audit_links",
+        "agent_runs",
+        "agent_steps",
+        "agent_tool_invocations",
         "approval_bindings",
         "approvals",
         "carrier_recovery_audit_links",
