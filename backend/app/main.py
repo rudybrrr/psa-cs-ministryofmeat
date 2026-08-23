@@ -55,6 +55,10 @@ from backend.app.domain.cargo_safety import CargoSafetyEvaluationResult, CargoSa
 from backend.app.orchestration.cargo_safety import CargoSafetyConflict, CargoSafetyWorkflow
 from backend.app.services.semantic_safety import SemanticSafetyChecker
 from backend.app.storage.cargo_safety import CargoSafetyHistory
+from backend.app.domain.agent_runtime import AgentHistory, AgentRun
+from backend.app.orchestration.agent_runtime import AgentRuntimeCoordinator, CanonicalAgentRuntimeConfiguration
+from backend.app.services.agent_model import AgentModel, OpenAIAgentModel
+from backend.app.storage.agent_runtime import AgentRuntimeConflict, AgentRuntimeRepository
 
 
 class TriggerResponse(BaseModel):
@@ -115,7 +119,7 @@ class CreateCargoSafetyReviewBody(BaseModel):
 SessionDependency = Annotated[Session, Depends(get_session)]
 
 
-def create_app(*, database_engine: Engine | None = None, cargo_safety_checker: SemanticSafetyChecker | None = None) -> FastAPI:
+def create_app(*, database_engine: Engine | None = None, cargo_safety_checker: SemanticSafetyChecker | None = None, agent_model: AgentModel | None = None) -> FastAPI:
     active_engine = database_engine if database_engine is not None else engine
 
     @asynccontextmanager
@@ -182,6 +186,10 @@ def create_app(*, database_engine: Engine | None = None, cargo_safety_checker: S
     def cargo_safety_workflow(session: Session) -> CargoSafetyWorkflow:
         return CargoSafetyWorkflow.for_session(session, checker=cargo_safety_checker)
 
+    def agent_runtime(session: Session) -> AgentRuntimeCoordinator:
+        configuration = CanonicalAgentRuntimeConfiguration.load()
+        return AgentRuntimeCoordinator(session=session, model=agent_model or OpenAIAgentModel(), clock=configuration.clock("before_deadline"), configuration=configuration)
+
     @application.get(
         "/incidents/{incident_id}",
         response_model=Incident,
@@ -197,6 +205,50 @@ def create_app(*, database_engine: Engine | None = None, cargo_safety_checker: S
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Incident not found",
             ) from error
+
+    @application.post("/incidents/{incident_id}/agent-runs", response_model=AgentRun, status_code=status.HTTP_201_CREATED)
+    def create_agent_run(incident_id: UUID, session: SessionDependency, body: dict | None = Body(default=None)) -> AgentRun:
+        if body is not None:
+            raise HTTPException(status_code=422, detail="Agent run creation accepts no request body")
+        try:
+            return agent_runtime(session).create_run(incident_id)
+        except RecordNotFound as error:
+            raise HTTPException(status_code=404, detail="Incident not found") from error
+        except AgentRuntimeConflict as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+
+    @application.post("/agent-runs/{run_id}/advance", response_model=AgentRun)
+    def advance_agent_run(run_id: UUID, session: SessionDependency, body: dict | None = Body(default=None)) -> AgentRun:
+        if body is not None:
+            raise HTTPException(status_code=422, detail="Agent advance accepts no request body")
+        try:
+            return agent_runtime(session).advance(run_id)
+        except LookupError as error:
+            raise HTTPException(status_code=404, detail="Agent run not found") from error
+        except AgentRuntimeConflict as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+
+    @application.get("/incidents/{incident_id}/agent-runs", response_model=list[AgentRun])
+    def list_agent_runs(incident_id: UUID, session: SessionDependency) -> list[AgentRun]:
+        try:
+            IncidentRepository(session).get(incident_id)
+            return AgentRuntimeRepository(session).list_runs(incident_id)
+        except RecordNotFound as error:
+            raise HTTPException(status_code=404, detail="Incident not found") from error
+
+    @application.get("/agent-runs/{run_id}", response_model=AgentRun)
+    def get_agent_run(run_id: UUID, session: SessionDependency) -> AgentRun:
+        try:
+            return AgentRuntimeRepository(session).get_run(run_id)
+        except LookupError as error:
+            raise HTTPException(status_code=404, detail="Agent run not found") from error
+
+    @application.get("/agent-runs/{run_id}/history", response_model=AgentHistory)
+    def get_agent_run_history(run_id: UUID, session: SessionDependency) -> AgentHistory:
+        try:
+            return AgentRuntimeRepository(session).history(run_id)
+        except LookupError as error:
+            raise HTTPException(status_code=404, detail="Agent run not found") from error
 
     @application.get(
         "/incidents/{incident_id}/decisions",
