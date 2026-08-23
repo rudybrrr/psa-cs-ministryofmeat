@@ -24,6 +24,7 @@ def test_create_evaluate_list_get_and_history(api_engine, incident) -> None:
         evaluated = client.post(f"/cargo-safety-reviews/{review_id}/evaluate")
         assert evaluated.status_code == 201
         assert evaluated.json()["policy_result"]["disposition"] == "ESCALATE"
+        assert client.post(f"/cargo-safety-reviews/{review_id}/evaluate", json={"model": "unsafe-user-choice"}).status_code == 422
         assert client.get(f"/incidents/{incident.id}/cargo-safety-reviews").json()[0]["id"] == review_id
         assert client.get(f"/cargo-safety-reviews/{review_id}/history").json()["assessment"]["result"] == "CONTRADICTION_FOUND"
 

@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import Depends, FastAPI, HTTPException, Response, status
+from fastapi import Body, Depends, FastAPI, HTTPException, Response, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, ValidationError
@@ -228,7 +228,9 @@ def create_app(*, database_engine: Engine | None = None, cargo_safety_checker: S
             raise HTTPException(status_code=422, detail=str(error)) from error
 
     @application.post("/cargo-safety-reviews/{review_id}/evaluate", response_model=CargoSafetyEvaluationResult, status_code=status.HTTP_201_CREATED)
-    def evaluate_cargo_safety_review(review_id: UUID, response: Response, session: SessionDependency) -> CargoSafetyEvaluationResult:
+    def evaluate_cargo_safety_review(review_id: UUID, response: Response, session: SessionDependency, body: dict | None = Body(default=None)) -> CargoSafetyEvaluationResult:
+        if body is not None:
+            raise HTTPException(status_code=422, detail="Cargo safety evaluation accepts no request body")
         workflow = cargo_safety_workflow(session)
         try:
             retry = workflow.get(review_id).state.value == "COMPLETED"
