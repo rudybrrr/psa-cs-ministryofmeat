@@ -32,6 +32,7 @@ from backend.app.domain.carrier_recovery import (
 from backend.app.domain.enums import ApprovalStatus, AuditActor, DecisionAction, DecisionStatus, IncidentState, RTARequestStatus
 from backend.app.domain.models import Approval, AuditEvent, Decision, RTARequest, utc_now
 from backend.app.evaluation.scarcity import ScarcityEvaluator, _is_structurally_eligible
+from backend.app.evaluation.carrier_recovery import FrozenCarrierRecoveryEvaluator
 from backend.app.services.canonical_incident import SyntheticCanonicalIncidentService
 from backend.app.services.scenarios import SeededScenarioGenerator
 from backend.app.services.carrier_simulator import (
@@ -282,8 +283,6 @@ class CarrierRecoveryWorkflow:
         if report.fixture_id != fixture.fixture_id or report.selected_allocation is None:
             raise CarrierRecoveryConflict("source scarcity evidence is incomplete")
         scenarios = self._scenarios.generate(fixture, seed=report.seed, world_count=report.scenario_count)
-        profiles = {profile.container.id: profile for profile in fixture.profiles if profile.container.onward_connection.id == case.connection_id}
-        allocation = set(report.selected_allocation.allocated_container_ids)
         timing = history.effective_timings[0] if history.effective_timings else None
         evidence_kind, timing_id, approval_id, timeout_context_id = self._reconsideration_evidence(history)
         fallback_links = {link.decision_id for link in history.decision_links if link.role == "FALLBACK_ROLL"}
@@ -291,29 +290,14 @@ class CarrierRecoveryWorkflow:
         fallback_by_container = {decisions[decision_id].container_id: decisions[decision_id] for decision_id in fallback_links if decision_id in decisions}
         created_at = utc_now()
         replacements: list[Decision] = []
+        evaluations = FrozenCarrierRecoveryEvaluator().evaluate(fixture=fixture, scenarios=scenarios, selected_allocation=report.selected_allocation.allocated_container_ids, affected_container_ids=case.affected_container_ids, connection_id=case.connection_id, effective_eta_pta=timing.effective_eta_pta if timing else None)
         pending_results: list[tuple[str, CarrierRecoveryDisposition, int, bool, Decision, Decision | None]] = []
-        for container_id in case.affected_container_ids:
-            profile = profiles.get(container_id)
+        for evaluation in evaluations:
+            container_id = evaluation.container_id
             fallback = fallback_by_container.get(container_id)
-            if profile is None or fallback is None:
+            if fallback is None:
                 raise CarrierRecoveryConflict("case snapshot fallback lineage is incomplete")
-            hard_safe = profile is not None and _is_structurally_eligible(profile)
-            if not hard_safe:
-                disposition, preserved = CarrierRecoveryDisposition.ESCALATE, 0
-            elif timing is None:
-                disposition, preserved = CarrierRecoveryDisposition.STILL_ROLL, 0
-            else:
-                boundary = timing.effective_eta_pta + timedelta(minutes=35)
-                preserved = sum(
-                    ScarcityEvaluator().ready_at(profile, world, expedited=container_id in allocation) <= boundary
-                    for world in scenarios.worlds
-                )
-                if preserved * 10 >= len(scenarios.worlds) * 9:
-                    disposition = CarrierRecoveryDisposition.PRESERVED_VIA_RTA
-                elif preserved == 0:
-                    disposition = CarrierRecoveryDisposition.STILL_ROLL
-                else:
-                    disposition = CarrierRecoveryDisposition.ESCALATE
+            disposition, preserved, hard_safe = evaluation.disposition, evaluation.preserved_world_count, evaluation.hard_constraints_satisfied
             replacement = None
             if disposition is not CarrierRecoveryDisposition.STILL_ROLL:
                 action = DecisionAction.PRESERVE_VIA_RTA if disposition is CarrierRecoveryDisposition.PRESERVED_VIA_RTA else DecisionAction.ESCALATE
