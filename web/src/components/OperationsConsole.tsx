@@ -1,212 +1,105 @@
-import { useCallback, useState } from "react";
-
-import {
-  ApiError,
-  loadIncidentSnapshot,
-  triggerAndLoadIncidentSnapshot,
-} from "../api/client";
-import type { IncidentSnapshot, TriggerResponse } from "../api/types";
+import { SyntheticBanner } from "./SyntheticBanner";
+import { IncidentHeader } from "./IncidentHeader";
 import { AuditTimeline } from "./AuditTimeline";
 import { ActorLegend } from "./ActorBadge";
-import { CanonicalIncidentView } from "./CanonicalIncidentView";
-import { CurrentDecision } from "./CurrentDecision";
-import { IncidentHeader } from "./IncidentHeader";
-import { SyntheticBanner } from "./SyntheticBanner";
-
-type ConsolePhase = "idle" | "triggering" | "ready" | "error";
+import { RecoverySummaryPanel } from "./incident/RecoverySummary";
+import { ContainerRecoveryTable } from "./recovery/ContainerRecoveryTable";
+import { CarrierRecoveryPanel } from "./carrier/CarrierRecoveryPanel";
+import { SyntheticDemoControl } from "./demo/SyntheticDemoControl";
+import { useRecoveryConsole } from "../hooks/useRecoveryConsole";
 
 export function OperationsConsole() {
-  const [phase, setPhase] = useState<ConsolePhase>("idle");
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [triggerResult, setTriggerResult] = useState<TriggerResponse | null>(
-    null,
-  );
-  const [snapshot, setSnapshot] = useState<IncidentSnapshot | null>(null);
-
-  const runTrigger = useCallback(async () => {
-    setPhase("triggering");
-    setErrorMessage(null);
-
-    try {
-      const result = await triggerAndLoadIncidentSnapshot();
-      setTriggerResult(result.trigger);
-      setSnapshot(result.snapshot);
-      setPhase("ready");
-    } catch (error) {
-      const message =
-        error instanceof ApiError
-          ? `${error.status}: ${error.detail}`
-          : error instanceof Error
-            ? error.message
-            : "Unexpected error while triggering synthetic incident";
-
-      setErrorMessage(message);
-      setPhase("error");
-    }
-  }, []);
-
-  const refreshSnapshot = useCallback(async () => {
-    if (!snapshot?.incident.id) {
-      return;
-    }
-
-    setPhase("triggering");
-    setErrorMessage(null);
-
-    try {
-      const refreshed = await loadIncidentSnapshot(snapshot.incident.id);
-      setSnapshot(refreshed);
-      setPhase("ready");
-    } catch (error) {
-      const message =
-        error instanceof ApiError
-          ? `${error.status}: ${error.detail}`
-          : error instanceof Error
-            ? error.message
-            : "Unexpected error while refreshing incident";
-
-      setErrorMessage(message);
-      setPhase("error");
-    }
-  }, [snapshot?.incident.id]);
-
-  const loading = phase === "triggering";
+  const console = useRecoveryConsole();
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <SyntheticBanner />
-      <IncidentHeader incident={snapshot?.incident ?? null} loading={loading} />
+      <IncidentHeader incident={console.incident} loading={console.loading} />
 
       <main className="mx-auto max-w-7xl space-y-6 px-4 py-6">
-        <CanonicalIncidentView />
+        <RecoverySummaryPanel
+          summary={console.recoverySummary}
+          fixtureId={console.fixture?.fixture_id ?? null}
+          loading={console.loading}
+        />
 
-        <div className="flex flex-wrap items-center justify-between gap-4 rounded border border-slate-800 bg-slate-900/40 px-4 py-4">
-          <div>
-            <h2 className="text-sm font-semibold text-slate-100">
-              Synthetic scenario control
-            </h2>
-            <p className="mt-1 max-w-2xl text-sm text-slate-400">
-              Trigger the one-container schedule-delay scenario. The console
-              still loads persisted incident, decision, and audit state from
-              the FastAPI backend. The 24-container view above is the frozen
-              canonical fixture, not an allocation result.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => void runTrigger()}
-              disabled={loading}
-              className="rounded border border-emerald-500/60 bg-emerald-900/40 px-4 py-2 font-mono text-xs font-semibold uppercase tracking-wide text-emerald-100 transition hover:bg-emerald-900/70 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Trigger synthetic incident
-            </button>
-            {snapshot && (
-              <button
-                type="button"
-                onClick={() => void refreshSnapshot()}
-                disabled={loading}
-                className="rounded border border-slate-700 px-4 py-2 font-mono text-xs uppercase tracking-wide text-slate-300 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Refresh persisted state
-              </button>
-            )}
-          </div>
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]">
+          <ContainerRecoveryTable
+            rows={console.containerRows}
+            selectedContainerId={console.selectedContainerId}
+            onSelect={(containerId) => void console.selectContainer(containerId)}
+            loading={console.loading}
+          />
+          <CarrierRecoveryPanel
+            selectedContainer={console.selectedContainer}
+            carrierCase={console.selectedCarrierCase ?? null}
+            history={console.selectedCaseHistory}
+            decisions={console.selectedCaseHistory?.decisions ?? console.decisions}
+            loading={console.loading}
+            onPrepare={(connectionId) =>
+              void console.prepareCarrierRecovery(connectionId)
+            }
+            onApproveRequest={() => void console.approveRequest()}
+            onRejectRequest={() => void console.rejectRequest()}
+            onSend={() => void console.sendRequest()}
+            onSimulate={() => void console.simulateCarrierResponse()}
+            onApproveCounter={() => void console.approveCounter()}
+            onRejectCounter={() => void console.rejectCounter()}
+            onEvaluateTimeout={() => void console.evaluateTimeout()}
+          />
         </div>
 
-        {phase === "idle" && (
+        {!console.incident && !console.loading && (
           <div className="rounded border border-dashed border-slate-800 bg-slate-950/40 px-6 py-10 text-center">
             <p className="text-sm text-slate-400">
-              No incident loaded. Trigger the synthetic schedule-delay scenario
-              to begin the one-container recovery walkthrough.
+              No incident loaded. Create a canonical scarcity incident or start a
+              canonical carrier demo run.
             </p>
           </div>
         )}
 
-        {loading && (
-          <div className="mb-6 rounded border border-slate-800 bg-slate-900/30 px-4 py-3 font-mono text-sm text-slate-300">
+        {console.loading && (
+          <div className="rounded border border-slate-800 bg-slate-900/30 px-4 py-3 font-mono text-sm text-slate-300">
             Contacting backend and loading persisted incident state…
           </div>
         )}
 
-        {phase === "error" && errorMessage && (
+        {console.error && (
           <div
             role="alert"
-            className="mb-6 rounded border border-rose-500/50 bg-rose-950/40 px-4 py-3 text-sm text-rose-100"
+            className="rounded border border-rose-500/50 bg-rose-950/40 px-4 py-3 text-sm text-rose-100"
           >
             <p className="font-semibold">Operations console error</p>
-            <p className="mt-1 font-mono text-xs">{errorMessage}</p>
+            <p className="mt-1 font-mono text-xs">
+              {console.error.status}: {console.error.detail}
+            </p>
           </div>
         )}
 
-        {snapshot && (
-          <div className="space-y-6">
-            <h2 className="text-sm font-semibold text-slate-100">
-              One-container API incident
-            </h2>
-            <section className="rounded border border-slate-800 bg-slate-950/60 px-4 py-4">
+        {console.incident && (
+          <section className="space-y-4 rounded border border-slate-800 bg-slate-950/60 px-4 py-4">
+            <div>
               <h2 className="text-sm font-semibold text-slate-100">
-                Current incident summary
-              </h2>
-              <dl className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <div>
-                  <dt className="font-mono text-[11px] uppercase tracking-wide text-slate-500">
-                    Workflow state
-                  </dt>
-                  <dd className="mt-1 font-mono text-slate-200">
-                    {snapshot.incident.state}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="font-mono text-[11px] uppercase tracking-wide text-slate-500">
-                    Decisions recorded
-                  </dt>
-                  <dd className="mt-1 font-mono text-slate-200">
-                    {snapshot.decisions.length}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="font-mono text-[11px] uppercase tracking-wide text-slate-500">
-                    Audit events
-                  </dt>
-                  <dd className="mt-1 font-mono text-slate-200">
-                    {snapshot.auditEvents.length}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="font-mono text-[11px] uppercase tracking-wide text-slate-500">
-                    Trigger decision ID
-                  </dt>
-                  <dd className="mt-1 font-mono text-slate-200">
-                    {triggerResult?.decision_id ?? "—"}
-                  </dd>
-                </div>
-              </dl>
-            </section>
-
-            <section className="rounded border border-slate-800 bg-slate-950/60 px-4 py-4">
-              <h2 className="text-sm font-semibold text-slate-100">
-                Audit actor legend
+                Audit / decision history
               </h2>
               <p className="mt-1 text-xs text-slate-500">
-                Current synthetic scenario emits SYSTEM and POLICY actors only.
-                Other badges are reserved for later workflow stages.
+                Persisted audit trail for the active incident. Human approvals and
+                carrier evidence remain visible in workflow order.
               </p>
-              <div className="mt-3">
-                <ActorLegend />
-              </div>
-            </section>
-
-            <CurrentDecision
-              decisions={snapshot.decisions}
-              highlightDecisionId={triggerResult?.decision_id ?? null}
-              loading={loading}
-            />
-
-            <AuditTimeline events={snapshot.auditEvents} loading={loading} />
-          </div>
+            </div>
+            <ActorLegend />
+            <AuditTimeline events={console.auditEvents} loading={console.loading} />
+          </section>
         )}
+
+        <SyntheticDemoControl
+          activeRunId={console.activeDemoRunId}
+          incidentId={console.incident?.id ?? null}
+          loading={console.loading}
+          onRunDemo={(runId) => void console.loadDemoRun(runId)}
+          onCreateIncident={() => void console.createCanonicalIncident()}
+          onRefresh={() => void console.refresh()}
+        />
       </main>
     </div>
   );
