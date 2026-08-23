@@ -3,8 +3,10 @@ from contextlib import asynccontextmanager
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import Depends, FastAPI, HTTPException, status
-from pydantic import BaseModel, ConfigDict
+from fastapi import Depends, FastAPI, HTTPException, Response, status
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, ConfigDict, ValidationError
 from sqlalchemy.engine import Engine
 from sqlmodel import Session
 
@@ -108,6 +110,10 @@ def create_app(*, database_engine: Engine | None = None) -> FastAPI:
         title="PSA Transshipment Recovery",
         lifespan=lifespan,
     )
+
+    @application.exception_handler(ValidationError)
+    async def domain_validation_error(_, error: ValidationError) -> JSONResponse:
+        return JSONResponse(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, content={"detail": jsonable_encoder(error.errors())})
 
     @application.post(
         "/synthetic/scenarios/schedule-delay",
@@ -219,46 +225,72 @@ def create_app(*, database_engine: Engine | None = None) -> FastAPI:
         except CarrierRecoveryConflict as error:
             raise HTTPException(status_code=409, detail=str(error)) from error
 
-    @application.post("/carrier-recovery-cases/{case_id}/request-approval", response_model=Approval)
-    def request_carrier_approval(case_id: UUID, body: RequestApprovalBody, session: SessionDependency) -> Approval:
+    @application.post("/carrier-recovery-cases/{case_id}/request-approval", response_model=Approval, status_code=status.HTTP_201_CREATED)
+    def request_carrier_approval(case_id: UUID, body: RequestApprovalBody, response: Response, session: SessionDependency) -> Approval:
+        workflow = build_carrier_recovery_workflow(session)
         try:
-            return build_carrier_recovery_workflow(session).record_request_approval(RequestApprovalCommand(case_id=case_id, **body.model_dump()))
+            retry = any(item.decision_id == body.proposal_decision_id for item in workflow.history(case_id).approvals)
+            result = workflow.record_request_approval(RequestApprovalCommand(case_id=case_id, **body.model_dump()))
+            if retry:
+                response.status_code = status.HTTP_200_OK
+            return result
         except LookupError as error:
             raise HTTPException(status_code=404, detail="Carrier recovery case or binding not found") from error
         except CarrierRecoveryConflict as error:
             raise HTTPException(status_code=409, detail=str(error)) from error
 
-    @application.post("/carrier-recovery-cases/{case_id}/send", response_model=RTARequestContext)
-    def send_carrier_request(case_id: UUID, session: SessionDependency) -> RTARequestContext:
+    @application.post("/carrier-recovery-cases/{case_id}/send", response_model=RTARequestContext, status_code=status.HTTP_201_CREATED)
+    def send_carrier_request(case_id: UUID, response: Response, session: SessionDependency) -> RTARequestContext:
+        workflow = build_carrier_recovery_workflow(session)
         try:
-            return build_carrier_recovery_workflow(session).send_authorised_request(case_id)
+            history = workflow.history(case_id)
+            retry = history.case.state.value == "AWAITING_CARRIER" and history.request is not None and history.request.status.value == "SENT"
+            result = workflow.send_authorised_request(case_id)
+            if retry:
+                response.status_code = status.HTTP_200_OK
+            return result
         except LookupError as error:
             raise HTTPException(status_code=404, detail="Carrier recovery case not found") from error
         except CarrierRecoveryConflict as error:
             raise HTTPException(status_code=409, detail=str(error)) from error
 
-    @application.post("/carrier-recovery-cases/{case_id}/simulate-carrier-response", response_model=CarrierSimulationResult)
-    def simulate_carrier_response(case_id: UUID, body: EffectiveAtBody, session: SessionDependency) -> CarrierSimulationResult:
+    @application.post("/carrier-recovery-cases/{case_id}/simulate-carrier-response", response_model=CarrierSimulationResult, status_code=status.HTTP_201_CREATED)
+    def simulate_carrier_response(case_id: UUID, body: EffectiveAtBody, response: Response, session: SessionDependency) -> CarrierSimulationResult:
+        workflow = build_carrier_recovery_workflow(session)
         try:
-            return build_carrier_recovery_workflow(session).simulate_response(SimulateCarrierResponseCommand(case_id=case_id, **body.model_dump()))
+            retry = CarrierRecoveryRepository(session).simulation_receipt(case_id) is not None
+            result = workflow.simulate_response(SimulateCarrierResponseCommand(case_id=case_id, **body.model_dump()))
+            if retry:
+                response.status_code = status.HTTP_200_OK
+            return result
         except LookupError as error:
             raise HTTPException(status_code=404, detail="Carrier recovery case not found") from error
         except CarrierRecoveryConflict as error:
             raise HTTPException(status_code=409, detail=str(error)) from error
 
-    @application.post("/carrier-recovery-cases/{case_id}/counter-approval", response_model=Approval)
-    def counter_carrier_approval(case_id: UUID, body: CounterApprovalBody, session: SessionDependency) -> Approval:
+    @application.post("/carrier-recovery-cases/{case_id}/counter-approval", response_model=Approval, status_code=status.HTTP_201_CREATED)
+    def counter_carrier_approval(case_id: UUID, body: CounterApprovalBody, response: Response, session: SessionDependency) -> Approval:
+        workflow = build_carrier_recovery_workflow(session)
         try:
-            return build_carrier_recovery_workflow(session).record_counter_approval(CounterApprovalCommand(case_id=case_id, **body.model_dump()))
+            retry = any(item.decision_id == body.proposal_decision_id for item in workflow.history(case_id).approvals)
+            result = workflow.record_counter_approval(CounterApprovalCommand(case_id=case_id, **body.model_dump()))
+            if retry:
+                response.status_code = status.HTTP_200_OK
+            return result
         except LookupError as error:
             raise HTTPException(status_code=404, detail="Carrier recovery case or binding not found") from error
         except CarrierRecoveryConflict as error:
             raise HTTPException(status_code=409, detail=str(error)) from error
 
-    @application.post("/carrier-recovery-cases/{case_id}/evaluate-timeout", response_model=CarrierRecoveryCase)
-    def evaluate_carrier_timeout(case_id: UUID, body: EffectiveAtBody, session: SessionDependency) -> CarrierRecoveryCase:
+    @application.post("/carrier-recovery-cases/{case_id}/evaluate-timeout", response_model=CarrierRecoveryCase, status_code=status.HTTP_201_CREATED)
+    def evaluate_carrier_timeout(case_id: UUID, body: EffectiveAtBody, response: Response, session: SessionDependency) -> CarrierRecoveryCase:
+        workflow = build_carrier_recovery_workflow(session)
         try:
-            return build_carrier_recovery_workflow(session).evaluate_timeout(EvaluateTimeoutCommand(case_id=case_id, **body.model_dump()))
+            retry = any(item.event_type == "carrier.response_timed_out" for item in workflow.history(case_id).audit_events)
+            result = workflow.evaluate_timeout(EvaluateTimeoutCommand(case_id=case_id, **body.model_dump()))
+            if retry:
+                response.status_code = status.HTTP_200_OK
+            return result
         except LookupError as error:
             raise HTTPException(status_code=404, detail="Carrier recovery case not found") from error
         except CarrierRecoveryConflict as error:
@@ -266,7 +298,11 @@ def create_app(*, database_engine: Engine | None = None) -> FastAPI:
 
     @application.get("/incidents/{incident_id}/carrier-recovery-cases", response_model=list[CarrierRecoveryCase])
     def list_carrier_recovery_cases(incident_id: UUID, session: SessionDependency) -> list[CarrierRecoveryCase]:
-        return CarrierRecoveryRepository(session).list_cases(incident_id)
+        try:
+            IncidentRepository(session).get(incident_id)
+            return CarrierRecoveryRepository(session).list_cases(incident_id)
+        except RecordNotFound as error:
+            raise HTTPException(status_code=404, detail="Incident not found") from error
 
     @application.get("/carrier-recovery-cases/{case_id}", response_model=CarrierRecoveryCase)
     def get_carrier_recovery_case(case_id: UUID, session: SessionDependency) -> CarrierRecoveryCase:

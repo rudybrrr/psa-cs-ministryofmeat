@@ -185,6 +185,12 @@ class PrepareCarrierRecoveryCaseCommand(_ExplicitUtcCommand):
     requested_eta_pta: AwareDatetime
     response_deadline: AwareDatetime
 
+    @model_validator(mode="after")
+    def _deadline_follows_requested_timing(self) -> "PrepareCarrierRecoveryCaseCommand":
+        if self.response_deadline <= self.requested_eta_pta:
+            raise ValueError("response deadline must be later than requested timing")
+        return self
+
 
 class RequestApprovalCommand(FrozenContract):
     case_id: UUID
