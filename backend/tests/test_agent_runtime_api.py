@@ -20,3 +20,6 @@ def test_agent_api_rejects_authority_body_and_unknown_run(api_engine, incident) 
     with TestClient(app) as client:
         assert client.post(f"/incidents/{incident.id}/agent-runs", json={"model": "unsafe"}).status_code == 422
         assert client.post("/agent-runs/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/advance").status_code == 404
+        schema = client.get("/openapi.json").json()
+    assert "requestBody" not in schema["paths"]["/incidents/{incident_id}/agent-runs"]["post"]
+    assert "requestBody" not in schema["paths"]["/agent-runs/{run_id}/advance"]["post"]

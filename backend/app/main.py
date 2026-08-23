@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import Body, Depends, FastAPI, HTTPException, Response, status
+from fastapi import Body, Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, ValidationError
@@ -207,8 +207,8 @@ def create_app(*, database_engine: Engine | None = None, cargo_safety_checker: S
             ) from error
 
     @application.post("/incidents/{incident_id}/agent-runs", response_model=AgentRun, status_code=status.HTTP_201_CREATED)
-    def create_agent_run(incident_id: UUID, session: SessionDependency, body: dict | None = Body(default=None)) -> AgentRun:
-        if body is not None:
+    async def create_agent_run(incident_id: UUID, session: SessionDependency, request: Request) -> AgentRun:
+        if await request.body():
             raise HTTPException(status_code=422, detail="Agent run creation accepts no request body")
         try:
             return agent_runtime(session).create_run(incident_id)
@@ -218,8 +218,8 @@ def create_app(*, database_engine: Engine | None = None, cargo_safety_checker: S
             raise HTTPException(status_code=409, detail=str(error)) from error
 
     @application.post("/agent-runs/{run_id}/advance", response_model=AgentRun)
-    def advance_agent_run(run_id: UUID, session: SessionDependency, body: dict | None = Body(default=None)) -> AgentRun:
-        if body is not None:
+    async def advance_agent_run(run_id: UUID, session: SessionDependency, request: Request) -> AgentRun:
+        if await request.body():
             raise HTTPException(status_code=422, detail="Agent advance accepts no request body")
         try:
             return agent_runtime(session).advance(run_id)
