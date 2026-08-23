@@ -107,14 +107,18 @@ class AgentRuntimeCoordinator:
         pending = self._repository.pending_invocations(run.id)
         if not pending:
             return None
+        latest_step_number = max(
+            (step.step_number for step in self._repository.history(run.id).steps),
+            default=run.step_count,
+        )
         if len(pending) != 1 or pending[0].tool_name != "send_authorised_rta_request":
-            return self._escalate(run, AgentEscalationReason.TOOL_FAILURE, "Unrecoverable pending agent tool invocation.")
+            return self._escalate(run.model_copy(update={"step_count": latest_step_number}), AgentEscalationReason.TOOL_FAILURE, "Unrecoverable pending agent tool invocation.")
         invocation = pending[0]
         try:
             case_id = UUID(str(invocation.arguments["case_id"]))
             context = build_carrier_recovery_workflow(self._session).send_authorised_request(case_id)
         except (CarrierRecoveryConflict, ValueError, KeyError, LookupError):
-            return self._escalate(run, AgentEscalationReason.TOOL_FAILURE, "Pending RTA dispatch could not be recovered safely.")
+            return self._escalate(run.model_copy(update={"step_count": latest_step_number}), AgentEscalationReason.TOOL_FAILURE, "Pending RTA dispatch could not be recovered safely.")
         self._repository.complete_invocation(invocation.model_copy(update={
             "status": AgentToolInvocationStatus.SUCCEEDED,
             "result_summary": f"Recovered authorised request sent at {context.sent_at.isoformat()}.",

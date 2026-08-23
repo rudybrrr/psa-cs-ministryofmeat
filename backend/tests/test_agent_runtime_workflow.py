@@ -161,6 +161,19 @@ def test_crash_recovery_reuses_phase3_idempotent_send_without_duplicate_dispatch
     assert [event.event_type for event in history.audit_events].count("rta.request_sent") == 1
 
 
+def test_unrecoverable_pending_invocation_escalates_without_step_collision(session, incident) -> None:
+    from backend.app.domain.agent_runtime import AgentEscalationReason, AgentStep, AgentStepKind
+
+    runtime = _runtime(session, [])
+    run = _persist_run(session, incident, runtime)
+    pending_step = AgentStep(run_id=run.id, step_number=1, kind=AgentStepKind.TOOL_CALL, action_summary="Invoked unsupported_tool.", model_name=run.model_name, prompt_version=run.prompt_version)
+    runtime._repository.add_step(pending_step)
+    runtime._repository.add_invocation_pending(run.id, pending_step.id, "unsupported_tool", {})
+    result = runtime.advance(run.id)
+    assert result.escalation_reason is AgentEscalationReason.TOOL_FAILURE
+    assert result.step_count == 2
+
+
 def test_accept_response_completes_without_changing_phase2_allocation(session) -> None:
     from backend.app.domain.agent_runtime import AgentModelTurn, AgentToolCall, AgentRunState
     from backend.app.domain.carrier_recovery import RequestApprovalCommand, SimulateCarrierResponseCommand
