@@ -6,11 +6,13 @@ from sqlmodel import Session
 
 from backend.app.domain.carrier_recovery import PrepareCarrierRecoveryCaseCommand
 from backend.app.domain.carrier_recovery import (
+    CarrierRecoveryDisposition,
     CounterApprovalCommand,
     EvaluateTimeoutCommand,
     RequestApprovalCommand,
     SimulateCarrierResponseCommand,
 )
+from backend.app.domain.carrier_recovery import ReconsiderationEvidenceKind, RequestCloseReason
 from backend.app.domain.enums import ApprovalStatus, AuditActor, DecisionAction, DecisionStatus
 from backend.app.orchestration.carrier_recovery import CarrierRecoveryConflict, build_carrier_recovery_workflow
 from backend.app.orchestration.scarce_capacity import build_scarce_capacity_workflow
@@ -188,6 +190,9 @@ def test_request_rejection_closes_authorization_and_recomputes_without_a_dead_en
     assert history.request_context is not None
     assert history.request_context.closed_at is not None
     assert history.results
+    assert {item.reconsideration_evidence_kind for item in history.results} == {ReconsiderationEvidenceKind.REQUEST_REJECTED}
+    assert {item.rejected_approval_id for item in history.results} == {history.approvals[0].id}
+    assert history.request_context.close_reason is RequestCloseReason.REQUEST_REJECTED
 
 
 def test_send_requires_exact_approved_binding(session: Session) -> None:
@@ -316,6 +321,13 @@ def test_accept_creates_effective_requested_timing_without_second_approval(
         effective_at="2026-08-22T08:30:00Z",
     )) == result
     assert history.effective_timings[0].effective_eta_pta == history.request.requested_eta_pta
+    assert {item.effective_connection_timing_id for item in history.results} == {history.effective_timings[0].id}
+    assert all(item.rejected_approval_id is None and item.timeout_request_context_id is None for item in history.results)
+    assert history.case.source_evaluation_id == phase_two.report.id
+    assert phase_two.report.fixture_id == "SYN-CANONICAL-24-V1"
+    assert phase_two.report.seed == 20260822
+    assert phase_two.report.scenario_count == 50
+    assert phase_two.report.selected_allocation is not None
     assert history.case.state.value in {"COMPLETED", "ESCALATED"}
 
 
@@ -390,6 +402,7 @@ def test_approved_counter_creates_exact_effective_timing_idempotently(
 
     assert first == second
     assert history.effective_timings[0].effective_eta_pta == history.carrier_responses[0].counter_eta_pta
+    assert {item.effective_connection_timing_id for item in history.results} == {history.effective_timings[0].id}
     assert history.case.state.value in {"COMPLETED", "ESCALATED"}
 
 
@@ -415,6 +428,8 @@ def test_rejected_counter_uses_no_counter_effective_timing(session: Session) -> 
     history = workflow.history(case.id)
 
     assert history.effective_timings == ()
+    assert {item.reconsideration_evidence_kind for item in history.results} == {ReconsiderationEvidenceKind.COUNTER_REJECTED}
+    assert {item.rejected_approval_id for item in history.results} == {history.approvals[-1].id}
     assert history.case.state.value in {"COMPLETED", "ESCALATED"}
 
 
@@ -439,6 +454,9 @@ def test_timeout_at_deadline_observes_absence_once_and_retries_idempotently(
     assert history.carrier_responses == ()
     assert [event.event_type for event in history.audit_events].count("carrier.response_timed_out") == 1
     assert AuditActor.CARRIER not in {event.actor for event in history.audit_events}
+    assert {item.reconsideration_evidence_kind for item in history.results} == {ReconsiderationEvidenceKind.RESPONSE_TIMEOUT}
+    assert {item.timeout_request_context_id for item in history.results} == {case.id}
+    assert history.request_context.timeout_observed_at == at_deadline.effective_at
 
 
 def test_timeout_before_deadline_and_after_response_fail_closed(session: Session) -> None:

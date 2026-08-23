@@ -11,6 +11,9 @@ from backend.app.domain.carrier_recovery import (
     CarrierRecoveryCaseState,
     CarrierRecoveryCaseStateMachine,
     PrepareCarrierRecoveryCaseCommand,
+    ContainerReconsiderationResult,
+    CarrierRecoveryDisposition,
+    ReconsiderationEvidenceKind,
     parse_explicit_utc,
 )
 from backend.app.domain.enums import DecisionAction
@@ -94,3 +97,16 @@ def test_binding_and_prepare_command_require_explicit_utc_evidence() -> None:
     assert binding.subject_id == REQUEST_ID
     assert command.requested_eta_pta == at(7)
     assert command.response_deadline == at(8)
+
+
+def test_result_rejects_mismatched_typed_reconsideration_evidence() -> None:
+    with pytest.raises(ValidationError):
+        ContainerReconsiderationResult(
+            case_id=CASE_ID, container_id="SYN-CNT-001",
+            disposition=CarrierRecoveryDisposition.STILL_ROLL,
+            prior_decision_id=DECISION_ID, preserved_world_count=0,
+            world_count=50, hard_constraints_satisfied=True,
+            reconsideration_evidence_kind=ReconsiderationEvidenceKind.REQUEST_REJECTED,
+            effective_connection_timing_id=REQUEST_ID,
+            created_at=at(6),
+        )

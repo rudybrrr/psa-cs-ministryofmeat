@@ -5,7 +5,7 @@ from enum import StrEnum
 from typing import Sequence
 from uuid import UUID, uuid4
 
-from pydantic import AwareDatetime, Field, field_validator
+from pydantic import AwareDatetime, Field, field_validator, model_validator
 
 from backend.app.domain.enums import ApprovalStatus
 from backend.app.domain.models import Approval, AuditEvent, CarrierResponse, Decision, RTARequest, FrozenContract, utc_now
@@ -30,6 +30,18 @@ class CarrierRecoveryDisposition(StrEnum):
     PRESERVED_VIA_RTA = "PRESERVED_VIA_RTA"
     STILL_ROLL = "STILL_ROLL"
     ESCALATE = "ESCALATE"
+
+
+class ReconsiderationEvidenceKind(StrEnum):
+    EFFECTIVE_CONNECTION_TIMING = "EFFECTIVE_CONNECTION_TIMING"
+    REQUEST_REJECTED = "REQUEST_REJECTED"
+    COUNTER_REJECTED = "COUNTER_REJECTED"
+    RESPONSE_TIMEOUT = "RESPONSE_TIMEOUT"
+
+
+class RequestCloseReason(StrEnum):
+    REQUEST_REJECTED = "REQUEST_REJECTED"
+    RESPONSE_TIMEOUT = "RESPONSE_TIMEOUT"
 
 
 def parse_explicit_utc(value: str) -> datetime:
@@ -75,6 +87,8 @@ class RTARequestContext(_UtcContract):
     response_deadline: AwareDatetime
     sent_at: AwareDatetime | None = None
     closed_at: AwareDatetime | None = None
+    close_reason: RequestCloseReason | None = None
+    timeout_observed_at: AwareDatetime | None = None
 
 
 class ApprovalBinding(_UtcContract):
@@ -112,7 +126,30 @@ class ContainerReconsiderationResult(_UtcContract):
     preserved_world_count: int = Field(ge=0)
     world_count: int = Field(gt=0)
     hard_constraints_satisfied: bool
+    reconsideration_evidence_kind: ReconsiderationEvidenceKind
+    effective_connection_timing_id: UUID | None = None
+    rejected_approval_id: UUID | None = None
+    timeout_request_context_id: UUID | None = None
     created_at: AwareDatetime = Field(default_factory=utc_now)
+
+    @model_validator(mode="after")
+    def _evidence_reference_matches_kind(self):
+        references = (
+            self.effective_connection_timing_id,
+            self.rejected_approval_id,
+            self.timeout_request_context_id,
+        )
+        if sum(item is not None for item in references) != 1:
+            raise ValueError("exactly one typed reconsideration evidence reference is required")
+        expected = {
+            ReconsiderationEvidenceKind.EFFECTIVE_CONNECTION_TIMING: self.effective_connection_timing_id,
+            ReconsiderationEvidenceKind.REQUEST_REJECTED: self.rejected_approval_id,
+            ReconsiderationEvidenceKind.COUNTER_REJECTED: self.rejected_approval_id,
+            ReconsiderationEvidenceKind.RESPONSE_TIMEOUT: self.timeout_request_context_id,
+        }[self.reconsideration_evidence_kind]
+        if expected is None:
+            raise ValueError("reconsideration evidence reference does not match its kind")
+        return self
 
 
 class CarrierSimulationResult(_UtcContract):

@@ -10,12 +10,15 @@ from sqlmodel import Field, Session, SQLModel, select
 
 from backend.app.domain.carrier_recovery import (
     ApprovalBinding,
+    AuthorizationSubjectKind,
     CarrierRecoveryCase,
     CarrierRecoveryCaseState,
     CarrierRecoveryDecisionLink,
     CarrierRecoveryHistory,
     ContainerReconsiderationResult,
     EffectiveConnectionTiming,
+    ReconsiderationEvidenceKind,
+    RequestCloseReason,
     RTARequestContext,
 )
 from backend.app.domain.enums import ApprovalStatus, CarrierResponseType, RTARequestStatus
@@ -55,6 +58,8 @@ class RTARequestContextRecord(SQLModel, table=True):
     response_deadline_utc: str
     sent_at_utc: str | None = None
     closed_at_utc: str | None = None
+    close_reason: str | None = None
+    timeout_observed_at_utc: str | None = None
 
 
 class ApprovalRecord(SQLModel, table=True):
@@ -126,6 +131,10 @@ class ContainerReconsiderationResultRecord(SQLModel, table=True):
     preserved_world_count: int
     world_count: int
     hard_constraints_satisfied: bool
+    reconsideration_evidence_kind: str
+    effective_connection_timing_id: str | None = None
+    rejected_approval_id: str | None = None
+    timeout_request_context_id: str | None = None
     created_at_utc: str
 
 
@@ -195,13 +204,13 @@ class CarrierRecoveryRepository:
 
     def add_request(self, request: RTARequest, context: RTARequestContext) -> RTARequest:
         self._persist(RTARequestRecord(id=str(request.id), incident_id=str(request.incident_id), connection_id=request.connection_id, requested_eta_pta_utc=to_utc_text(request.requested_eta_pta), status=request.status.value, created_at_utc=to_utc_text(request.created_at)))
-        self._persist(RTARequestContextRecord(case_id=str(context.case_id), request_id=str(context.request_id), payload_fingerprint=context.payload_fingerprint, response_deadline_utc=to_utc_text(context.response_deadline), sent_at_utc=to_utc_text(context.sent_at) if context.sent_at else None, closed_at_utc=to_utc_text(context.closed_at) if context.closed_at else None))
+        self._persist(RTARequestContextRecord(case_id=str(context.case_id), request_id=str(context.request_id), payload_fingerprint=context.payload_fingerprint, response_deadline_utc=to_utc_text(context.response_deadline), sent_at_utc=to_utc_text(context.sent_at) if context.sent_at else None, closed_at_utc=to_utc_text(context.closed_at) if context.closed_at else None, close_reason=context.close_reason.value if context.close_reason else None, timeout_observed_at_utc=to_utc_text(context.timeout_observed_at) if context.timeout_observed_at else None))
         return request
 
     def get_request_context(self, case_id: UUID) -> RTARequestContext:
         record = self._session.get(RTARequestContextRecord, str(case_id))
         if record is None: raise LookupError(f"request context for {case_id} not found")
-        return RTARequestContext(case_id=UUID(record.case_id), request_id=UUID(record.request_id), payload_fingerprint=record.payload_fingerprint, response_deadline=from_utc_text(record.response_deadline_utc), sent_at=from_utc_text(record.sent_at_utc) if record.sent_at_utc else None, closed_at=from_utc_text(record.closed_at_utc) if record.closed_at_utc else None)
+        return RTARequestContext(case_id=UUID(record.case_id), request_id=UUID(record.request_id), payload_fingerprint=record.payload_fingerprint, response_deadline=from_utc_text(record.response_deadline_utc), sent_at=from_utc_text(record.sent_at_utc) if record.sent_at_utc else None, closed_at=from_utc_text(record.closed_at_utc) if record.closed_at_utc else None, close_reason=RequestCloseReason(record.close_reason) if record.close_reason else None, timeout_observed_at=from_utc_text(record.timeout_observed_at_utc) if record.timeout_observed_at_utc else None)
 
     def update_request(self, request: RTARequest) -> RTARequest:
         record = self._session.get(RTARequestRecord, str(request.id))
@@ -217,6 +226,8 @@ class CarrierRecoveryRepository:
             raise LookupError(f"request context for {context.case_id} not found")
         record.sent_at_utc = to_utc_text(context.sent_at) if context.sent_at else None
         record.closed_at_utc = to_utc_text(context.closed_at) if context.closed_at else None
+        record.close_reason = context.close_reason.value if context.close_reason else None
+        record.timeout_observed_at_utc = to_utc_text(context.timeout_observed_at) if context.timeout_observed_at else None
         self._persist(record)
         return context
 
@@ -245,7 +256,39 @@ class CarrierRecoveryRepository:
         return ApprovalBinding(case_id=UUID(record.case_id), proposal_decision_id=UUID(record.proposal_decision_id), subject_kind=record.subject_kind, subject_id=UUID(record.subject_id), payload_fingerprint=record.payload_fingerprint, created_at=from_utc_text(record.created_at_utc))
 
     def add_result(self, result: ContainerReconsiderationResult) -> ContainerReconsiderationResult:
-        self._persist(ContainerReconsiderationResultRecord(id=str(result.id), case_id=str(result.case_id), container_id=result.container_id, disposition=result.disposition.value, prior_decision_id=str(result.prior_decision_id), replacement_decision_id=str(result.replacement_decision_id) if result.replacement_decision_id else None, preserved_world_count=result.preserved_world_count, world_count=result.world_count, hard_constraints_satisfied=result.hard_constraints_satisfied, created_at_utc=to_utc_text(result.created_at)))
+        if result.effective_connection_timing_id is not None:
+            timing = self._session.get(
+                EffectiveConnectionTimingRecord,
+                str(result.effective_connection_timing_id),
+            )
+            if timing is None or timing.case_id != str(result.case_id):
+                raise ValueError("effective timing provenance must belong to the result case")
+        if result.rejected_approval_id is not None:
+            approval = self._session.get(ApprovalRecord, str(result.rejected_approval_id))
+            binding = None if approval is None else self._session.get(
+                ApprovalBindingRecord, approval.decision_id
+            )
+            expected_kind = (
+                AuthorizationSubjectKind.OUTBOUND_REQUEST.value
+                if result.reconsideration_evidence_kind is ReconsiderationEvidenceKind.REQUEST_REJECTED
+                else AuthorizationSubjectKind.COUNTER_PROPOSAL.value
+            )
+            if (
+                approval is None or binding is None or binding.case_id != str(result.case_id)
+                or binding.subject_kind != expected_kind
+                or approval.status != ApprovalStatus.REJECTED.value
+            ):
+                raise ValueError("rejected approval provenance does not match its case or kind")
+        if result.timeout_request_context_id is not None:
+            context = self._session.get(
+                RTARequestContextRecord, str(result.timeout_request_context_id)
+            )
+            if (
+                context is None or context.case_id != str(result.case_id)
+                or context.close_reason != RequestCloseReason.RESPONSE_TIMEOUT.value
+            ):
+                raise ValueError("timeout provenance must be the result case's timed-out request context")
+        self._persist(ContainerReconsiderationResultRecord(id=str(result.id), case_id=str(result.case_id), container_id=result.container_id, disposition=result.disposition.value, prior_decision_id=str(result.prior_decision_id), replacement_decision_id=str(result.replacement_decision_id) if result.replacement_decision_id else None, preserved_world_count=result.preserved_world_count, world_count=result.world_count, hard_constraints_satisfied=result.hard_constraints_satisfied, reconsideration_evidence_kind=result.reconsideration_evidence_kind.value, effective_connection_timing_id=str(result.effective_connection_timing_id) if result.effective_connection_timing_id else None, rejected_approval_id=str(result.rejected_approval_id) if result.rejected_approval_id else None, timeout_request_context_id=str(result.timeout_request_context_id) if result.timeout_request_context_id else None, created_at_utc=to_utc_text(result.created_at)))
         return result
 
     def add_carrier_response(self, response: CarrierResponse) -> CarrierResponse:
@@ -299,7 +342,7 @@ class CarrierRecoveryRepository:
         timing_records = self._session.exec(select(EffectiveConnectionTimingRecord).where(EffectiveConnectionTimingRecord.case_id == str(case_id))).all()
         effective_timings = tuple(EffectiveConnectionTiming(id=UUID(record.id), case_id=UUID(record.case_id), request_id=UUID(record.request_id), carrier_response_id=UUID(record.carrier_response_id), effective_eta_pta=from_utc_text(record.effective_eta_pta_utc), created_at=from_utc_text(record.created_at_utc)) for record in timing_records)
         result_records = self._session.exec(select(ContainerReconsiderationResultRecord).where(ContainerReconsiderationResultRecord.case_id == str(case_id)).order_by(ContainerReconsiderationResultRecord.container_id)).all()
-        results = tuple(ContainerReconsiderationResult(id=UUID(record.id), case_id=UUID(record.case_id), container_id=record.container_id, disposition=record.disposition, prior_decision_id=UUID(record.prior_decision_id), replacement_decision_id=UUID(record.replacement_decision_id) if record.replacement_decision_id else None, preserved_world_count=record.preserved_world_count, world_count=record.world_count, hard_constraints_satisfied=record.hard_constraints_satisfied, created_at=from_utc_text(record.created_at_utc)) for record in result_records)
+        results = tuple(ContainerReconsiderationResult(id=UUID(record.id), case_id=UUID(record.case_id), container_id=record.container_id, disposition=record.disposition, prior_decision_id=UUID(record.prior_decision_id), replacement_decision_id=UUID(record.replacement_decision_id) if record.replacement_decision_id else None, preserved_world_count=record.preserved_world_count, world_count=record.world_count, hard_constraints_satisfied=record.hard_constraints_satisfied, reconsideration_evidence_kind=record.reconsideration_evidence_kind, effective_connection_timing_id=UUID(record.effective_connection_timing_id) if record.effective_connection_timing_id else None, rejected_approval_id=UUID(record.rejected_approval_id) if record.rejected_approval_id else None, timeout_request_context_id=UUID(record.timeout_request_context_id) if record.timeout_request_context_id else None, created_at=from_utc_text(record.created_at_utc)) for record in result_records)
         link_records = self._session.exec(select(CarrierRecoveryDecisionLinkRecord).where(CarrierRecoveryDecisionLinkRecord.case_id == str(case_id))).all()
         decision_links = tuple(CarrierRecoveryDecisionLink(case_id=UUID(record.case_id), decision_id=UUID(record.decision_id), role=record.role, created_at=from_utc_text(record.created_at_utc)) for record in link_records)
         linked_ids = {link.decision_id for link in decision_links}

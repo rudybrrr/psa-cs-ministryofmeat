@@ -26,6 +26,8 @@ from backend.app.domain.carrier_recovery import (
     EvaluateTimeoutCommand,
     CarrierRecoveryDisposition,
     ContainerReconsiderationResult,
+    ReconsiderationEvidenceKind,
+    RequestCloseReason,
 )
 from backend.app.domain.enums import ApprovalStatus, AuditActor, DecisionAction, DecisionStatus, IncidentState, RTARequestStatus
 from backend.app.domain.models import Approval, AuditEvent, Decision, RTARequest, utc_now
@@ -141,7 +143,7 @@ class CarrierRecoveryWorkflow:
                     history.request.model_copy(update={"status": RTARequestStatus.CLOSED})
                 )
                 self._cases.update_request_context(
-                    history.request_context.model_copy(update={"closed_at": now})
+                    history.request_context.model_copy(update={"closed_at": now, "close_reason": RequestCloseReason.REQUEST_REJECTED})
                 )
                 self._cases.update_case(updated_case)
             self._cases.link_audit(case.id, AuditEvent(actor=AuditActor.OPERATOR, actor_id=command.operator_id, incident_id=case.incident_id, event_type="carrier_recovery.request_approval_recorded", payload={"recovery_case_id": str(case.id), "proposal_decision_id": str(command.proposal_decision_id), "subject_id": str(command.request_id), "payload_fingerprint": command.expected_payload_fingerprint, "status": command.status.value}, timestamp=now))
@@ -258,7 +260,7 @@ class CarrierRecoveryWorkflow:
         ):
             raise CarrierRecoveryConflict("timeout is not valid for this request state or deadline")
         closed_request = request.model_copy(update={"status": RTARequestStatus.CLOSED})
-        closed_context = context.model_copy(update={"closed_at": effective_at})
+        closed_context = context.model_copy(update={"closed_at": effective_at, "close_reason": RequestCloseReason.RESPONSE_TIMEOUT, "timeout_observed_at": effective_at})
         timed_out_case = case.model_copy(update={"state": CarrierRecoveryCaseState.RECOMPUTING, "updated_at": effective_at})
         with self._cases.transaction():
             self._cases.update_request(closed_request)
@@ -283,6 +285,7 @@ class CarrierRecoveryWorkflow:
         profiles = {profile.container.id: profile for profile in fixture.profiles if profile.container.onward_connection.id == case.connection_id}
         allocation = set(report.selected_allocation.allocated_container_ids)
         timing = history.effective_timings[0] if history.effective_timings else None
+        evidence_kind, timing_id, approval_id, timeout_context_id = self._reconsideration_evidence(history)
         fallback_links = {link.decision_id for link in history.decision_links if link.role == "FALLBACK_ROLL"}
         decisions = {decision.id: decision for decision in self._decisions.list_for_incident(case.incident_id)}
         fallback_by_container = {decisions[decision_id].container_id: decisions[decision_id] for decision_id in fallback_links if decision_id in decisions}
@@ -324,7 +327,7 @@ class CarrierRecoveryWorkflow:
             if replacements:
                 self._decisions.add_many_uncommitted(tuple(replacements))
             for container_id, disposition, preserved, hard_safe, fallback, replacement in pending_results:
-                result = ContainerReconsiderationResult(case_id=case.id, container_id=container_id, disposition=disposition, prior_decision_id=fallback.id, replacement_decision_id=replacement.id if replacement else None, preserved_world_count=preserved, world_count=len(scenarios.worlds), hard_constraints_satisfied=hard_safe, created_at=created_at)
+                result = ContainerReconsiderationResult(case_id=case.id, container_id=container_id, disposition=disposition, prior_decision_id=fallback.id, replacement_decision_id=replacement.id if replacement else None, preserved_world_count=preserved, world_count=len(scenarios.worlds), hard_constraints_satisfied=hard_safe, reconsideration_evidence_kind=evidence_kind, effective_connection_timing_id=timing_id, rejected_approval_id=approval_id, timeout_request_context_id=timeout_context_id, created_at=created_at)
                 self._cases.add_result(result)
                 if replacement is not None:
                     self._cases.add_decision_link(CarrierRecoveryDecisionLink(case_id=case.id, decision_id=replacement.id, role=disposition.value, created_at=created_at))
@@ -332,6 +335,19 @@ class CarrierRecoveryWorkflow:
             self._cases.link_audit(case.id, AuditEvent(actor=AuditActor.SYSTEM, actor_id="carrier-recovery-workflow", incident_id=case.incident_id, event_type="carrier_recovery.recomputation_completed", payload={"recovery_case_id": str(case.id), "seed": report.seed, "world_count": report.scenario_count, "selected_allocation": list(report.selected_allocation.allocated_container_ids)}, timestamp=created_at))
             self._cases.link_audit(case.id, AuditEvent(actor=AuditActor.POLICY, actor_id="synthetic-p90-policy", incident_id=case.incident_id, event_type="carrier_recovery.disposition_recorded", payload={"recovery_case_id": str(case.id), "state": terminal.value}, timestamp=created_at))
         return completed_case
+
+    @staticmethod
+    def _reconsideration_evidence(history: CarrierRecoveryHistory):
+        if history.effective_timings:
+            return (ReconsiderationEvidenceKind.EFFECTIVE_CONNECTION_TIMING, history.effective_timings[0].id, None, None)
+        for binding in history.bindings:
+            approval = next((item for item in history.approvals if item.decision_id == binding.proposal_decision_id), None)
+            if approval is not None and approval.status is ApprovalStatus.REJECTED:
+                kind = ReconsiderationEvidenceKind.REQUEST_REJECTED if binding.subject_kind is AuthorizationSubjectKind.OUTBOUND_REQUEST else ReconsiderationEvidenceKind.COUNTER_REJECTED
+                return (kind, None, approval.id, None)
+        if history.request_context and history.request_context.close_reason is RequestCloseReason.RESPONSE_TIMEOUT:
+            return (ReconsiderationEvidenceKind.RESPONSE_TIMEOUT, None, None, history.request_context.case_id)
+        raise CarrierRecoveryConflict("recomputation lacks durable reconsideration evidence")
 
     def simulate_response(
         self,
