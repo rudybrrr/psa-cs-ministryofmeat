@@ -11,14 +11,16 @@ from backend.app.domain.cargo_safety import CargoSafetyReviewState
 from backend.app.storage.carrier_recovery import CarrierRecoveryRepository
 from backend.app.storage.cargo_safety import CargoSafetyRepository
 from backend.app.storage.repositories import DecisionRepository, ScarcityEvaluationRepository
+from backend.app.orchestration.dynamic_yard import DynamicYardWorkflow
 
 
 class _Clock(Protocol):
     def now(self) -> datetime: ...
 
 
-def _tool(name: str, description: str, required: tuple[str, ...] = ()) -> AgentToolDefinition:
-    return AgentToolDefinition(name=name, description=description, parameters={"type": "object", "properties": {key: {"type": "string"} for key in required}, "required": list(required), "additionalProperties": False})
+def _tool(name: str, description: str, required: tuple[str, ...] = (), string_enums: dict[str, tuple[str, ...]] | None = None) -> AgentToolDefinition:
+    enums = string_enums or {}
+    return AgentToolDefinition(name=name, description=description, parameters={"type": "object", "properties": {key: ({"type": "string", "enum": list(enums[key])} if key in enums else {"type": "string"}) for key in required}, "required": list(required), "additionalProperties": False})
 
 
 class AgentToolRegistry:
@@ -46,8 +48,16 @@ class AgentToolRegistry:
                 history = CarrierRecoveryRepository(session).history(case.id)
                 if history.request_context and not history.carrier_responses and self._clock.now() >= history.request_context.response_deadline:
                     tools.append(_tool("evaluate_carrier_timeout", "Evaluate a due carrier timeout using the trusted clock.", ("case_id",)))
-        if not cases:
-            tools.append(_tool("prepare_rta_request", "Prepare configured RTA recovery for a connection.", ("connection_id",)))
+        dynamic = DynamicYardWorkflow.for_session(session)
+        dynamic_history = dynamic.history(run.incident_id)
+        unhandled = next((assessment for assessment in dynamic_history.assessments if assessment.handled_at is None), None)
+        if not cases and unhandled is None:
+            if not dynamic_history.snapshots:
+                tools.append(_tool("prepare_rta_request", "Prepare configured RTA recovery for a connection.", ("connection_id",)))
+            else:
+                compatible = dynamic.compatible_connection_ids(run.incident_id)
+                if compatible:
+                    tools.append(_tool("prepare_rta_request", "Prepare configured RTA recovery for a compatible connection.", ("connection_id",), {"connection_id": compatible}))
         if any(review.state is CargoSafetyReviewState.PENDING_CHECK for review in CargoSafetyRepository(session).list_reviews(run.incident_id)):
             tools.append(_tool("request_cargo_safety_review", "Evaluate an existing pending cargo safety review.", ("container_id",)))
         return tuple({tool.name: tool for tool in tools}.values())
@@ -61,6 +71,8 @@ def build_agent_turn_context(session: Session, run: AgentRun, registry: AgentToo
     except LookupError:
         scarcity_summary = {"status": "missing"}
     cases = CarrierRecoveryRepository(session).list_cases(run.incident_id)
+    dynamic = DynamicYardWorkflow.for_session(session)
+    dynamic_history = dynamic.history(run.incident_id)
     return AgentTurnContext(
         run_id=run.id,
         incident_id=run.incident_id,
@@ -71,6 +83,7 @@ def build_agent_turn_context(session: Session, run: AgentRun, registry: AgentToo
             "scarcity": scarcity_summary,
             "decision_ids": [str(decision.id) for decision in decisions],
             "carrier_cases": [{"id": str(case.id), "state": case.state.value} for case in cases],
+            "dynamic_yard": {"snapshot_count": len(dynamic_history.snapshots), "compatible_connection_ids": list(dynamic.compatible_connection_ids(run.incident_id)) if dynamic_history.snapshots else []},
             "available_tools": [tool.name for tool in registry.available_tools(session, run)],
         },
         evidence_refs=tuple(str(decision.id) for decision in decisions[-10:]),

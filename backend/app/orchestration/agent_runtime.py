@@ -20,6 +20,7 @@ from backend.app.domain.enums import ApprovalStatus
 from backend.app.domain.cargo_safety import CargoSafetyReviewState
 from backend.app.orchestration.cargo_safety import CargoSafetyWorkflow
 from backend.app.storage.cargo_safety import CargoSafetyRepository
+from backend.app.orchestration.dynamic_yard import DynamicYardWorkflow
 
 
 class AgentRuntimeClock(Protocol):
@@ -162,6 +163,8 @@ class AgentRuntimeCoordinator:
                 updated = run.model_copy(update={"step_count": step.step_number, "updated_at": utc_now()})
                 result = "Evidence read."
             elif tool_name == "prepare_rta_request":
+                if not DynamicYardWorkflow.for_session(self._session).phase3_compatible(run.incident_id, str(arguments["connection_id"])):
+                    raise ValueError("connection is incompatible with current dynamic-yard evidence")
                 case = build_carrier_recovery_workflow(self._session).prepare(self._configuration.prepare_command(run.incident_id, str(arguments["connection_id"])))
                 updated = run.model_copy(update={"state": AgentRunState.WAITING, "wait_kind": AgentWaitKind.REQUEST_APPROVAL, "wait_subject_id": str(case.id), "step_count": step.step_number, "updated_at": utc_now()})
                 result = "Carrier request prepared; operator approval required."
