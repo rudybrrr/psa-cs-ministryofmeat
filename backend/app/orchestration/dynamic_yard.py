@@ -145,6 +145,9 @@ class DynamicYardWorkflow:
     def history(self, incident_id: UUID) -> AllocationTradeoffHistory:
         return self._repository.history(incident_id)
 
+    def latest_unhandled_assessment(self, incident_id: UUID):
+        return self._repository.latest_unhandled_assessment(incident_id)
+
     @staticmethod
     def _options_fingerprint(options: tuple[AllocationTradeoffOption, ...]) -> str:
         from hashlib import sha256

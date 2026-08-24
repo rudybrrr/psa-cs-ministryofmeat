@@ -51,6 +51,9 @@ class AgentToolRegistry:
         dynamic = DynamicYardWorkflow.for_session(session)
         dynamic_history = dynamic.history(run.incident_id)
         unhandled = next((assessment for assessment in dynamic_history.assessments if assessment.handled_at is None), None)
+        stronger_wait = run.state is AgentRunState.WAITING and run.wait_kind is not None and run.wait_kind.value != "NEW_OPERATIONAL_EVIDENCE"
+        if unhandled is not None and not stronger_wait:
+            tools.append(_tool("request_expedite_feasibility", "Apply the latest deterministic expedite reconsideration."))
         if not cases and unhandled is None:
             if not dynamic_history.snapshots:
                 tools.append(_tool("prepare_rta_request", "Prepare configured RTA recovery for a connection.", ("connection_id",)))
@@ -58,7 +61,7 @@ class AgentToolRegistry:
                 compatible = dynamic.compatible_connection_ids(run.incident_id)
                 if compatible:
                     tools.append(_tool("prepare_rta_request", "Prepare configured RTA recovery for a compatible connection.", ("connection_id",), {"connection_id": compatible}))
-        if any(review.state is CargoSafetyReviewState.PENDING_CHECK for review in CargoSafetyRepository(session).list_reviews(run.incident_id)):
+        if unhandled is None and any(review.state is CargoSafetyReviewState.PENDING_CHECK for review in CargoSafetyRepository(session).list_reviews(run.incident_id)):
             tools.append(_tool("request_cargo_safety_review", "Evaluate an existing pending cargo safety review.", ("container_id",)))
         return tuple({tool.name: tool for tool in tools}.values())
 

@@ -191,6 +191,14 @@ class AgentRuntimeCoordinator:
                     return self._escalate(run.model_copy(update={"step_count": step.step_number}), AgentEscalationReason.SAFETY_REVIEW_REQUIRED, "Phase 4 cargo safety policy requires human review.")
                 updated = run.model_copy(update={"step_count": step.step_number, "updated_at": utc_now()})
                 result = "Cargo safety review completed without automation block."
+            elif tool_name == "request_expedite_feasibility":
+                result = DynamicYardWorkflow.for_session(self._session).apply_latest_assessment(run.incident_id, run.id)
+                if hasattr(result, "state") and result.state.value == "OPEN":
+                    updated = run.model_copy(update={"state": AgentRunState.WAITING, "wait_kind": AgentWaitKind.HUMAN_TRADEOFF_DECISION, "wait_subject_id": str(result.id), "step_count": step.step_number, "updated_at": utc_now()})
+                    result = "Deterministic tradeoff review requires an exact human selection."
+                else:
+                    updated = run.model_copy(update={"step_count": step.step_number, "updated_at": utc_now()})
+                    result = "Deterministic expedite reconsideration applied."
             elif tool_name == "complete_agent_run":
                 if self._actionable_work_remains(run):
                     raise ValueError("actionable recovery work remains")
@@ -203,7 +211,11 @@ class AgentRuntimeCoordinator:
                 self._repository.complete_invocation(complete)
                 return self._escalate(run.model_copy(update={"step_count": step.step_number}), AgentEscalationReason.UNRESOLVED_TRADEOFF, "Agent requested safe escalation.")
             elif tool_name == "pause_agent_run":
-                raise ValueError("pause requires a durable external wait condition")
+                history = DynamicYardWorkflow.for_session(self._session).history(run.incident_id)
+                if not history.revisions or not any(snapshot.stage.value == "PRE_DISCHARGE" for snapshot in history.snapshots) or any(snapshot.stage.value == "DISCHARGE_ACTIVE" for snapshot in history.snapshots):
+                    raise ValueError("pause requires pending dynamic-yard discharge evidence")
+                updated = run.model_copy(update={"state": AgentRunState.WAITING, "wait_kind": AgentWaitKind.NEW_OPERATIONAL_EVIDENCE, "wait_subject_id": str(run.incident_id), "step_count": step.step_number, "updated_at": utc_now()})
+                result = "Waiting for durable discharge-active operational evidence."
             else:
                 raise ValueError("tool is unavailable")
             complete = invocation.model_copy(update={"status": AgentToolInvocationStatus.SUCCEEDED, "result_summary": result, "completed_at": utc_now()})
@@ -215,6 +227,12 @@ class AgentRuntimeCoordinator:
             return self._repository.update_run(run.model_copy(update={"step_count": step.step_number, "updated_at": utc_now()}))
 
     def _resolve_wait(self, run: AgentRun) -> AgentRun | None:
+        if run.wait_kind is AgentWaitKind.NEW_OPERATIONAL_EVIDENCE:
+            if DynamicYardWorkflow.for_session(self._session).latest_unhandled_assessment(run.incident_id) is None:
+                return None
+            return self._repository.update_run(run.model_copy(update={"state": AgentRunState.RUNNING, "wait_kind": None, "wait_subject_id": None, "updated_at": utc_now()}))
+        if run.wait_kind is AgentWaitKind.HUMAN_TRADEOFF_DECISION:
+            return None
         if run.wait_subject_id is None:
             return None
         try:
@@ -251,7 +269,8 @@ class AgentRuntimeCoordinator:
 
     def _actionable_work_remains(self, run: AgentRun) -> bool:
         cases = CarrierRecoveryRepository(self._session).list_cases(run.incident_id)
-        return any(case.state not in {CarrierRecoveryCaseState.COMPLETED, CarrierRecoveryCaseState.ESCALATED} for case in cases) or any(review.state is CargoSafetyReviewState.PENDING_CHECK for review in CargoSafetyRepository(self._session).list_reviews(run.incident_id))
+        dynamic = DynamicYardWorkflow.for_session(self._session).history(run.incident_id)
+        return any(assessment.handled_at is None for assessment in dynamic.assessments) or any(review.state.value == "OPEN" for review in dynamic.reviews) or any(case.state not in {CarrierRecoveryCaseState.COMPLETED, CarrierRecoveryCaseState.ESCALATED} for case in cases) or any(review.state is CargoSafetyReviewState.PENDING_CHECK for review in CargoSafetyRepository(self._session).list_reviews(run.incident_id))
 
     def _escalate(self, run: AgentRun, reason: AgentEscalationReason, summary: str) -> AgentRun:
         step = AgentStep(run_id=run.id, step_number=run.step_count + 1, kind=AgentStepKind.ESCALATE, action_summary=summary, model_name=run.model_name, prompt_version=run.prompt_version)
