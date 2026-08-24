@@ -274,3 +274,12 @@ Only the Windows Codex agent edits this file.
 
 - Scope: generated human-review IDs before their immutable options, fingerprints the exact persisted option payloads, verifies complete human-wait resolution evidence before resuming a model turn, removes the duplicate human-selection POLICY revision audit, and restores pending cargo-safety review priority over unhandled dynamic-yard evidence while retaining carrier-mutation stale-plan gates.
 - Verification: focused Phase 5B suite passed `28` tests; canonical same-run hero passed `1`; full backend suite passed `332`, skipped `2`. All runs retained only the existing `11` Starlette/FastAPI deprecation warnings. The final hero still proves `601 -> 602`, `SYN-CNT-005 OUT -> SYN-CNT-001 IN`, locked `002/004`, JV2's exact `SYN-CNT-017` affected set, and `ESCALATED / SAFETY_REVIEW_REQUIRED`.
+
+## 2026-08-25 — Phase 6 full agent/frontend integration
+
+- Branch/base: `feat/phase6-full-agent-frontend-integration` from `fe707f0e4f38849d96f6ae134ac65327f86a4cf7`.
+- Spec/plan: `2aba919` (`docs/superpowers/specs/2026-08-25-phase6-full-agent-frontend-integration-design.md`); `1ee6ee9` (`docs/superpowers/plans/2026-08-25-phase6-full-agent-frontend-integration.md`).
+- Scope: extended the existing React operations-console hook/client/component architecture with explicit AgentRun, dynamic-yard, tradeoff, and cargo-safety panels and typed clients. Agent advance remains a one-shot explicit action; no polling, browser allocation logic, or reasoning stream was added.
+- Backend addition: additive read-only `GET /incidents/{incident_id}/allocation-tradeoff-options`, exposing already-persisted tradeoff options required for the operator to select an exact backend-owned option. No workflow or authority behavior changed.
+- Verification: backend suite `332 passed, 2 skipped`; `uv lock --check` passed. Frontend suite `37 passed`; typecheck and production build passed; lint exited zero with the pre-existing AuditTimeline Fast Refresh warning. `git diff --check` passed.
+- Deviations: no browser/manual smoke was run in this environment. Existing console tests required optional new incident-bundle reads to tolerate absent/mock-unimplemented Phase 5 endpoints; base incident, scarcity, and carrier failures remain surfaced through the existing error state.

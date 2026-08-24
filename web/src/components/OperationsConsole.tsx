@@ -6,6 +6,10 @@ import { RecoverySummaryPanel } from "./incident/RecoverySummary";
 import { ContainerRecoveryTable } from "./recovery/ContainerRecoveryTable";
 import { CarrierRecoveryPanel } from "./carrier/CarrierRecoveryPanel";
 import { SyntheticDemoControl } from "./demo/SyntheticDemoControl";
+import { AgentRunPanel } from "./agent/AgentRunPanel";
+import { DynamicYardPanel } from "./dynamic/DynamicYardPanel";
+import { TradeoffReviewPanel } from "./dynamic/TradeoffReviewPanel";
+import { CargoSafetyPanel } from "./safety/CargoSafetyPanel";
 import { useRecoveryConsole } from "../hooks/useRecoveryConsole";
 
 export function OperationsConsole() {
@@ -22,6 +26,11 @@ export function OperationsConsole() {
           fixtureId={console.fixture?.fixture_id ?? null}
           loading={console.loading}
         />
+
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]">
+          <AgentRunPanel run={console.agentRuns.at(-1) ?? null} history={console.selectedAgentHistory} loading={console.loading} onStart={() => void console.startAgent()} onAdvance={() => void console.advanceAgent()} onRefresh={() => void console.refresh()} />
+          <DynamicYardPanel snapshots={console.yardForecasts} revisions={console.allocationRevisions} commitments={console.expediteCommitments} loading={console.loading} onBootstrap={() => void console.bootstrapYard()} onActive={() => void console.publishActive()} />
+        </div>
 
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]">
           <ContainerRecoveryTable
@@ -48,6 +57,9 @@ export function OperationsConsole() {
             onEvaluateTimeout={() => void console.evaluateTimeout()}
           />
         </div>
+
+        <TradeoffReviewPanel reviews={console.tradeoffReviews} options={console.tradeoffOptions} loading={console.loading} onSelect={(review, optionId) => void console.chooseTradeoff(review, optionId)} />
+        <CargoSafetyPanel reviews={console.cargoSafetyReviews} histories={console.safetyHistories} loading={console.loading} onEvaluate={(id) => void console.evaluateSafety(id)} />
 
         {!console.incident && !console.loading && (
           <div className="rounded border border-dashed border-slate-800 bg-slate-950/40 px-6 py-10 text-center">

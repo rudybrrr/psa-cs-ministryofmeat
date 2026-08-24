@@ -1,0 +1,11 @@
+import { request } from "./client";
+import type { AllocationRevision, AllocationTradeoffOption, AllocationTradeoffReview, AllocationTradeoffSelectionBody, ExpediteCommitment, ExpediteReconsiderationAssessment, YardForecastSnapshot } from "./types";
+export const bootstrapDynamicYard = (id: string) => request<AllocationRevision[]>(`/synthetic/scenarios/${id}/dynamic-yard/bootstrap`, { method: "POST" });
+export const publishDischargeActive = (id: string) => request<ExpediteReconsiderationAssessment>(`/synthetic/scenarios/${id}/dynamic-yard/discharge-active`, { method: "POST" });
+export const listYardForecasts = (id: string) => request<YardForecastSnapshot[]>(`/incidents/${id}/yard-forecast-snapshots`);
+export const listAllocationRevisions = (id: string) => request<AllocationRevision[]>(`/incidents/${id}/allocation-revisions`);
+export const listExpediteCommitments = (id: string) => request<ExpediteCommitment[]>(`/incidents/${id}/expedite-commitments`);
+export const listReconsiderations = (id: string) => request<ExpediteReconsiderationAssessment[]>(`/incidents/${id}/expedite-reconsiderations`);
+export const listTradeoffReviews = (id: string) => request<AllocationTradeoffReview[]>(`/incidents/${id}/allocation-tradeoff-reviews`);
+export const listTradeoffOptions = (id: string) => request<AllocationTradeoffOption[]>(`/incidents/${id}/allocation-tradeoff-options`);
+export const selectTradeoff = (id: string, body: AllocationTradeoffSelectionBody) => request<AllocationRevision>(`/allocation-tradeoff-reviews/${id}/selection`, { method: "POST", body: JSON.stringify(body) });
