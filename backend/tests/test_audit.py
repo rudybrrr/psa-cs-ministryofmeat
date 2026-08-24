@@ -250,6 +250,10 @@ def test_database_helpers_create_tables_and_yield_a_usable_session(
         "agent_runs",
         "agent_steps",
         "agent_tool_invocations",
+        "allocation_revisions",
+        "allocation_tradeoff_options",
+        "allocation_tradeoff_reviews",
+        "allocation_tradeoff_selections",
         "approval_bindings",
         "approvals",
         "carrier_recovery_audit_links",
@@ -263,12 +267,15 @@ def test_database_helpers_create_tables_and_yield_a_usable_session(
             "container_reconsideration_results",
         "decisions",
         "effective_connection_timings",
+        "expedite_commitments",
+        "expedite_reconsideration_assessments",
         "incidents",
         "rta_request_contexts",
             "rta_requests",
             "semantic_safety_assessments",
-            "semantic_safety_policy_results",
+        "semantic_safety_policy_results",
         "scarcity_evaluations",
+        "yard_forecast_snapshots",
     }
     assert yielded_session.exec(select(IncidentRecord)).all() == []
 
