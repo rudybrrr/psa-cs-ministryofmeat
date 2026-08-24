@@ -59,6 +59,9 @@ from backend.app.domain.agent_runtime import AgentHistory, AgentRun
 from backend.app.orchestration.agent_runtime import AgentRuntimeCoordinator, CanonicalAgentRuntimeConfiguration
 from backend.app.services.agent_model import AgentModel, OpenAIAgentModel
 from backend.app.storage.agent_runtime import AgentRuntimeConflict, AgentRuntimeRepository
+from backend.app.domain.dynamic_yard import AllocationRevision, AllocationTradeoffReview, ExpediteCommitment, ExpediteReconsiderationAssessment, YardForecastSnapshot
+from backend.app.orchestration.dynamic_yard import DynamicYardWorkflow
+from backend.app.services.dynamic_yard import CanonicalDynamicYardHarness
 
 
 class TriggerResponse(BaseModel):
@@ -189,6 +192,53 @@ def create_app(*, database_engine: Engine | None = None, cargo_safety_checker: S
     def agent_runtime(session: Session) -> AgentRuntimeCoordinator:
         configuration = CanonicalAgentRuntimeConfiguration.load()
         return AgentRuntimeCoordinator(session=session, model=agent_model or OpenAIAgentModel(), clock=configuration.clock("before_deadline"), configuration=configuration)
+
+    def dynamic_yard_workflow(session: Session) -> DynamicYardWorkflow:
+        return DynamicYardWorkflow.for_session(session)
+
+    @application.post("/synthetic/scenarios/{incident_id}/dynamic-yard/bootstrap", response_model=list[AllocationRevision], status_code=status.HTTP_201_CREATED)
+    async def bootstrap_dynamic_yard(incident_id: UUID, session: SessionDependency, request: Request) -> list[AllocationRevision]:
+        if await request.body():
+            raise HTTPException(status_code=422, detail="Dynamic-yard bootstrap accepts no request body")
+        try:
+            return list(dynamic_yard_workflow(session).initialize(incident_id, CanonicalDynamicYardHarness().bootstrap_snapshot(incident_id)).revisions)
+        except (LookupError, RecordNotFound) as error:
+            raise HTTPException(status_code=404, detail="Incident or scarcity evaluation not found") from error
+        except ValueError as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+
+    @application.post("/synthetic/scenarios/{incident_id}/dynamic-yard/discharge-active", response_model=ExpediteReconsiderationAssessment, status_code=status.HTTP_201_CREATED)
+    async def discharge_active_dynamic_yard(incident_id: UUID, session: SessionDependency, request: Request) -> ExpediteReconsiderationAssessment:
+        if await request.body():
+            raise HTTPException(status_code=422, detail="Dynamic-yard discharge-active accepts no request body")
+        try:
+            assessment = dynamic_yard_workflow(session).ingest(CanonicalDynamicYardHarness().discharge_active_snapshot(incident_id))
+            if assessment is None: raise HTTPException(status_code=409, detail="No discharge-active assessment was created")
+            return assessment
+        except (LookupError, RecordNotFound) as error:
+            raise HTTPException(status_code=404, detail="Dynamic-yard flow not found") from error
+        except ValueError as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+
+    @application.get("/incidents/{incident_id}/yard-forecast-snapshots", response_model=list[YardForecastSnapshot])
+    def list_yard_forecast_snapshots(incident_id: UUID, session: SessionDependency) -> list[YardForecastSnapshot]:
+        return list(dynamic_yard_workflow(session).history(incident_id).snapshots)
+
+    @application.get("/incidents/{incident_id}/allocation-revisions", response_model=list[AllocationRevision])
+    def list_allocation_revisions(incident_id: UUID, session: SessionDependency) -> list[AllocationRevision]:
+        return list(dynamic_yard_workflow(session).history(incident_id).revisions)
+
+    @application.get("/incidents/{incident_id}/expedite-commitments", response_model=list[ExpediteCommitment])
+    def list_expedite_commitments(incident_id: UUID, session: SessionDependency) -> list[ExpediteCommitment]:
+        return list(dynamic_yard_workflow(session).history(incident_id).commitments)
+
+    @application.get("/incidents/{incident_id}/expedite-reconsiderations", response_model=list[ExpediteReconsiderationAssessment])
+    def list_expedite_reconsiderations(incident_id: UUID, session: SessionDependency) -> list[ExpediteReconsiderationAssessment]:
+        return list(dynamic_yard_workflow(session).history(incident_id).assessments)
+
+    @application.get("/incidents/{incident_id}/allocation-tradeoff-reviews", response_model=list[AllocationTradeoffReview])
+    def list_allocation_tradeoff_reviews(incident_id: UUID, session: SessionDependency) -> list[AllocationTradeoffReview]:
+        return list(dynamic_yard_workflow(session).history(incident_id).reviews)
 
     @application.get(
         "/incidents/{incident_id}",
