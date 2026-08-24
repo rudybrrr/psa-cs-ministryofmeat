@@ -1,8 +1,10 @@
 from datetime import UTC, datetime
 
+import pytest
 from backend.app.domain.agent_runtime import AgentRun, AgentRunState
 from backend.app.orchestration.agent_context import AgentToolRegistry
 from backend.app.orchestration.agent_runtime import FixedAgentRuntimeClock
+from backend.app.storage.agent_runtime import AgentRuntimeConflict
 
 
 def test_feasibility_tool_is_zero_argument_when_material_evidence_is_pending(session, incident) -> None:
@@ -10,3 +12,33 @@ def test_feasibility_tool_is_zero_argument_when_material_evidence_is_pending(ses
     run = AgentRun(incident_id=incident.id, state=AgentRunState.RUNNING, model_name="test", prompt_version="test")
 
     assert "request_expedite_feasibility" not in {tool.name for tool in registry.available_tools(session, run)}
+
+
+def test_human_tradeoff_wait_resumes_only_after_exact_selection_without_early_model_call(session, incident) -> None:
+    from backend.app.domain.agent_runtime import AgentModelTurn, AgentToolCall, AgentRunState, AgentWaitKind
+    from backend.app.services.agent_model import FakeAgentModel
+    from backend.app.orchestration.agent_runtime import AgentRuntimeCoordinator, CanonicalAgentRuntimeConfiguration
+    from backend.app.storage.repositories import IncidentRepository
+    from backend.app.orchestration.dynamic_yard import DynamicYardWorkflow
+    from backend.tests.test_dynamic_yard_tradeoff_selection import _pending_review
+
+    IncidentRepository(session).create(incident)
+    review, option = _pending_review(session, incident.id)
+    model = FakeAgentModel([AgentModelTurn(tool_call=AgentToolCall(name="escalate_agent_run", arguments={}))])
+    configuration = CanonicalAgentRuntimeConfiguration.load()
+    runtime = AgentRuntimeCoordinator(session=session, model=model, clock=configuration.clock("before_deadline"), configuration=configuration)
+    run = runtime.create_run(incident.id)
+    waiting = run.model_copy(update={"state": AgentRunState.WAITING, "wait_kind": AgentWaitKind.HUMAN_TRADEOFF_DECISION, "wait_subject_id": str(review.id)})
+    runtime._repository.update_run(waiting)
+
+    with pytest.raises(AgentRuntimeConflict, match="unresolved"):
+        runtime.advance(run.id)
+    assert runtime.get_run(run.id).wait_subject_id == str(review.id)
+    assert model.calls == 0
+    DynamicYardWorkflow.for_session(session).select_tradeoff(review.id, selected_option_id=option.id, expected_options_fingerprint=review.options_fingerprint, operator_id="operator-1")
+    assert runtime.get_run(run.id).wait_kind is AgentWaitKind.HUMAN_TRADEOFF_DECISION
+    assert model.calls == 0
+    resumed = runtime.advance(run.id)
+    assert resumed.id == run.id
+    assert model.calls == 1
+    assert resumed.wait_kind is None and resumed.wait_subject_id is None

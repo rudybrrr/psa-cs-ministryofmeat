@@ -19,11 +19,14 @@ from backend.app.domain.dynamic_yard import (
     YardForecastSnapshot,
 )
 from backend.app.domain.scarcity import AllocationPlan, AllocationStrategy
+from backend.app.domain.enums import AuditActor
+from backend.app.domain.models import AuditEvent
 from backend.app.evaluation.dynamic_yard import connection_is_phase3_compatible, reconstruct_phase2_worlds
 from backend.app.optimization.dynamic_yard import assess_reconsideration
 from backend.app.services.canonical_incident import SyntheticCanonicalIncidentService
 from backend.app.storage.dynamic_yard import DynamicYardRepository
 from backend.app.storage.repositories import ScarcityEvaluationRepository
+from backend.app.storage.repositories import AuditRepository
 
 
 class DynamicYardWorkflow:
@@ -169,8 +172,12 @@ class DynamicYardWorkflow:
         if assessment is None:
             raise LookupError("tradeoff reconsideration assessment not found")
         with self._repository.transaction():
-            self._repository.select_tradeoff_option(review.id, selected_option_id=selected_option_id, expected_options_fingerprint=expected_options_fingerprint, operator_id=operator_id)
-            return self._apply_candidate(review.incident_id, assessment, option.allocated_container_ids, option.preserved_connection_total, option.expected_preserved_connections)
+            selection = self._repository.select_tradeoff_option(review.id, selected_option_id=selected_option_id, expected_options_fingerprint=expected_options_fingerprint, operator_id=operator_id)
+            revision = self._apply_candidate(review.incident_id, assessment, option.allocated_container_ids, option.preserved_connection_total, option.expected_preserved_connections)
+            audit = AuditRepository(self._session)
+            audit.add_uncommitted(AuditEvent(actor=AuditActor.OPERATOR, actor_id=operator_id, incident_id=review.incident_id, event_type="allocation_tradeoff.option_selected", payload={"review_id": str(review.id), "selected_option_id": str(selection.selected_option_id), "options_fingerprint": review.options_fingerprint}))
+            audit.add_uncommitted(AuditEvent(actor=AuditActor.POLICY, actor_id="allocation-dominance-policy", incident_id=review.incident_id, event_type="allocation_revision.applied", payload={"review_id": str(review.id), "assessment_id": str(assessment.id), "parent_revision_id": str(revision.parent_revision_id), "child_revision_id": str(revision.id), "allocated_container_ids": list(revision.allocated_container_ids)}))
+            return revision
 
     @staticmethod
     def _options_fingerprint(options: tuple[AllocationTradeoffOption, ...]) -> str:
