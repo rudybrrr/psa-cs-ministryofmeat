@@ -159,6 +159,8 @@ class AgentRuntimeCoordinator:
         self._repository.add_step(step)
         invocation = self._repository.add_invocation_pending(run.id, step.id, tool_name, arguments)
         try:
+            if tool_name in {"prepare_rta_request", "send_authorised_rta_request", "evaluate_carrier_timeout"} and DynamicYardWorkflow.for_session(self._session).latest_unhandled_assessment(run.incident_id) is not None:
+                raise ValueError("material dynamic-yard reconsideration must be handled before carrier mutation")
             if tool_name in {"get_incident_context", "get_scarcity_evaluation", "get_carrier_recovery_cases", "get_carrier_recovery_history", "get_cargo_safety_reviews"}:
                 updated = run.model_copy(update={"step_count": step.step_number, "updated_at": utc_now()})
                 result = "Evidence read."

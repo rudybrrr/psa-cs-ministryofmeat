@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from backend.app.domain.dynamic_yard import ContainerReadyForecast, ForecastStage, YardForecastSnapshot
@@ -27,4 +27,5 @@ class CanonicalDynamicYardHarness:
             if stage is ForecastStage.DISCHARGE_ACTIVE and profile.container.id == "SYN-CNT-005":
                 p50 = p50 - timedelta(minutes=3)
             forecasts.append(ContainerReadyForecast(container_id=profile.container.id, p10_ready_at=p50 - timedelta(minutes=width), p50_ready_at=p50, p90_ready_at=p50 + timedelta(minutes=width)))
-        return YardForecastSnapshot(incident_id=incident_id, stage=stage, source="synthetic-canonical-dynamic-yard", container_forecasts=tuple(forecasts))
+        generated_at = datetime(2026, 8, 22, 4 if stage is ForecastStage.PRE_DISCHARGE else 5, 0, tzinfo=UTC)
+        return YardForecastSnapshot(incident_id=incident_id, stage=stage, generated_at=generated_at, source="synthetic-canonical-dynamic-yard", container_forecasts=tuple(forecasts))

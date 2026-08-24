@@ -46,6 +46,7 @@ class DynamicYardWorkflow:
         report = self._evaluations.get_for_incident(incident_id)
         if report.selected_allocation is None:
             raise ValueError("dynamic-yard initialization requires selected Phase 2 allocation")
+        persisted_snapshot = self._repository.add_snapshot(snapshot)
         existing = self._repository.active_revision(incident_id)
         if existing is not None:
             return self._repository.history(incident_id)
@@ -54,7 +55,7 @@ class DynamicYardWorkflow:
         from backend.app.evaluation.dynamic_yard import DynamicYardEvaluator
         evaluated = DynamicYardEvaluator().evaluate_allocation(fixture, scenarios, snapshot, report.selected_allocation)
         with self._repository.transaction():
-            persisted = self._repository.add_snapshot(snapshot)
+            persisted = persisted_snapshot
             revision = AllocationRevision(
                 incident_id=incident_id, source_phase2_evaluation_id=report.id,
                 source_forecast_snapshot_id=persisted.id,
@@ -82,17 +83,17 @@ class DynamicYardWorkflow:
             return None
         if not any(item.stage is ForecastStage.PRE_DISCHARGE for item in history.snapshots):
             raise ValueError("DISCHARGE_ACTIVE requires PRE_DISCHARGE evidence")
-        existing = self._repository.get_snapshot_for_stage(snapshot.incident_id, ForecastStage.DISCHARGE_ACTIVE)
-        if existing is not None:
-            assessment = self._repository.latest_unhandled_assessment(snapshot.incident_id)
-            return assessment
+        persisted_snapshot = self._repository.add_snapshot(snapshot)
+        existing_assessment = self._repository.get_assessment_for_snapshot(persisted_snapshot.id)
+        if existing_assessment is not None:
+            return existing_assessment
         report = self._evaluations.get_for_incident(snapshot.incident_id)
         fixture = self._fixture.load()
         scenarios = reconstruct_phase2_worlds(report, fixture)
         prior = history.revisions[-1]
         locked = tuple(commitment.container_id for commitment in history.commitments if commitment.status in {ExpediteCommitmentStatus.COMMITTED, ExpediteCommitmentStatus.EXECUTED})
         with self._repository.transaction():
-            persisted = self._repository.add_snapshot(snapshot)
+            persisted = persisted_snapshot
             assessment = assess_reconsideration(snapshot.incident_id, persisted, prior, fixture, scenarios, locked)
             return self._repository.add_assessment(assessment)
 

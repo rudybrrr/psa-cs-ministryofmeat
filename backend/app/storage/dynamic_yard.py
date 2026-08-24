@@ -274,6 +274,10 @@ class DynamicYardRepository:
         ).order_by(ExpediteReconsiderationAssessmentRecord.created_at_utc)).all()
         return None if not records else self._assessment(records[-1])
 
+    def get_assessment_for_snapshot(self, snapshot_id: UUID) -> ExpediteReconsiderationAssessment | None:
+        record = self._session.exec(select(ExpediteReconsiderationAssessmentRecord).where(ExpediteReconsiderationAssessmentRecord.source_snapshot_id == str(snapshot_id))).one_or_none()
+        return None if record is None else self._assessment(record)
+
     def mark_assessment_handled(self, assessment_id: UUID, handled_at: datetime) -> ExpediteReconsiderationAssessment:
         record = self._session.get(ExpediteReconsiderationAssessmentRecord, str(assessment_id))
         if record is None: raise LookupError(f"assessment {assessment_id} not found")

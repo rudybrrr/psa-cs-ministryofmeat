@@ -73,18 +73,20 @@ def assess_reconsideration(
     plans = LockedAllocationSolver().solve(fixture, scenarios, source_snapshot, locked_container_ids, evaluator)
     evaluations = tuple(evaluator.evaluate_allocation(fixture, scenarios, source_snapshot, plan) for plan in plans)
     improving = tuple(item for item in evaluations if item.preserved_connection_total > current.preserved_connection_total)
-    options = tuple(ReconsiderationCandidate(allocated_container_ids=item.allocation.allocated_container_ids, preserved_connection_total=item.preserved_connection_total, expected_preserved_connections=item.expected_preserved_connections) for item in improving)
-    if not improving:
+    frontier = pareto_front(improving)
+    if not frontier:
         disposition, after, reason = ReconsiderationDisposition.NO_CHANGE, current, "no feasible allocation strictly improves preserved connections"
+        options = ()
     else:
-        frontier = pareto_front(improving)
         selected = AllocationDominancePolicy().select(frontier)
         if selected is None:
-            disposition, after, reason = ReconsiderationDisposition.HUMAN_REVIEW_REQUIRED, max(improving, key=lambda item: item.preserved_connection_total), "authorised policy leaves multiple non-dominated feasible options"
+            disposition, after, reason = ReconsiderationDisposition.HUMAN_REVIEW_REQUIRED, max(frontier, key=lambda item: item.preserved_connection_total), "authorised policy leaves multiple non-dominated feasible options"
+            options = tuple(ReconsiderationCandidate(allocated_container_ids=item.allocation.allocated_container_ids, preserved_connection_total=item.preserved_connection_total, expected_preserved_connections=item.expected_preserved_connections) for item in frontier)
         else:
             disposition = ReconsiderationDisposition.AUTO_SUPERSEDE
-            after = next(item for item in improving if item.allocation == selected)
+            after = next(item for item in frontier if item.allocation == selected)
             reason = "feasible locked allocation strictly improves preserved connections"
+            options = (ReconsiderationCandidate(allocated_container_ids=after.allocation.allocated_container_ids, preserved_connection_total=after.preserved_connection_total, expected_preserved_connections=after.expected_preserved_connections),)
     return ExpediteReconsiderationAssessment(
         incident_id=incident_id, source_snapshot_id=source_snapshot.id,
         prior_allocation_revision_id=prior_revision.id, locked_container_ids=locked_container_ids,
