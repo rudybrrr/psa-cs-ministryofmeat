@@ -245,9 +245,10 @@ class AgentRuntimeCoordinator:
             except (LookupError, ValueError):
                 return None
             selection = next((item for item in history.selections if item.review_id == review.id), None)
+            option = next((item for item in history.options if selection is not None and item.id == selection.selected_option_id and item.review_id == review.id), None)
             assessment = next((item for item in history.assessments if item.id == review.reconsideration_assessment_id), None)
-            selected_revision = next((item for item in history.revisions if item.parent_revision_id == (assessment.prior_allocation_revision_id if assessment else None)), None)
-            if review.state.value != "RESOLVED" or selection is None or assessment is None or assessment.handled_at is None or selection.selected_option_id not in review.option_ids or selection.expected_options_fingerprint != review.options_fingerprint or selected_revision is None:
+            selected_revisions = () if assessment is None or option is None else tuple(item for item in history.revisions if item.parent_revision_id == assessment.prior_allocation_revision_id and item.source_forecast_snapshot_id == assessment.source_snapshot_id and item.allocated_container_ids == option.allocated_container_ids)
+            if review.state.value != "RESOLVED" or selection is None or option is None or assessment is None or assessment.handled_at is None or selection.selected_option_id not in review.option_ids or selection.expected_options_fingerprint != review.options_fingerprint or len(selected_revisions) != 1:
                 return None
             return self._repository.update_run(run.model_copy(update={"state": AgentRunState.RUNNING, "wait_kind": None, "wait_subject_id": None, "updated_at": utc_now()}))
         if run.wait_subject_id is None:

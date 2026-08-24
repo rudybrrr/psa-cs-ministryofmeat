@@ -61,7 +61,7 @@ class AgentToolRegistry:
                 compatible = dynamic.compatible_connection_ids(run.incident_id)
                 if compatible:
                     tools.append(_tool("prepare_rta_request", "Prepare configured RTA recovery for a compatible connection.", ("connection_id",), {"connection_id": compatible}))
-        if unhandled is None and any(review.state is CargoSafetyReviewState.PENDING_CHECK for review in CargoSafetyRepository(session).list_reviews(run.incident_id)):
+        if any(review.state is CargoSafetyReviewState.PENDING_CHECK for review in CargoSafetyRepository(session).list_reviews(run.incident_id)):
             tools.append(_tool("request_cargo_safety_review", "Evaluate an existing pending cargo safety review.", ("container_id",)))
         if unhandled is not None and not stronger_wait:
             forbidden = {"prepare_rta_request", "send_authorised_rta_request", "evaluate_carrier_timeout"}

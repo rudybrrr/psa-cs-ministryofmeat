@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlmodel import Session
 
@@ -113,9 +113,9 @@ class DynamicYardWorkflow:
             existing = next((review for review in self._repository.list_reviews(incident_id) if review.reconsideration_assessment_id == assessment.id), None)
             if existing is not None:
                 return existing
-            options = tuple(AllocationTradeoffOption(id=candidate.id, review_id=UUID(int=0), allocated_container_ids=candidate.allocated_container_ids, preserved_connection_total=candidate.preserved_connection_total, expected_preserved_connections=candidate.expected_preserved_connections) for candidate in assessment.candidate_options)
-            review = AllocationTradeoffReview(incident_id=incident_id, reconsideration_assessment_id=assessment.id, option_ids=tuple(option.id for option in options), options_fingerprint=self._options_fingerprint(options), state=TradeoffReviewState.OPEN)
-            options = tuple(option.model_copy(update={"review_id": review.id}) for option in options)
+            review_id = uuid4()
+            options = tuple(AllocationTradeoffOption(id=candidate.id, review_id=review_id, allocated_container_ids=candidate.allocated_container_ids, preserved_connection_total=candidate.preserved_connection_total, expected_preserved_connections=candidate.expected_preserved_connections) for candidate in assessment.candidate_options)
+            review = AllocationTradeoffReview(id=review_id, incident_id=incident_id, reconsideration_assessment_id=assessment.id, option_ids=tuple(option.id for option in options), options_fingerprint=self._options_fingerprint(options), state=TradeoffReviewState.OPEN)
             with self._repository.transaction():
                 self._repository.create_tradeoff_review(review, options)
             return review
@@ -183,7 +183,6 @@ class DynamicYardWorkflow:
             revision = self._apply_candidate(review.incident_id, assessment, option.allocated_container_ids, option.preserved_connection_total, option.expected_preserved_connections)
             audit = AuditRepository(self._session)
             audit.add_uncommitted(AuditEvent(actor=AuditActor.OPERATOR, actor_id=operator_id, incident_id=review.incident_id, event_type="allocation_tradeoff.option_selected", payload={"review_id": str(review.id), "selected_option_id": str(selection.selected_option_id), "options_fingerprint": review.options_fingerprint}))
-            audit.add_uncommitted(AuditEvent(actor=AuditActor.POLICY, actor_id="allocation-dominance-policy", incident_id=review.incident_id, event_type="allocation_revision.applied", payload={"review_id": str(review.id), "assessment_id": str(assessment.id), "parent_revision_id": str(revision.parent_revision_id), "child_revision_id": str(revision.id), "allocated_container_ids": list(revision.allocated_container_ids)}))
             return revision
 
     @staticmethod
