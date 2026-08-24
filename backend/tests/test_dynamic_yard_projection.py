@@ -1,5 +1,4 @@
 from datetime import timedelta
-from types import SimpleNamespace
 
 from backend.app.domain.dynamic_yard import ContainerReadyForecast
 from backend.app.evaluation.dynamic_yard import (
@@ -8,6 +7,7 @@ from backend.app.evaluation.dynamic_yard import (
     projected_ready_at,
     reconstruct_phase2_worlds,
 )
+from backend.app.orchestration.scarce_capacity import build_scarce_capacity_workflow
 
 
 def _forecast(profile):
@@ -19,10 +19,9 @@ def _forecast(profile):
     )
 
 
-def test_reconstruction_reuses_exact_phase_two_world_identities(canonical_fixture, canonical_scenarios) -> None:
-    reconstructed = reconstruct_phase2_worlds(
-        SimpleNamespace(seed=20260822, scenario_count=50), canonical_fixture
-    )
+def test_reconstruction_reuses_exact_phase_two_world_identities(session, canonical_fixture, canonical_scenarios) -> None:
+    report = build_scarce_capacity_workflow(session).run().report
+    reconstructed = reconstruct_phase2_worlds(report, canonical_fixture)
 
     assert reconstructed == canonical_scenarios
 
@@ -43,3 +42,10 @@ def test_projection_uses_positive_and_negative_quantile_branches(canonical_fixtu
     negative_z = DynamicYardEvaluator.combined_factor_minutes(profile, negative_world) / (12**2 + 7**2 + 2**2) ** 0.5
     assert projected_ready_at(profile, positive_world, forecast) == forecast.p50_ready_at - (positive_z / Z90) * (forecast.p50_ready_at - forecast.p10_ready_at)
     assert projected_ready_at(profile, negative_world, forecast) == forecast.p50_ready_at + (-negative_z / Z90) * (forecast.p90_ready_at - forecast.p50_ready_at)
+
+
+def test_reconstruction_rejects_report_fixture_mismatch(session, canonical_fixture) -> None:
+    report = build_scarce_capacity_workflow(session).run().report
+    assert reconstruct_phase2_worlds(report, canonical_fixture).worlds
+    with __import__("pytest").raises(ValueError, match="fixture"):
+        reconstruct_phase2_worlds(report.model_copy(update={"fixture_id": "other"}), canonical_fixture)

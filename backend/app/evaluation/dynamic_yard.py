@@ -16,6 +16,7 @@ from backend.app.domain.scarcity import (
 )
 from backend.app.evaluation.scarcity import ScarcityEvaluator, _factor_minutes, _is_structurally_eligible
 from backend.app.services.scenarios import SeededScenarioGenerator
+from backend.app.evaluation.scarcity import comparison_reproducibility_key
 
 
 LATENT_STD_MINUTES = sqrt(12**2 + 7**2 + 2**2)
@@ -25,11 +26,15 @@ Z90 = 1.2815515655
 def reconstruct_phase2_worlds(
     report: ScarcityEvaluationReport, fixture: CanonicalIncidentFixture
 ) -> ScenarioSet:
+    if report.fixture_id != fixture.fixture_id:
+        raise ValueError("Phase 2 report fixture does not match dynamic-yard fixture")
     scenarios = SeededScenarioGenerator().generate(
         fixture, seed=report.seed, world_count=report.scenario_count
     )
     if scenarios.assumptions.seed != report.seed or len(scenarios.worlds) != report.scenario_count:
         raise ValueError("Phase 2 scenario reconstruction mismatch")
+    if comparison_reproducibility_key(fixture, scenarios, report.baseline, report.scenario_aware_evaluations, report.pareto_evaluations, report.selected_allocation) != report.reproducibility_key:
+        raise ValueError("Phase 2 scenario reconstruction reproducibility mismatch")
     return scenarios
 
 

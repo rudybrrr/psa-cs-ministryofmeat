@@ -325,7 +325,7 @@ def semantic_reproducibility_key(
     return hashlib.sha256(encoded).hexdigest()
 
 
-def _comparison_reproducibility_key(
+def comparison_reproducibility_key(
     fixture: CanonicalIncidentFixture,
     scenarios: ScenarioSet,
     baseline: StrategyEvaluation,
@@ -406,7 +406,7 @@ class ScarcityComparisonService:
         selected_allocation = AllocationDominancePolicy().select(
             pareto_evaluations
         )
-        reproducibility_key = _comparison_reproducibility_key(
+        reproducibility_key = comparison_reproducibility_key(
             fixture,
             scenarios,
             baseline,
