@@ -51,7 +51,9 @@ class CanonicalAgentRuntimeConfiguration:
         try:
             values = self._payload["rta_preparation"][connection_id]
         except KeyError as error:
-            raise ValueError(f"no trusted RTA preparation configuration for {connection_id}") from error
+            values = next((item for item in self._payload["rta_preparation"].values() if item.get("connection_id") == connection_id), None)
+            if values is None:
+                raise ValueError(f"no trusted RTA preparation configuration for {connection_id}") from error
         return PrepareCarrierRecoveryCaseCommand(
             incident_id=incident_id,
             connection_id=values.get("connection_id", connection_id),
