@@ -62,6 +62,7 @@ from backend.app.storage.agent_runtime import AgentRuntimeConflict, AgentRuntime
 from backend.app.domain.dynamic_yard import AllocationRevision, AllocationTradeoffReview, ExpediteCommitment, ExpediteReconsiderationAssessment, YardForecastSnapshot
 from backend.app.orchestration.dynamic_yard import DynamicYardWorkflow
 from backend.app.services.dynamic_yard import CanonicalDynamicYardHarness
+from backend.app.storage.dynamic_yard import DynamicYardConflict
 
 
 class TriggerResponse(BaseModel):
@@ -117,6 +118,13 @@ class CreateCargoSafetyReviewBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
     container_id: str
     note: CargoSafetyNoteBody
+
+
+class AllocationTradeoffSelectionBody(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    selected_option_id: UUID
+    expected_options_fingerprint: str
+    operator_id: str
 
 
 SessionDependency = Annotated[Session, Depends(get_session)]
@@ -239,6 +247,22 @@ def create_app(*, database_engine: Engine | None = None, cargo_safety_checker: S
     @application.get("/incidents/{incident_id}/allocation-tradeoff-reviews", response_model=list[AllocationTradeoffReview])
     def list_allocation_tradeoff_reviews(incident_id: UUID, session: SessionDependency) -> list[AllocationTradeoffReview]:
         return list(dynamic_yard_workflow(session).history(incident_id).reviews)
+
+    @application.post("/allocation-tradeoff-reviews/{review_id}/selection", response_model=AllocationRevision, status_code=status.HTTP_201_CREATED)
+    def select_allocation_tradeoff(review_id: UUID, body: AllocationTradeoffSelectionBody, session: SessionDependency) -> AllocationRevision:
+        try:
+            return dynamic_yard_workflow(session).select_tradeoff(
+                review_id,
+                selected_option_id=body.selected_option_id,
+                expected_options_fingerprint=body.expected_options_fingerprint,
+                operator_id=body.operator_id,
+            )
+        except LookupError as error:
+            raise HTTPException(status_code=404, detail=str(error)) from error
+        except DynamicYardConflict as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+        except ValueError as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
 
     @application.get(
         "/incidents/{incident_id}",

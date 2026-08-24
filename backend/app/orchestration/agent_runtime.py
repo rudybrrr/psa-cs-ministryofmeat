@@ -232,7 +232,20 @@ class AgentRuntimeCoordinator:
                 return None
             return self._repository.update_run(run.model_copy(update={"state": AgentRunState.RUNNING, "wait_kind": None, "wait_subject_id": None, "updated_at": utc_now()}))
         if run.wait_kind is AgentWaitKind.HUMAN_TRADEOFF_DECISION:
-            return None
+            if run.wait_subject_id is None:
+                return None
+            try:
+                workflow = DynamicYardWorkflow.for_session(self._session)
+                review = workflow.get_tradeoff_review(UUID(run.wait_subject_id))
+                history = workflow.history(review.incident_id)
+            except (LookupError, ValueError):
+                return None
+            selection = next((item for item in history.selections if item.review_id == review.id), None)
+            assessment = next((item for item in history.assessments if item.id == review.reconsideration_assessment_id), None)
+            selected_revision = next((item for item in history.revisions if item.parent_revision_id == (assessment.prior_allocation_revision_id if assessment else None)), None)
+            if review.state.value != "RESOLVED" or selection is None or assessment is None or assessment.handled_at is None or selection.selected_option_id not in review.option_ids or selection.expected_options_fingerprint != review.options_fingerprint or selected_revision is None:
+                return None
+            return self._repository.update_run(run.model_copy(update={"state": AgentRunState.RUNNING, "wait_kind": None, "wait_subject_id": None, "updated_at": utc_now()}))
         if run.wait_subject_id is None:
             return None
         try:

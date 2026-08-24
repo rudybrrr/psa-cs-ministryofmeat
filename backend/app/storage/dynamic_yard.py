@@ -338,6 +338,12 @@ class DynamicYardRepository:
         ).order_by(AllocationTradeoffReviewRecord.created_at_utc)).all()
         return tuple(self._review(record) for record in records)
 
+    def get_review(self, review_id: UUID) -> AllocationTradeoffReview:
+        record = self._session.get(AllocationTradeoffReviewRecord, str(review_id))
+        if record is None:
+            raise LookupError(f"tradeoff review {review_id} not found")
+        return self._review(record)
+
     def history(self, incident_id: UUID) -> AllocationTradeoffHistory:
         reviews = self.list_reviews(incident_id)
         review_ids = [str(review.id) for review in reviews]

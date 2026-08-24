@@ -148,6 +148,30 @@ class DynamicYardWorkflow:
     def latest_unhandled_assessment(self, incident_id: UUID):
         return self._repository.latest_unhandled_assessment(incident_id)
 
+    def get_tradeoff_review(self, review_id: UUID) -> AllocationTradeoffReview:
+        return self._repository.get_review(review_id)
+
+    def select_tradeoff(
+        self,
+        review_id: UUID,
+        *,
+        selected_option_id: UUID,
+        expected_options_fingerprint: str,
+        operator_id: str,
+    ) -> AllocationRevision:
+        review = self._repository.get_review(review_id)
+        history = self._repository.history(review.incident_id)
+        option = next((item for item in history.options if item.id == selected_option_id and item.review_id == review.id), None)
+        if option is None:
+            from backend.app.storage.dynamic_yard import DynamicYardConflict
+            raise DynamicYardConflict("selected option does not belong to review")
+        assessment = next((item for item in history.assessments if item.id == review.reconsideration_assessment_id), None)
+        if assessment is None:
+            raise LookupError("tradeoff reconsideration assessment not found")
+        with self._repository.transaction():
+            self._repository.select_tradeoff_option(review.id, selected_option_id=selected_option_id, expected_options_fingerprint=expected_options_fingerprint, operator_id=operator_id)
+            return self._apply_candidate(review.incident_id, assessment, option.allocated_container_ids, option.preserved_connection_total, option.expected_preserved_connections)
+
     @staticmethod
     def _options_fingerprint(options: tuple[AllocationTradeoffOption, ...]) -> str:
         from hashlib import sha256
