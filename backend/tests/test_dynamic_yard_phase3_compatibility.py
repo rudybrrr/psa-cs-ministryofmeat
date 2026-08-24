@@ -60,3 +60,27 @@ def test_membership_mismatch_is_excluded_and_direct_prepare_is_rejected(session)
     run = runtime.create_run(scarcity.incident.id)
     runtime._execute_turn(run, "prepare_rta_request", {"connection_id": "SYN-CONN-JV2"})
     assert not CarrierRecoveryRepository(session).list_cases(scarcity.incident.id)
+
+
+def test_evidence_mismatch_is_excluded_and_direct_prepare_is_rejected(session) -> None:
+    from datetime import timedelta
+    from backend.app.domain.agent_runtime import AgentModelTurn, AgentToolCall
+    from backend.app.orchestration.dynamic_yard import DynamicYardWorkflow
+    from backend.app.orchestration.scarce_capacity import build_scarce_capacity_workflow
+    from backend.app.services.dynamic_yard import CanonicalDynamicYardHarness
+    from backend.app.services.agent_model import FakeAgentModel
+    from backend.app.orchestration.agent_runtime import AgentRuntimeCoordinator, CanonicalAgentRuntimeConfiguration
+    from backend.app.storage.carrier_recovery import CarrierRecoveryRepository
+    from backend.app.storage.dynamic_yard import YardForecastSnapshotRecord
+
+    scarcity = build_scarce_capacity_workflow(session).run(); yard = DynamicYardWorkflow.for_session(session); harness = CanonicalDynamicYardHarness()
+    yard.initialize(scarcity.incident.id, harness.bootstrap_snapshot(scarcity.incident.id)); active = harness.discharge_active_snapshot(scarcity.incident.id); yard.ingest(active); yard.apply_latest_assessment(scarcity.incident.id)
+    frozen_ids = scarcity.report.selected_allocation.allocated_container_ids
+    assert yard.history(scarcity.incident.id).revisions[-1].allocated_container_ids == ("SYN-CNT-001", "SYN-CNT-002", "SYN-CNT-004", "SYN-CNT-010", "SYN-CNT-011", "SYN-CNT-012", "SYN-CNT-014", "SYN-CNT-015")
+    record = session.get(YardForecastSnapshotRecord, str(active.id)); payload = dict(record.snapshot_json); rows = list(payload["container_forecasts"])
+    rows[9] = {**rows[9], "p50_ready_at": "2026-08-22T06:04:00Z", "p90_ready_at": "2026-08-22T06:21:59.246003Z", "p10_ready_at": "2026-08-22T05:46:00.753997Z"}; payload["container_forecasts"] = rows; record.snapshot_json = payload; session.add(record); session.commit()
+    assert yard.history(scarcity.incident.id).revisions[-1].allocated_container_ids != frozen_ids
+    assert not yard.phase3_compatible(scarcity.incident.id, "SYN-CONN-JV2")
+    config = CanonicalAgentRuntimeConfiguration.load(); runtime = AgentRuntimeCoordinator(session=session, model=FakeAgentModel([]), clock=config.clock("before_deadline"), configuration=config); run = runtime.create_run(scarcity.incident.id)
+    runtime._execute_turn(run, "prepare_rta_request", {"connection_id": "SYN-CONN-JV2"})
+    assert not CarrierRecoveryRepository(session).list_cases(scarcity.incident.id)
