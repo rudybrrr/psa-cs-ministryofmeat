@@ -230,22 +230,32 @@ def create_app(*, database_engine: Engine | None = None, cargo_safety_checker: S
 
     @application.get("/incidents/{incident_id}/yard-forecast-snapshots", response_model=list[YardForecastSnapshot])
     def list_yard_forecast_snapshots(incident_id: UUID, session: SessionDependency) -> list[YardForecastSnapshot]:
+        try: IncidentRepository(session).get(incident_id)
+        except RecordNotFound as error: raise HTTPException(status_code=404, detail="Incident not found") from error
         return list(dynamic_yard_workflow(session).history(incident_id).snapshots)
 
     @application.get("/incidents/{incident_id}/allocation-revisions", response_model=list[AllocationRevision])
     def list_allocation_revisions(incident_id: UUID, session: SessionDependency) -> list[AllocationRevision]:
+        try: IncidentRepository(session).get(incident_id)
+        except RecordNotFound as error: raise HTTPException(status_code=404, detail="Incident not found") from error
         return list(dynamic_yard_workflow(session).history(incident_id).revisions)
 
     @application.get("/incidents/{incident_id}/expedite-commitments", response_model=list[ExpediteCommitment])
     def list_expedite_commitments(incident_id: UUID, session: SessionDependency) -> list[ExpediteCommitment]:
+        try: IncidentRepository(session).get(incident_id)
+        except RecordNotFound as error: raise HTTPException(status_code=404, detail="Incident not found") from error
         return list(dynamic_yard_workflow(session).history(incident_id).commitments)
 
     @application.get("/incidents/{incident_id}/expedite-reconsiderations", response_model=list[ExpediteReconsiderationAssessment])
     def list_expedite_reconsiderations(incident_id: UUID, session: SessionDependency) -> list[ExpediteReconsiderationAssessment]:
+        try: IncidentRepository(session).get(incident_id)
+        except RecordNotFound as error: raise HTTPException(status_code=404, detail="Incident not found") from error
         return list(dynamic_yard_workflow(session).history(incident_id).assessments)
 
     @application.get("/incidents/{incident_id}/allocation-tradeoff-reviews", response_model=list[AllocationTradeoffReview])
     def list_allocation_tradeoff_reviews(incident_id: UUID, session: SessionDependency) -> list[AllocationTradeoffReview]:
+        try: IncidentRepository(session).get(incident_id)
+        except RecordNotFound as error: raise HTTPException(status_code=404, detail="Incident not found") from error
         return list(dynamic_yard_workflow(session).history(incident_id).reviews)
 
     @application.post("/allocation-tradeoff-reviews/{review_id}/selection", response_model=AllocationRevision, status_code=status.HTTP_201_CREATED)

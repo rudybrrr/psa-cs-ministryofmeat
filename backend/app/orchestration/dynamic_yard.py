@@ -56,6 +56,7 @@ class DynamicYardWorkflow:
         evaluated = DynamicYardEvaluator().evaluate_allocation(fixture, scenarios, snapshot, report.selected_allocation)
         with self._repository.transaction():
             persisted = persisted_snapshot
+            AuditRepository(self._session).add_uncommitted(AuditEvent(actor=AuditActor.SYSTEM, actor_id="dynamic-yard-workflow", incident_id=incident_id, event_type="yard_forecast.snapshot_ingested", payload={"snapshot_id": str(persisted.id), "stage": persisted.stage.value, "source": persisted.source, "fingerprint": self._repository._fingerprint(persisted)}))
             revision = AllocationRevision(
                 incident_id=incident_id, source_phase2_evaluation_id=report.id,
                 source_forecast_snapshot_id=persisted.id,
@@ -95,7 +96,11 @@ class DynamicYardWorkflow:
         with self._repository.transaction():
             persisted = persisted_snapshot
             assessment = assess_reconsideration(snapshot.incident_id, persisted, prior, fixture, scenarios, locked)
-            return self._repository.add_assessment(assessment)
+            assessment = self._repository.add_assessment(assessment)
+            audit = AuditRepository(self._session)
+            audit.add_uncommitted(AuditEvent(actor=AuditActor.SYSTEM, actor_id="dynamic-yard-workflow", incident_id=snapshot.incident_id, event_type="yard_forecast.snapshot_ingested", payload={"snapshot_id": str(persisted.id), "stage": persisted.stage.value, "source": persisted.source, "fingerprint": self._repository._fingerprint(persisted)}))
+            audit.add_uncommitted(AuditEvent(actor=AuditActor.POLICY, actor_id="allocation-dominance-policy", incident_id=snapshot.incident_id, event_type="expedite_reconsideration.assessed", payload={"assessment_id": str(assessment.id), "source_snapshot_id": str(assessment.source_snapshot_id), "prior_revision_id": str(assessment.prior_allocation_revision_id), "disposition": assessment.disposition.value, "preserved_total_before": assessment.preserved_connection_total_before, "preserved_total_after": assessment.preserved_connection_total_after, "locked_container_ids": list(assessment.locked_container_ids)}))
+            return assessment
 
     def apply_latest_assessment(self, incident_id: UUID, run_id: UUID | None = None) -> AllocationRevision | AllocationTradeoffReview | None:
         assessment = self._repository.latest_unhandled_assessment(incident_id)
@@ -132,6 +137,7 @@ class DynamicYardWorkflow:
                 if container_id not in present:
                     self._repository.add_commitment(ExpediteCommitment(incident_id=incident_id, origin_revision_id=revision.id, container_id=container_id))
             self._repository.mark_assessment_handled(assessment.id, datetime.now(UTC))
+            AuditRepository(self._session).add_uncommitted(AuditEvent(actor=AuditActor.POLICY, actor_id="allocation-dominance-policy", incident_id=incident_id, event_type="allocation_revision.applied", payload={"parent_revision_id": str(prior.id), "child_revision_id": str(revision.id), "assessment_id": str(assessment.id), "allocated_container_ids": list(revision.allocated_container_ids), "displaced_planned_ids": [item.container_id for item in active if item.status is ExpediteCommitmentStatus.PLANNED and item.container_id not in allocated], "replacement_planned_ids": [container_id for container_id in allocated if container_id not in present]}))
         return revision
 
     def phase3_compatible(self, incident_id: UUID, connection_id: str) -> bool:
