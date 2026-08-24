@@ -42,6 +42,8 @@ def _build_model(
     fixture: CanonicalIncidentFixture,
     candidate_ids: tuple[str, ...],
     coefficients: dict[str, int],
+    *,
+    fixed_true_ids: tuple[str, ...] = (),
 ) -> tuple[cp_model.CpModel, dict[str, cp_model.IntVar], cp_model.LinearExprT]:
     profiles = {
         profile.container.id: profile for profile in fixture.profiles
@@ -51,6 +53,12 @@ def _build_model(
         container_id: model.new_bool_var(f"expedite_{container_id}")
         for container_id in candidate_ids
     }
+    for container_id in fixed_true_ids:
+        if container_id not in variables:
+            raise ScarcityOptimizationError(
+                f"locked container {container_id} is not an optimisation candidate"
+            )
+        model.add(variables[container_id] == 1)
     model.add(sum(variables.values()) <= fixture.capacity.total_slots)
 
     for limit in fixture.capacity.handling_group_limits:
