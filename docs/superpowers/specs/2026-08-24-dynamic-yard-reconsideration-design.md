@@ -198,7 +198,15 @@ POST /synthetic/scenarios/{incident_id}/dynamic-yard/discharge-active
 
 Both accept no body. Bootstrap creates the canonical PRE_DISCHARGE snapshot, R0, all initial planned commitments, and promotes 002 and 004 to `COMMITTED`. Discharge-active ingests the frozen later snapshot and persists its deterministic assessment. Neither endpoint invokes an agent.
 
-For both canonical snapshots, use the symmetric half-width derived from the approved constants:
+The canonical snapshots intentionally show uncertainty tightening. `PRE_DISCHARGE` uses every frozen fixture `base_ready_at` as p50 with a symmetric 30-minute half-width:
+
+```text
+PRE_DISCHARGE
+p10 = p50 - 30 minutes
+p90 = p50 + 30 minutes
+```
+
+`DISCHARGE_ACTIVE` uses the narrower symmetric half-width derived from the approved constants:
 
 ```text
 half_width_minutes = 1.2815515655 * sqrt(12^2 + 7^2 + 2^2)
@@ -207,7 +215,7 @@ p10 = p50 - half_width_minutes
 p90 = p50 + half_width_minutes
 ```
 
-`PRE_DISCHARGE` uses every frozen fixture `base_ready_at` as p50. `DISCHARGE_ACTIVE` changes only SF1 container 005: its p50 is `2026-08-22T05:56:00Z`, three minutes earlier than the frozen `05:59:00Z`. Every other container, including all JV2 containers, keeps `p50 = base_ready_at` and the same full-precision symmetric half-width. This reconstructs the Phase 2 ready-time mapping exactly for unchanged containers: with this width, `latent_z / z90 * half_width_minutes` equals the existing combined factor. The source is the fixed synthetic dynamic-yard harness and all snapshot timestamps are UTC.
+`DISCHARGE_ACTIVE` changes only SF1 container 005: its p50 is `2026-08-22T05:56:00Z`, three minutes earlier than the frozen `05:59:00Z`. Every other container, including all JV2 containers, keeps `p50 = base_ready_at` and the same full-precision symmetric half-width. The discharge-active half-width is strictly narrower than PRE_DISCHARGE (`17.987433384504683 < 30` minutes). It reconstructs the Phase 2 ready-time mapping exactly for unchanged containers: with this width, `latent_z / z90 * half_width_minutes` equals the existing combined factor. The source is the fixed synthetic dynamic-yard harness and all snapshot timestamps are UTC.
 
 Read-only calibration against the exact current 50 worlds, the approved split-quantile projection, existing Phase 2 constraints, and existing Pareto/dominance policy yields one valid strict SF1-only revision:
 
@@ -239,6 +247,7 @@ Audit ownership is explicit: synthetic/real adapter ingestion is `SYSTEM`; fixed
 Ordinary tests make zero external network calls and must cover at least:
 
 - p10/p50/p90 ordering, strict UTC, stage progression, identical retry idempotency, and contradictory duplicate rejection;
+- canonical PRE_DISCHARGE bands being exactly ±30 minutes, canonical DISCHARGE_ACTIVE bands being exactly ±17.987433384504683 minutes, and every discharge-active band being strictly narrower than its predecessor;
 - exact Phase 2 world identity/factor reuse, zero new RNG, and both branches plus anchors of the split-quantile transform;
 - locked committed/executed IDs never moving; maximum eight slots; handling-group, reefer, DG, and structural-safety constraints preserved;
 - unchanged original Phase 2 report and allocation;
@@ -247,7 +256,7 @@ Ordinary tests make zero external network calls and must cover at least:
 - allocation revisions remaining immutable; commitment status being monotonic/audited; surviving commitment membership being read from the current revision rather than `origin_revision_id`; and displaced active planned commitments being cancelled even when they originated before the parent revision;
 - locked solver candidates being evaluated through existing `pareto_front`/`AllocationDominancePolicy` semantics with no Phase 5B tie-breaker; strict improvement with one selected winner versus non-dominated improving options requiring human review;
 - human review option immutability; agent inability to choose an option; stale/invalid tradeoff fingerprint rejection;
-- evidence queued without preempting request, carrier, counter, or human-tradeoff waits; every accepted DISCHARGE_ACTIVE assessment resolving the operational-evidence wait; stale-plan mutations blocked; terminal runs not resurrected; completion rejected with pending reconsideration/tradeoff or existing actionable Phase 5A work;
+- evidence queued without preempting request, carrier, counter, or human-tradeoff waits; every accepted newer DISCHARGE_ACTIVE assessment resolving the operational-evidence wait and triggering deterministic reconsideration without asynchronous model invocation; stale-plan mutations blocked; terminal runs not resurrected; completion rejected with pending reconsideration/tradeoff or existing actionable Phase 5A work;
 - valid `pause_agent_run` evidence wait and invalid fabricated pause rejection;
 - Phase 3 compatibility guard: unchanged/equivalent canonical JV2 evidence exposes and admits prepare with its existing affected set `SYN-CNT-017`, while changed membership or projected evidence for any carrier connection filters prepare out and rejects a direct stale attempt before Phase 3;
 - the exact canonical SF1-only 005-to-001 revision with 002/004 locked and observed same-snapshot 601-to-602 metrics;
