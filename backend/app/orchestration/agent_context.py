@@ -89,7 +89,16 @@ def build_agent_turn_context(session: Session, run: AgentRun, registry: AgentToo
             "scarcity": scarcity_summary,
             "decision_ids": [str(decision.id) for decision in decisions],
             "carrier_cases": [{"id": str(case.id), "state": case.state.value} for case in cases],
-            "dynamic_yard": {"snapshot_count": len(dynamic_history.snapshots), "compatible_connection_ids": list(dynamic.compatible_connection_ids(run.incident_id)) if dynamic_history.snapshots else []},
+            "dynamic_yard": {
+                "snapshot_count": len(dynamic_history.snapshots),
+                "compatible_connection_ids": list(dynamic.compatible_connection_ids(run.incident_id)) if dynamic_history.snapshots else [],
+                "forecast_stages": list(dict.fromkeys(snapshot.stage.value for snapshot in dynamic_history.snapshots)),
+            },
+            "cargo_safety_pending_reviews": [
+                {"review_id": str(review.id), "container_id": review.container_id}
+                for review in CargoSafetyRepository(session).list_reviews(run.incident_id)
+                if review.state is CargoSafetyReviewState.PENDING_CHECK
+            ],
             "available_tools": [tool.name for tool in registry.available_tools(session, run)],
         },
         evidence_refs=tuple(str(decision.id) for decision in decisions[-10:]),
