@@ -425,6 +425,6 @@ Phase 7 is accepted only when all of the following hold in ordinary deterministi
 11. Repeat replays are isolated (fresh incidents; no cross-contamination).
 12. ACCEPT/SILENT legacy paths unaffected; full backend and frontend suites pass; lint/typecheck/build/lock checks pass; final smoke passes.
 
-## 19. Explicit Phase 8/9/10 exclusions
+## 19. Explicit Phase 8–11 exclusions
 
-Phase 7 excludes and must be implemented without: live-model production hardening; deployment or credential configuration; evaluation framework expansion; portfolio/deck/video work; unrelated UI polish; solver changes; new negotiation semantics; new safety authority; background production agent execution; enterprise infrastructure; generic reset/destruction; chat UIs; state-management frameworks; polling loops; any automatic agent invocation outside explicit user actions.
+Phase 7 excludes and must be implemented without: Phase 9 live-model production hardening, deployment, or credential configuration; Phase 8 evaluation-framework expansion; Phase 11 portfolio/deck/video work; Phase 10 unrelated UI polish; solver changes; new negotiation semantics; new safety authority; background production agent execution; enterprise infrastructure; generic reset/destruction; chat UIs; state-management frameworks; polling loops; any automatic agent invocation outside explicit user actions.
