@@ -55,11 +55,12 @@ export function OperationsConsole() {
             onApproveCounter={() => void console.approveCounter()}
             onRejectCounter={() => void console.rejectCounter()}
             onEvaluateTimeout={() => void console.evaluateTimeout()}
+            agentRunActive={Boolean(console.agentRuns.at(-1) && !["COMPLETED", "ESCALATED", "FAILED"].includes(console.agentRuns.at(-1)!.state))}
           />
         </div>
 
         <TradeoffReviewPanel reviews={console.tradeoffReviews} options={console.tradeoffOptions} loading={console.loading} onSelect={(review, optionId) => void console.chooseTradeoff(review, optionId)} />
-        <CargoSafetyPanel reviews={console.cargoSafetyReviews} histories={console.safetyHistories} loading={console.loading} onEvaluate={(id) => void console.evaluateSafety(id)} />
+        <CargoSafetyPanel reviews={console.cargoSafetyReviews} histories={console.safetyHistories} loading={console.loading} onEvaluate={(id) => void console.evaluateSafety(id)} onCreateCanonical={() => void console.createSafetyReview("SYN-CNT-010")} />
 
         {!console.incident && !console.loading && (
           <div className="rounded border border-dashed border-slate-800 bg-slate-950/40 px-6 py-10 text-center">

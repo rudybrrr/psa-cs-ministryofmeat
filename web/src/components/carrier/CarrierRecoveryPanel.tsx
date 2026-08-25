@@ -19,6 +19,7 @@ interface CarrierRecoveryPanelProps {
   onApproveCounter: () => void;
   onRejectCounter: () => void;
   onEvaluateTimeout: () => void;
+  agentRunActive?: boolean;
 }
 
 function actionButtonClass(variant: "primary" | "danger" | "neutral" = "primary") {
@@ -47,6 +48,7 @@ export function CarrierRecoveryPanel({
   onApproveCounter,
   onRejectCounter,
   onEvaluateTimeout,
+  agentRunActive = false,
 }: CarrierRecoveryPanelProps) {
   if (!selectedContainer) {
     return (
@@ -100,14 +102,15 @@ export function CarrierRecoveryPanel({
           <p className="text-sm text-slate-400">
             No carrier recovery case prepared for this connection.
           </p>
-          <button
+          {!agentRunActive && <button
             type="button"
             disabled={loading}
             className={actionButtonClass()}
             onClick={() => onPrepare(selectedContainer.connectionId)}
           >
             Prepare carrier recovery
-          </button>
+          </button>}
+          {agentRunActive && <p className="text-xs text-amber-200">AgentRun is active. The agent prepares carrier recovery on the next explicit advance.</p>}
         </div>
       )}
 
@@ -132,11 +135,11 @@ export function CarrierRecoveryPanel({
                   Deadline {formatUtcClock(history.request_context.response_deadline)}
                 </p>
               )}
-              {history.approvals.some((approval) => approval.status === "APPROVED") ? (
+              {history.approvals.some((approval) => approval.status === "APPROVED") && !agentRunActive ? (
                 <button type="button" disabled={loading} className={actionButtonClass()} onClick={onSend}>
                   Send authorised request
                 </button>
-              ) : (
+              ) : !history.approvals.some((approval) => approval.status === "APPROVED") ? (
                 <div className="flex flex-wrap gap-2">
                   <button type="button" disabled={loading} className={actionButtonClass()} onClick={onApproveRequest}>
                     Approve request
@@ -145,7 +148,7 @@ export function CarrierRecoveryPanel({
                     Reject request
                   </button>
                 </div>
-              )}
+              ) : <p className="text-xs text-amber-200">Approval persisted. Advance the agent explicitly to send the authorised request.</p>}
             </div>
           )}
 

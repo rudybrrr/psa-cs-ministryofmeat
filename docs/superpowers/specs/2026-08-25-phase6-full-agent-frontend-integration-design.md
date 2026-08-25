@@ -14,7 +14,7 @@ Three focused clients will mirror the existing backend routes without backend be
 * `dynamicYard.ts` for bootstrap, discharge-active publication, read histories, and exact tradeoff selection.
 * `cargoSafety.ts` for create, evaluate, list, and history of reviews.
 
-The API contract uses backend JSON field names exactly. Existing backend endpoints provide every required read and approved command, so no backend route or workflow change is required.
+The API contract uses backend JSON field names exactly. One additive read-only backend route exposes already-persisted allocation-tradeoff options (`GET /incidents/{incident_id}/allocation-tradeoff-options`); it adds no workflow or authority behavior.
 
 ## Data flow and authority
 

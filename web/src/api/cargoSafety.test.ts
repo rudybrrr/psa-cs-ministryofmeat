@@ -1,0 +1,4 @@
+import { expect, it, vi } from "vitest";
+import { jsonResponse } from "../test/fixtures";
+import { createCargoSafetyReview, getCargoSafetyHistory } from "./cargoSafety";
+it("uses the backend safety history shape and posts the note unchanged", async () => { const fetch = vi.fn(async () => jsonResponse({ review: {}, note: { text: "note", source: "synthetic" }, assessment: null, policy_result: null, audit_events: [] })); vi.stubGlobal("fetch", fetch); await createCargoSafetyReview("incident", "SYN-CNT-010", "note", "synthetic"); const history = await getCargoSafetyHistory("review"); expect(history.note.source).toBe("synthetic"); expect(fetch).toHaveBeenCalledWith("/incidents/incident/cargo-safety-reviews", expect.objectContaining({ body: JSON.stringify({ container_id: "SYN-CNT-010", note: { text: "note", source: "synthetic" } }) })); });

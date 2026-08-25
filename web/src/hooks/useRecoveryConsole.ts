@@ -62,10 +62,6 @@ export interface RecoveryConsoleState {
   error: ApiError | null;
 }
 
-async function optional<T>(operation: () => Promise<T>, fallback: T): Promise<T> {
-  try { return await operation(); } catch (error) { if (error instanceof ApiError || error instanceof TypeError) return fallback; throw error; }
-}
-
 async function loadIncidentBundle(incidentId: string) {
   const [
     incident,
@@ -89,14 +85,7 @@ async function loadIncidentBundle(incidentId: string) {
     getDecisions(incidentId),
     getAuditEvents(incidentId),
     listCarrierCases(incidentId),
-    optional(() => listYardForecasts(incidentId), [] as YardForecastSnapshot[]),
-    optional(() => listAllocationRevisions(incidentId), [] as AllocationRevision[]),
-    optional(() => listExpediteCommitments(incidentId), [] as ExpediteCommitment[]),
-    optional(() => listReconsiderations(incidentId), [] as ExpediteReconsiderationAssessment[]),
-    optional(() => listTradeoffReviews(incidentId), [] as AllocationTradeoffReview[]),
-    optional(() => listTradeoffOptions(incidentId), [] as AllocationTradeoffOption[]),
-    optional(() => listCargoSafetyReviews(incidentId), [] as CargoSafetyReview[]),
-    optional(() => listAgentRuns(incidentId), [] as AgentRun[]),
+    listYardForecasts(incidentId), listAllocationRevisions(incidentId), listExpediteCommitments(incidentId), listReconsiderations(incidentId), listTradeoffReviews(incidentId), listTradeoffOptions(incidentId), listCargoSafetyReviews(incidentId), listAgentRuns(incidentId),
   ]);
 
   return {
@@ -249,6 +238,8 @@ export function useRecoveryConsole() {
       setDecisions(bundle.decisions);
       setAuditEvents(bundle.auditEvents);
       setCarrierCases(bundle.carrierCases);
+      setYardForecasts(bundle.yardForecasts); setAllocationRevisions(bundle.allocationRevisions); setExpediteCommitments(bundle.expediteCommitments); setReconsiderations(bundle.reconsiderations); setTradeoffReviews(bundle.tradeoffReviews); setTradeoffOptions(bundle.tradeoffOptions); setCargoSafetyReviews(bundle.cargoSafetyReviews); setAgentRuns(bundle.agentRuns);
+      setSelectedAgentHistory(null); setSafetyHistories([]);
       setSelectedContainerId(null);
       setSelectedCarrierCaseId(null);
       setSelectedCaseHistory(null);
@@ -476,7 +467,7 @@ export function useRecoveryConsole() {
   const startAgent = useCallback(async () => { if (incident) await runMutation(async () => { await createAgentRun(incident.id); }); }, [incident, runMutation]);
   const advanceAgent = useCallback(async () => { const run = agentRuns.at(-1); if (run) await runMutation(async () => { await advanceAgentRun(run.id); }); }, [agentRuns, runMutation]);
   const chooseTradeoff = useCallback(async (review: AllocationTradeoffReview, selectedOptionId: string) => { await runMutation(async () => { await selectTradeoff(review.id, { selected_option_id: selectedOptionId, expected_options_fingerprint: review.options_fingerprint, operator_id: "operator-console" }); }); }, [runMutation]);
-  const createSafetyReview = useCallback(async (containerId: string) => { if (incident) await runMutation(async () => { await createCargoSafetyReview(incident.id, containerId, "Synthetic cargo note requires semantic consistency review.", "synthetic-demo"); }); }, [incident, runMutation]);
+  const createSafetyReview = useCallback(async (containerId: string) => { if (incident) await runMutation(async () => { await createCargoSafetyReview(incident.id, containerId, "Manifest declares general cargo; free-text handling note identifies corrosive material and requires safety review.", "synthetic-canonical-cargo-note"); }); }, [incident, runMutation]);
   const evaluateSafety = useCallback(async (reviewId: string) => { await runMutation(async () => { await evaluateCargoSafetyReview(reviewId); }); }, [runMutation]);
 
   return {

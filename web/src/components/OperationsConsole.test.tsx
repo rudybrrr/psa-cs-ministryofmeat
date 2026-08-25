@@ -371,6 +371,7 @@ function createFetchMock(handlers: {
       );
     }
 
+    if (url.includes(`/incidents/${INCIDENT_ID}/`) && ["yard-forecast-snapshots", "allocation-revisions", "expedite-commitments", "expedite-reconsiderations", "allocation-tradeoff-reviews", "allocation-tradeoff-options", "cargo-safety-reviews", "agent-runs"].some((suffix) => url.endsWith(suffix))) return jsonResponse([]);
     return jsonResponse({ detail: `Unexpected ${method} ${url}` }, 500);
   });
 }
