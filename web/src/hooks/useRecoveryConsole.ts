@@ -23,6 +23,9 @@ import {
   getScarcityEvaluation,
   triggerCanonicalScarcity,
 } from "../api/scarcity";
+import { createAgentRun, advanceAgentRun, getAgentRunHistory, listAgentRuns } from "../api/agentRuntime";
+import { bootstrapDynamicYard, listAllocationRevisions, listExpediteCommitments, listReconsiderations, listTradeoffOptions, listTradeoffReviews, listYardForecasts, publishDischargeActive, selectTradeoff } from "../api/dynamicYard";
+import { createCargoSafetyReview, evaluateCargoSafetyReview, getCargoSafetyHistory, listCargoSafetyReviews } from "../api/cargoSafety";
 import type {
   AuditEvent,
   CanonicalIncidentFixture,
@@ -31,6 +34,7 @@ import type {
   Decision,
   Incident,
   ScarcityEvaluationReport,
+  AgentHistory, AgentRun, AllocationRevision, AllocationTradeoffOption, AllocationTradeoffReview, CargoSafetyHistory, CargoSafetyReview, ExpediteCommitment, ExpediteReconsiderationAssessment, YardForecastSnapshot,
 } from "../api/types";
 import type { CanonicalDemoRunId } from "../lib/canonicalDemo";
 import {
@@ -41,6 +45,8 @@ import {
   buildContainerRows,
   buildRecoverySummary,
   carrierCaseForConnection,
+  latestSnapshot,
+  latestAllocationRevision,
 } from "../lib/recoverySelectors";
 
 export interface RecoveryConsoleState {
@@ -66,6 +72,14 @@ async function loadIncidentBundle(incidentId: string) {
     decisions,
     auditEvents,
     carrierCases,
+    yardForecasts,
+    allocationRevisions,
+    expediteCommitments,
+    reconsiderations,
+    tradeoffReviews,
+    tradeoffOptions,
+    cargoSafetyReviews,
+    agentRuns,
   ] = await Promise.all([
     getIncident(incidentId),
     getCanonicalFixture(),
@@ -73,6 +87,7 @@ async function loadIncidentBundle(incidentId: string) {
     getDecisions(incidentId),
     getAuditEvents(incidentId),
     listCarrierCases(incidentId),
+    listYardForecasts(incidentId), listAllocationRevisions(incidentId), listExpediteCommitments(incidentId), listReconsiderations(incidentId), listTradeoffReviews(incidentId), listTradeoffOptions(incidentId), listCargoSafetyReviews(incidentId), listAgentRuns(incidentId),
   ]);
 
   return {
@@ -82,6 +97,7 @@ async function loadIncidentBundle(incidentId: string) {
     decisions,
     auditEvents,
     carrierCases,
+    yardForecasts, allocationRevisions, expediteCommitments, reconsiderations, tradeoffReviews, tradeoffOptions, cargoSafetyReviews, agentRuns,
   };
 }
 
@@ -93,6 +109,17 @@ export function useRecoveryConsole() {
   const [decisions, setDecisions] = useState<Decision[]>([]);
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
   const [carrierCases, setCarrierCases] = useState<CarrierRecoveryCase[]>([]);
+  const [yardForecasts, setYardForecasts] = useState<YardForecastSnapshot[]>([]);
+  const [allocationRevisions, setAllocationRevisions] = useState<AllocationRevision[]>([]);
+  const [expediteCommitments, setExpediteCommitments] = useState<ExpediteCommitment[]>([]);
+  const [reconsiderations, setReconsiderations] = useState<ExpediteReconsiderationAssessment[]>([]);
+  const [tradeoffReviews, setTradeoffReviews] = useState<AllocationTradeoffReview[]>([]);
+  const [tradeoffOptions, setTradeoffOptions] = useState<AllocationTradeoffOption[]>([]);
+  const [cargoSafetyReviews, setCargoSafetyReviews] = useState<CargoSafetyReview[]>([]);
+  const [agentRuns, setAgentRuns] = useState<AgentRun[]>([]);
+  const [selectedAgentHistory, setSelectedAgentHistory] = useState<AgentHistory | null>(null);
+  const [agentWaitHistory, setAgentWaitHistory] = useState<CarrierRecoveryHistory | null>(null);
+  const [safetyHistories, setSafetyHistories] = useState<CargoSafetyHistory[]>([]);
   const [selectedContainerId, setSelectedContainerId] = useState<string | null>(
     null,
   );
@@ -122,8 +149,12 @@ export function useRecoveryConsole() {
       scarcityEvaluation,
       decisions,
       carrierCases,
+      latestSnapshot(yardForecasts, "DISCHARGE_ACTIVE"),
+      expediteCommitments,
+      safetyHistories,
+      latestAllocationRevision(allocationRevisions),
     );
-  }, [fixture, scarcityEvaluation, decisions, carrierCases]);
+  }, [fixture, scarcityEvaluation, decisions, carrierCases, yardForecasts, expediteCommitments, safetyHistories, allocationRevisions]);
 
   const selectedContainer = useMemo(
     () =>
@@ -145,17 +176,26 @@ export function useRecoveryConsole() {
     );
   }, [carrierCases, selectedCarrierCaseId, selectedContainer]);
 
-  const refresh = useCallback(async () => {
-    if (!incident) {
-      return;
-    }
-    const bundle = await loadIncidentBundle(incident.id);
+  const applyBundle = useCallback(async (bundle: Awaited<ReturnType<typeof loadIncidentBundle>>) => {
     setIncident(bundle.incident);
     setFixture(bundle.fixture);
     setScarcityEvaluation(bundle.scarcityEvaluation);
     setDecisions(bundle.decisions);
     setAuditEvents(bundle.auditEvents);
     setCarrierCases(bundle.carrierCases);
+    setYardForecasts(bundle.yardForecasts); setAllocationRevisions(bundle.allocationRevisions); setExpediteCommitments(bundle.expediteCommitments); setReconsiderations(bundle.reconsiderations); setTradeoffReviews(bundle.tradeoffReviews); setTradeoffOptions(bundle.tradeoffOptions); setCargoSafetyReviews(bundle.cargoSafetyReviews); setAgentRuns(bundle.agentRuns);
+    const currentRun = bundle.agentRuns.at(-1);
+    setSelectedAgentHistory(currentRun ? await getAgentRunHistory(currentRun.id) : null);
+    setAgentWaitHistory(currentRun?.wait_subject_id && ["REQUEST_APPROVAL", "COUNTER_APPROVAL", "CARRIER_RESPONSE_OR_TIMEOUT"].includes(currentRun.wait_kind ?? "") ? await getCarrierCaseHistory(currentRun.wait_subject_id) : null);
+    setSafetyHistories(await Promise.all(bundle.cargoSafetyReviews.map((review) => getCargoSafetyHistory(review.id))));
+  }, []);
+
+  const refresh = useCallback(async () => {
+    if (!incident) {
+      return;
+    }
+    const bundle = await loadIncidentBundle(incident.id);
+    await applyBundle(bundle);
 
     const activeCase =
       selectedCarrierCaseId &&
@@ -177,7 +217,7 @@ export function useRecoveryConsole() {
         setSelectedCaseHistory(await getCarrierCaseHistory(matched.id));
       }
     }
-  }, [incident, selectedCarrierCaseId, selectedContainerId]);
+  }, [applyBundle, incident, selectedCarrierCaseId, selectedContainerId]);
 
   const runMutation = useCallback(
     async (operation: () => Promise<void>) => {
@@ -204,17 +244,12 @@ export function useRecoveryConsole() {
     await runMutation(async () => {
       const trigger = await triggerCanonicalScarcity();
       const bundle = await loadIncidentBundle(trigger.incident_id);
-      setIncident(bundle.incident);
-      setFixture(bundle.fixture);
-      setScarcityEvaluation(bundle.scarcityEvaluation);
-      setDecisions(bundle.decisions);
-      setAuditEvents(bundle.auditEvents);
-      setCarrierCases(bundle.carrierCases);
+      await applyBundle(bundle);
       setSelectedContainerId(null);
       setSelectedCarrierCaseId(null);
       setSelectedCaseHistory(null);
     });
-  }, [runMutation]);
+  }, [applyBundle, runMutation]);
 
   const loadDemoRun = useCallback(
     async (runId: CanonicalDemoRunId) => {
@@ -222,12 +257,7 @@ export function useRecoveryConsole() {
         const run = demoRunById(runId);
         const trigger = await triggerCanonicalScarcity();
         const bundle = await loadIncidentBundle(trigger.incident_id);
-        setIncident(bundle.incident);
-        setFixture(bundle.fixture);
-        setScarcityEvaluation(bundle.scarcityEvaluation);
-        setDecisions(bundle.decisions);
-        setAuditEvents(bundle.auditEvents);
-        setCarrierCases(bundle.carrierCases);
+        await applyBundle(bundle);
         setActiveDemoRunId(runId);
 
         const profile = bundle.fixture.profiles.find(
@@ -237,11 +267,11 @@ export function useRecoveryConsole() {
           setSelectedContainerId(profile.container.id);
         }
         setSelectedCarrierCaseId(null);
-        setSelectedCaseHistory(null);
-      });
-    },
-    [runMutation],
-  );
+          setSelectedCaseHistory(null);
+        });
+      },
+      [applyBundle, runMutation],
+        );
 
   const selectContainer = useCallback(
     async (containerId: string) => {
@@ -431,6 +461,14 @@ export function useRecoveryConsole() {
     });
   }, [runMutation, selectedCarrierCase]);
 
+  const bootstrapYard = useCallback(async () => { if (incident) await runMutation(async () => { await bootstrapDynamicYard(incident.id); }); }, [incident, runMutation]);
+  const publishActive = useCallback(async () => { if (incident) await runMutation(async () => { await publishDischargeActive(incident.id); }); }, [incident, runMutation]);
+  const startAgent = useCallback(async () => { if (incident) await runMutation(async () => { await createAgentRun(incident.id); }); }, [incident, runMutation]);
+  const advanceAgent = useCallback(async () => { const run = agentRuns.at(-1); if (run) await runMutation(async () => { await advanceAgentRun(run.id); }); }, [agentRuns, runMutation]);
+  const chooseTradeoff = useCallback(async (review: AllocationTradeoffReview, selectedOptionId: string) => { await runMutation(async () => { await selectTradeoff(review.id, { selected_option_id: selectedOptionId, expected_options_fingerprint: review.options_fingerprint, operator_id: "operator-console" }); }); }, [runMutation]);
+  const createSafetyReview = useCallback(async (containerId: string) => { if (incident) await runMutation(async () => { await createCargoSafetyReview(incident.id, containerId, "Manifest declares general cargo; free-text handling note identifies corrosive material and requires safety review.", "synthetic-canonical-cargo-note"); }); }, [incident, runMutation]);
+  const evaluateSafety = useCallback(async (reviewId: string) => { await runMutation(async () => { await evaluateCargoSafetyReview(reviewId); }); }, [runMutation]);
+
   return {
     incident,
     fixture,
@@ -438,6 +476,7 @@ export function useRecoveryConsole() {
     decisions,
     auditEvents,
     carrierCases,
+    yardForecasts, allocationRevisions, expediteCommitments, reconsiderations, tradeoffReviews, tradeoffOptions, cargoSafetyReviews, agentRuns, selectedAgentHistory, agentWaitHistory, safetyHistories,
     selectedContainerId,
     selectedCarrierCaseId,
     selectedCaseHistory,
@@ -459,6 +498,7 @@ export function useRecoveryConsole() {
     approveCounter: approveCounterAction,
     rejectCounter: rejectCounterAction,
     evaluateTimeout: evaluateTimeoutAction,
+    bootstrapYard, publishActive, startAgent, advanceAgent, chooseTradeoff, createSafetyReview, evaluateSafety,
     refresh,
     setIncident,
     setFixture,

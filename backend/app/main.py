@@ -59,7 +59,7 @@ from backend.app.domain.agent_runtime import AgentHistory, AgentRun
 from backend.app.orchestration.agent_runtime import AgentRuntimeCoordinator, CanonicalAgentRuntimeConfiguration
 from backend.app.services.agent_model import AgentModel, OpenAIAgentModel
 from backend.app.storage.agent_runtime import AgentRuntimeConflict, AgentRuntimeRepository
-from backend.app.domain.dynamic_yard import AllocationRevision, AllocationTradeoffReview, ExpediteCommitment, ExpediteReconsiderationAssessment, YardForecastSnapshot
+from backend.app.domain.dynamic_yard import AllocationRevision, AllocationTradeoffOption, AllocationTradeoffReview, ExpediteCommitment, ExpediteReconsiderationAssessment, YardForecastSnapshot
 from backend.app.orchestration.dynamic_yard import DynamicYardWorkflow
 from backend.app.services.dynamic_yard import CanonicalDynamicYardHarness
 from backend.app.storage.dynamic_yard import DynamicYardConflict
@@ -257,6 +257,12 @@ def create_app(*, database_engine: Engine | None = None, cargo_safety_checker: S
         try: IncidentRepository(session).get(incident_id)
         except RecordNotFound as error: raise HTTPException(status_code=404, detail="Incident not found") from error
         return list(dynamic_yard_workflow(session).history(incident_id).reviews)
+
+    @application.get("/incidents/{incident_id}/allocation-tradeoff-options", response_model=list[AllocationTradeoffOption])
+    def list_allocation_tradeoff_options(incident_id: UUID, session: SessionDependency) -> list[AllocationTradeoffOption]:
+        try: IncidentRepository(session).get(incident_id)
+        except RecordNotFound as error: raise HTTPException(status_code=404, detail="Incident not found") from error
+        return list(dynamic_yard_workflow(session).history(incident_id).options)
 
     @application.post("/allocation-tradeoff-reviews/{review_id}/selection", response_model=AllocationRevision, status_code=status.HTTP_201_CREATED)
     def select_allocation_tradeoff(review_id: UUID, body: AllocationTradeoffSelectionBody, session: SessionDependency) -> AllocationRevision:

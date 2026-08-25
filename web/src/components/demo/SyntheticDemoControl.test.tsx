@@ -1,0 +1,4 @@
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { SyntheticDemoControl } from "./SyntheticDemoControl";
+describe("SyntheticDemoControl", () => { it("offers only guided Phase 6 actions", () => { render(<SyntheticDemoControl incidentId="i" loading={false} onCreateIncident={vi.fn()} onRefresh={vi.fn()} onBootstrap={vi.fn()} onStartAgent={vi.fn()} onAdvanceAgent={vi.fn()} onPublishActive={vi.fn()} onCreateSafetyReview={vi.fn()} canBootstrap canStartAgent canAdvanceAgent canPublishActive canCreateSafetyReview />); expect(screen.getByRole("button", { name: /create canonical incident/i })).toBeInTheDocument(); expect(screen.getByRole("button", { name: /bootstrap pre_discharge/i })).toBeInTheDocument(); expect(screen.queryByRole("button", { name: /run all|replay|reset/i })).not.toBeInTheDocument(); }); });

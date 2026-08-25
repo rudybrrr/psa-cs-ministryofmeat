@@ -6,10 +6,18 @@ import { RecoverySummaryPanel } from "./incident/RecoverySummary";
 import { ContainerRecoveryTable } from "./recovery/ContainerRecoveryTable";
 import { CarrierRecoveryPanel } from "./carrier/CarrierRecoveryPanel";
 import { SyntheticDemoControl } from "./demo/SyntheticDemoControl";
+import { AgentRunPanel } from "./agent/AgentRunPanel";
+import { DynamicYardPanel } from "./dynamic/DynamicYardPanel";
+import { TradeoffReviewPanel } from "./dynamic/TradeoffReviewPanel";
+import { CargoSafetyPanel } from "./safety/CargoSafetyPanel";
 import { useRecoveryConsole } from "../hooks/useRecoveryConsole";
+import { canAdvanceAgent, latestSnapshot } from "../lib/recoverySelectors";
 
 export function OperationsConsole() {
   const console = useRecoveryConsole();
+  const run = console.agentRuns.at(-1) ?? null;
+  const activeSnapshot = latestSnapshot(console.yardForecasts, "DISCHARGE_ACTIVE");
+  const canAdvance = canAdvanceAgent(run, { carrierHistory: console.agentWaitHistory, reconsiderations: console.reconsiderations, tradeoffReviews: console.tradeoffReviews });
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
@@ -22,6 +30,11 @@ export function OperationsConsole() {
           fixtureId={console.fixture?.fixture_id ?? null}
           loading={console.loading}
         />
+
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]">
+          <AgentRunPanel run={run} history={console.selectedAgentHistory} loading={console.loading} canAdvance={canAdvance} onStart={() => void console.startAgent()} onAdvance={() => void console.advanceAgent()} onRefresh={() => void console.refresh()} />
+          <DynamicYardPanel snapshots={console.yardForecasts} revisions={console.allocationRevisions} commitments={console.expediteCommitments} loading={console.loading} onBootstrap={() => void console.bootstrapYard()} onActive={() => void console.publishActive()} />
+        </div>
 
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]">
           <ContainerRecoveryTable
@@ -46,8 +59,12 @@ export function OperationsConsole() {
             onApproveCounter={() => void console.approveCounter()}
             onRejectCounter={() => void console.rejectCounter()}
             onEvaluateTimeout={() => void console.evaluateTimeout()}
+            agentRunActive={Boolean(console.agentRuns.at(-1) && !["COMPLETED", "ESCALATED", "FAILED"].includes(console.agentRuns.at(-1)!.state))}
           />
         </div>
+
+        <TradeoffReviewPanel reviews={console.tradeoffReviews} options={console.tradeoffOptions} loading={console.loading} onSelect={(review, optionId) => void console.chooseTradeoff(review, optionId)} />
+        <CargoSafetyPanel reviews={console.cargoSafetyReviews} histories={console.safetyHistories} loading={console.loading} onEvaluate={(id) => void console.evaluateSafety(id)} onCreateCanonical={() => void console.createSafetyReview("SYN-CNT-010")} />
 
         {!console.incident && !console.loading && (
           <div className="rounded border border-dashed border-slate-800 bg-slate-950/40 px-6 py-10 text-center">
@@ -93,12 +110,20 @@ export function OperationsConsole() {
         )}
 
         <SyntheticDemoControl
-          activeRunId={console.activeDemoRunId}
           incidentId={console.incident?.id ?? null}
           loading={console.loading}
-          onRunDemo={(runId) => void console.loadDemoRun(runId)}
           onCreateIncident={() => void console.createCanonicalIncident()}
           onRefresh={() => void console.refresh()}
+          onBootstrap={() => void console.bootstrapYard()}
+          onStartAgent={() => void console.startAgent()}
+          onAdvanceAgent={() => void console.advanceAgent()}
+          onPublishActive={() => void console.publishActive()}
+          onCreateSafetyReview={() => void console.createSafetyReview("SYN-CNT-010")}
+          canBootstrap={Boolean(console.incident && console.yardForecasts.length === 0)}
+          canStartAgent={Boolean(console.incident && !run)}
+          canAdvanceAgent={canAdvance}
+          canPublishActive={Boolean(console.incident && console.yardForecasts.length > 0 && !activeSnapshot)}
+          canCreateSafetyReview={Boolean(console.incident && !console.cargoSafetyReviews.some((review) => review.container_id === "SYN-CNT-010"))}
         />
       </main>
     </div>

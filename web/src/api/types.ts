@@ -455,3 +455,26 @@ export interface RecoveryConsoleSnapshot {
   auditEvents: AuditEvent[];
   carrierCases: CarrierRecoveryCase[];
 }
+
+export const AgentRunState = { CREATED: "CREATED", RUNNING: "RUNNING", WAITING: "WAITING", COMPLETED: "COMPLETED", ESCALATED: "ESCALATED", FAILED: "FAILED" } as const;
+export type AgentRunState = (typeof AgentRunState)[keyof typeof AgentRunState];
+export const AgentWaitKind = { REQUEST_APPROVAL: "REQUEST_APPROVAL", COUNTER_APPROVAL: "COUNTER_APPROVAL", CARRIER_RESPONSE_OR_TIMEOUT: "CARRIER_RESPONSE_OR_TIMEOUT", NEW_OPERATIONAL_EVIDENCE: "NEW_OPERATIONAL_EVIDENCE", HUMAN_TRADEOFF_DECISION: "HUMAN_TRADEOFF_DECISION" } as const;
+export type AgentWaitKind = (typeof AgentWaitKind)[keyof typeof AgentWaitKind];
+export interface AgentRun { id: string; incident_id: string; state: AgentRunState; model_name: string; prompt_version: string; step_count: number; max_steps: number; wait_kind: AgentWaitKind | null; wait_subject_id: string | null; escalation_reason: string | null; started_at: string; updated_at: string; completed_at: string | null; }
+export interface AgentStep { id: string; run_id: string; step_number: number; kind: string; action_summary: string; evidence_refs: string[]; model_name: string; prompt_version: string; latency_ms: number | null; input_tokens: number | null; output_tokens: number | null; created_at: string; }
+export interface AgentToolInvocation { id: string; run_id: string; step_id: string; tool_name: string; arguments: Record<string, unknown>; status: string; result_summary: string | null; error_kind: string | null; started_at: string; completed_at: string | null; }
+export interface AgentHistory { run: AgentRun; steps: AgentStep[]; tool_invocations: AgentToolInvocation[]; }
+export interface ContainerReadyForecast { container_id: string; p10_ready_at: string; p50_ready_at: string; p90_ready_at: string; }
+export interface YardForecastSnapshot { id: string; incident_id: string; stage: "PRE_DISCHARGE" | "DISCHARGE_ACTIVE"; generated_at: string; source: string; container_forecasts: ContainerReadyForecast[]; }
+export interface AllocationRevision { id: string; incident_id: string; source_phase2_evaluation_id: string; source_forecast_snapshot_id: string; parent_revision_id: string | null; allocated_container_ids: string[]; locked_container_ids: string[]; preserved_connection_total: number; expected_preserved_connections: number; reason: string; created_at: string; }
+export interface ExpediteCommitment { id: string; incident_id: string; origin_revision_id: string; container_id: string; status: "PLANNED" | "COMMITTED" | "EXECUTED" | "CANCELLED"; created_at: string; updated_at: string; }
+export interface ExpediteReconsiderationAssessment { id: string; incident_id: string; source_snapshot_id: string; prior_allocation_revision_id: string; locked_container_ids: string[]; candidate_options: Array<{ id: string; allocated_container_ids: string[]; preserved_connection_total: number; expected_preserved_connections: number }>; preserved_connection_total_before: number; preserved_connection_total_after: number; expected_preserved_connections_before: number; expected_preserved_connections_after: number; disposition: string; reason: string; handled_at: string | null; created_at: string; }
+export interface AllocationTradeoffReview { id: string; incident_id: string; reconsideration_assessment_id: string; option_ids: string[]; options_fingerprint: string; state: "OPEN" | "RESOLVED"; created_at: string; }
+export interface AllocationTradeoffOption { id: string; review_id: string; allocated_container_ids: string[]; preserved_connection_total: number; expected_preserved_connections: number; }
+export interface AllocationTradeoffSelectionBody { selected_option_id: string; expected_options_fingerprint: string; operator_id: string; }
+export interface CargoSafetyReview { id: string; incident_id: string; container_id: string; cargo_note_id: string; state: "PENDING_CHECK" | "COMPLETED"; created_at: string; updated_at: string; }
+export interface CargoNote { id: string; incident_id: string; container_id: string; text: string; source: string; created_at: string; }
+export interface SemanticSafetyAssessment { id: string; review_id: string; incident_id: string; container_id: string; cargo_note_id: string; result: string; explanation: string; evidence_excerpt: string | null; failure_kind: string | null; structured_dangerous_goods: boolean; structured_un_number: string | null; structured_commodity: string; checker_kind: string; model_name: string | null; prompt_version: string; latency_ms: number | null; input_tokens: number | null; output_tokens: number | null; created_at: string; }
+export interface SemanticSafetyPolicyResult { id: string; review_id: string; assessment_id: string; incident_id: string; container_id: string; disposition: string; automation_blocked: boolean; reason: string; replacement_decision_id: string | null; created_at: string; }
+export interface CargoSafetyEvaluationResult { review: CargoSafetyReview; assessment: SemanticSafetyAssessment; policy_result: SemanticSafetyPolicyResult; decision: Decision | null; }
+export interface CargoSafetyHistory { review: CargoSafetyReview; note: CargoNote; assessment: SemanticSafetyAssessment | null; policy_result: SemanticSafetyPolicyResult | null; audit_events: AuditEvent[]; }

@@ -10,6 +10,7 @@ import type {
   StrategyEvaluation,
 } from "../api/types";
 import {
+  allocationDelta,
   buildContainerRows,
   buildDecisionLineage,
   buildRecoverySummary,
@@ -17,6 +18,13 @@ import {
   hasCarrierResponseEvidence,
   selectLatestDecisionByContainer,
   selectedAllocationSet,
+  canAdvanceAgent,
+  commitmentByContainer,
+  forecastByContainer,
+  latestAllocationRevision,
+  latestSnapshot,
+  previousAllocationRevision,
+  safetyByContainer,
 } from "./recoverySelectors";
 
 const baselineEval: StrategyEvaluation = {
@@ -286,5 +294,46 @@ describe("recoverySelectors", () => {
       ],
     };
     expect(hasCarrierResponseEvidence(history)).toBe(false);
+  });
+
+  it("selects persisted snapshots, revisions, and their membership delta", () => {
+    const snapshots = [
+      { id: "pre", incident_id: "i", stage: "PRE_DISCHARGE" as const, generated_at: "2026-08-25T01:00:00Z", source: "seed", container_forecasts: [] },
+      { id: "active", incident_id: "i", stage: "DISCHARGE_ACTIVE" as const, generated_at: "2026-08-25T02:00:00Z", source: "sensor", container_forecasts: [] },
+    ];
+    const revisions = [
+      { id: "r0", incident_id: "i", source_phase2_evaluation_id: "e", source_forecast_snapshot_id: "pre", parent_revision_id: null, allocated_container_ids: ["OUT"], locked_container_ids: [], preserved_connection_total: 601, expected_preserved_connections: 12.02, reason: "pre", created_at: "2026-08-25T01:00:00Z" },
+      { id: "r1", incident_id: "i", source_phase2_evaluation_id: "e", source_forecast_snapshot_id: "active", parent_revision_id: "r0", allocated_container_ids: ["IN"], locked_container_ids: [], preserved_connection_total: 602, expected_preserved_connections: 12.04, reason: "active", created_at: "2026-08-25T02:00:00Z" },
+    ];
+    expect(latestSnapshot(snapshots, "PRE_DISCHARGE")?.id).toBe("pre");
+    expect(latestSnapshot(snapshots, "DISCHARGE_ACTIVE")?.id).toBe("active");
+    expect(latestAllocationRevision(revisions)?.id).toBe("r1");
+    expect(previousAllocationRevision(revisions)?.id).toBe("r0");
+    expect(allocationDelta(revisions)).toEqual({ added: ["IN"], removed: ["OUT"] });
+  });
+
+  it("indexes persisted commitment, forecast, and safety evidence by container", () => {
+    expect(commitmentByContainer([{ id: "c", incident_id: "i", origin_revision_id: "r", container_id: "C1", status: "COMMITTED", created_at: "", updated_at: "" }]).get("C1")).toBe("COMMITTED");
+    expect(forecastByContainer({ id: "s", incident_id: "i", stage: "DISCHARGE_ACTIVE", generated_at: "", source: "", container_forecasts: [{ container_id: "C1", p10_ready_at: "a", p50_ready_at: "b", p90_ready_at: "c" }] }).get("C1")?.p50_ready_at).toBe("b");
+    expect(safetyByContainer([{ review: { id: "r", incident_id: "i", container_id: "C1", cargo_note_id: "n", state: "COMPLETED", created_at: "", updated_at: "" }, note: { id: "n", incident_id: "i", container_id: "C1", text: "", source: "", created_at: "" }, assessment: null, policy_result: { id: "p", review_id: "r", assessment_id: "a", incident_id: "i", container_id: "C1", disposition: "BLOCK", automation_blocked: true, reason: "x", replacement_decision_id: null, created_at: "" }, audit_events: [] }]).get("C1")).toBe(true);
+  });
+
+  it("enables agent advance only from the exact persisted wait subject", () => {
+    const run = (state: any, wait_kind: any = null, wait_subject_id: string | null = null) => ({ id: "run", incident_id: "i", state, model_name: "m", prompt_version: "v", step_count: 1, max_steps: 4, wait_kind, wait_subject_id, escalation_reason: null, started_at: "", updated_at: "", completed_at: null });
+    const empty = { carrierHistory: null, reconsiderations: [], tradeoffReviews: [] };
+    const history: any = { case: { id: "case", state: "AWAITING_REQUEST_APPROVAL" }, approvals: [{ status: "APPROVED" }] };
+    expect(canAdvanceAgent(run("RUNNING"), empty)).toBe(true);
+    expect(canAdvanceAgent(run("CREATED"), empty)).toBe(true);
+    expect(canAdvanceAgent(run("WAITING", "NEW_OPERATIONAL_EVIDENCE"), empty)).toBe(false);
+    expect(canAdvanceAgent(run("WAITING", "NEW_OPERATIONAL_EVIDENCE"), { ...empty, reconsiderations: [{ id: "a", handled_at: null }] })).toBe(true);
+    expect(canAdvanceAgent(run("WAITING", "REQUEST_APPROVAL", "case"), empty)).toBe(false);
+    expect(canAdvanceAgent(run("WAITING", "REQUEST_APPROVAL", "case"), { ...empty, carrierHistory: history })).toBe(true);
+    expect(canAdvanceAgent(run("WAITING", "REQUEST_APPROVAL", "other"), { ...empty, carrierHistory: history })).toBe(false);
+    expect(canAdvanceAgent(run("WAITING", "COUNTER_APPROVAL", "case"), { ...empty, carrierHistory: { ...history, case: { id: "case", state: "COMPLETED" } } })).toBe(true);
+    expect(canAdvanceAgent(run("WAITING", "COUNTER_APPROVAL", "case"), { ...empty, carrierHistory: { ...history, case: { id: "case", state: "AWAITING_COUNTER_APPROVAL" } } })).toBe(false);
+    expect(canAdvanceAgent(run("WAITING", "CARRIER_RESPONSE_OR_TIMEOUT", "case"), { ...empty, carrierHistory: { ...history, case: { id: "case", state: "AWAITING_COUNTER_APPROVAL" } } })).toBe(true);
+    expect(canAdvanceAgent(run("WAITING", "CARRIER_RESPONSE_OR_TIMEOUT", "case"), { ...empty, carrierHistory: { ...history, case: { id: "case", state: "AWAITING_CARRIER" } } })).toBe(false);
+    expect(canAdvanceAgent(run("WAITING", "HUMAN_TRADEOFF_DECISION", "review"), { ...empty, reconsiderations: [{ id: "a", handled_at: "now" }], tradeoffReviews: [{ id: "review", reconsideration_assessment_id: "a", state: "RESOLVED" }] })).toBe(true);
+    expect(canAdvanceAgent(run("COMPLETED"), empty)).toBe(false);
   });
 });
