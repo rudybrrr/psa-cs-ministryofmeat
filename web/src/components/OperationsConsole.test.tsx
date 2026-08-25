@@ -193,8 +193,23 @@ interface FetchMockHandlers {
   tradeoffReviews?: unknown[];
   tradeoffOptions?: unknown[];
   cargoSafetyReviews?: unknown[];
+  canonicalStage?: Record<string, unknown>;
   onPost?: (url: string, body?: unknown) => void;
 }
+
+export const defaultStageView = (overrides: Record<string, unknown> = {}) => ({
+  stage: "READY_FOR_PRE_DISCHARGE",
+  ordinal: 2,
+  progress_label: "Stage 2 of 16",
+  status: "PENDING_ACTION",
+  explanation: "bootstrap",
+  next_allowed_action: "BOOTSTRAP_PRE_DISCHARGE",
+  guided_can_execute: true,
+  auto_replay_may_execute: true,
+  requires_human_authority: false,
+  deviation_reason: null,
+  ...overrides,
+});
 
 function createFetchMock(handlers: FetchMockHandlers = {}) {
   return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -220,6 +235,14 @@ function createFetchMock(handlers: FetchMockHandlers = {}) {
 
     if (url.endsWith("/synthetic/scenarios/canonical-scarcity/fixture")) {
       return jsonResponse(minimalFixture());
+    }
+
+    if (url.includes("/canonical-replay/stage")) {
+      return jsonResponse(handlers.canonicalStage ?? defaultStageView());
+    }
+
+    if (url.endsWith("/canonical-replay/agent-runs") && method === "POST") {
+      return jsonResponse({ id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee", incident_id: INCIDENT_ID, state: "CREATED", model_name: "canonical-replay-agent-v1", prompt_version: "incident-agent-v1", step_count: 0, max_steps: 16, wait_kind: null, wait_subject_id: null, escalation_reason: null, started_at: "2026-08-22T08:00:00Z", updated_at: "2026-08-22T08:00:00Z", completed_at: null }, 201);
     }
 
     if (url.endsWith(`/incidents/${INCIDENT_ID}/scarcity-evaluation`)) {
@@ -680,6 +703,7 @@ describe("OperationsConsole guided Phase 6 entry flow", () => {
       if (method === "POST") posts.push(url);
       if (url.endsWith("/synthetic/scenarios/canonical-scarcity")) return jsonResponse({ incident_id: incidentId, evaluation_id: "eval", decision_ids: [], reproducibility_key: "a".repeat(64) }, 201);
       if (url.endsWith("/fixture")) return jsonResponse(fixture);
+      if (url.includes("/canonical-replay/stage")) return jsonResponse(defaultStageView());
       if (url.endsWith(`/incidents/${incidentId}/scarcity-evaluation`)) return jsonResponse(report);
       if (url.endsWith(`/incidents/${incidentId}`)) return jsonResponse({ id: incidentId, source_event_id: "SYN-EVENT", state: "RECOVERY_ANALYSIS", created_at: "2026-08-25T01:00:00Z" });
       if (url.includes(`/incidents/${incidentId}/`)) return jsonResponse([]);
@@ -815,6 +839,7 @@ function createGuidedBackend() {
     safetyNotes: {} as Record<string, { text: string; source: string }>,
     safetyAssessments: {} as Record<string, Record<string, unknown> | undefined>,
     decisions: [] as Array<Record<string, unknown>>,
+    canonicalStage: null as Record<string, unknown> | null,
     audit: [] as Array<Record<string, unknown>>,
     stepCount: 0,
   };
@@ -823,7 +848,7 @@ function createGuidedBackend() {
   const counts = {
     bootstrap: 0, publishActive: 0, advance: 0, start: 0,
     requestApproval: 0, counterApproval: 0, simulate: 0, send: 0, prepare: 0,
-    safetyCreate: 0, safetyEvaluate: 0,
+    safetyCreate: 0, safetyEvaluate: 0, startDemoRun: 0,
   };
 
   function audit(actor: string, actorId: string, eventType: string, payload: Record<string, unknown>) {
@@ -1013,6 +1038,15 @@ function createGuidedBackend() {
       return jsonResponse({ incident_id: INCIDENT_ID, evaluation_id: "eval-1", decision_ids: [], reproducibility_key: "a".repeat(64) }, 201);
     }
     if (url.endsWith("/canonical-scarcity/fixture")) return jsonResponse(guidedFixture());
+    if (url.includes("/canonical-replay/stage")) {
+      return jsonResponse(state.canonicalStage ?? defaultStageView());
+    }
+    if (url.endsWith("/canonical-replay/agent-runs") && method === "POST") {
+      const run = { id: RUN_ID, incident_id: INCIDENT_ID, state: "CREATED", model_name: "canonical-replay-agent-v1", prompt_version: "incident-agent-v1", step_count: 0, max_steps: 16, wait_kind: null, wait_subject_id: null, escalation_reason: null, started_at: at(8, 10), updated_at: at(8, 10), completed_at: null };
+      state.agentRuns.push(run);
+      counts.startDemoRun = (counts.startDemoRun ?? 0) + 1;
+      return jsonResponse(run, 201);
+    }
     if (url.endsWith(`/incidents/${INCIDENT_ID}/scarcity-evaluation`)) return jsonResponse(guidedReport());
     if (url.endsWith(`/incidents/${INCIDENT_ID}`)) return jsonResponse(state.incident);
     if (url.endsWith(`/incidents/${INCIDENT_ID}/decisions`)) return jsonResponse(state.decisions);

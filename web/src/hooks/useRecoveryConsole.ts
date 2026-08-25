@@ -26,9 +26,11 @@ import {
 import { createAgentRun, advanceAgentRun, getAgentRunHistory, listAgentRuns } from "../api/agentRuntime";
 import { bootstrapDynamicYard, listAllocationRevisions, listExpediteCommitments, listReconsiderations, listTradeoffOptions, listTradeoffReviews, listYardForecasts, publishDischargeActive, selectTradeoff } from "../api/dynamicYard";
 import { createCargoSafetyReview, evaluateCargoSafetyReview, getCargoSafetyHistory, listCargoSafetyReviews } from "../api/cargoSafety";
+import { createCanonicalDemoAgentRun, fetchCanonicalReplayStage, initialCanonicalStageView } from "../api/canonicalReplay";
 import type {
   AuditEvent,
   CanonicalIncidentFixture,
+  CanonicalReplayStageView,
   CarrierRecoveryCase,
   CarrierRecoveryHistory,
   Decision,
@@ -64,6 +66,14 @@ export interface RecoveryConsoleState {
   error: ApiError | null;
 }
 
+export interface MutationOutcome {
+  ok: boolean;
+  conflict: boolean;
+  error: ApiError | null;
+}
+
+const SKIPPED_MUTATION: MutationOutcome = { ok: false, conflict: false, error: null };
+
 async function loadIncidentBundle(incidentId: string) {
   const [
     incident,
@@ -80,6 +90,7 @@ async function loadIncidentBundle(incidentId: string) {
     tradeoffOptions,
     cargoSafetyReviews,
     agentRuns,
+    canonicalStage,
   ] = await Promise.all([
     getIncident(incidentId),
     getCanonicalFixture(),
@@ -88,6 +99,7 @@ async function loadIncidentBundle(incidentId: string) {
     getAuditEvents(incidentId),
     listCarrierCases(incidentId),
     listYardForecasts(incidentId), listAllocationRevisions(incidentId), listExpediteCommitments(incidentId), listReconsiderations(incidentId), listTradeoffReviews(incidentId), listTradeoffOptions(incidentId), listCargoSafetyReviews(incidentId), listAgentRuns(incidentId),
+    fetchCanonicalReplayStage(incidentId),
   ]);
 
   return {
@@ -97,7 +109,7 @@ async function loadIncidentBundle(incidentId: string) {
     decisions,
     auditEvents,
     carrierCases,
-    yardForecasts, allocationRevisions, expediteCommitments, reconsiderations, tradeoffReviews, tradeoffOptions, cargoSafetyReviews, agentRuns,
+    yardForecasts, allocationRevisions, expediteCommitments, reconsiderations, tradeoffReviews, tradeoffOptions, cargoSafetyReviews, agentRuns, canonicalStage,
   };
 }
 
@@ -117,6 +129,7 @@ export function useRecoveryConsole() {
   const [tradeoffOptions, setTradeoffOptions] = useState<AllocationTradeoffOption[]>([]);
   const [cargoSafetyReviews, setCargoSafetyReviews] = useState<CargoSafetyReview[]>([]);
   const [agentRuns, setAgentRuns] = useState<AgentRun[]>([]);
+  const [canonicalStage, setCanonicalStage] = useState<CanonicalReplayStageView | null>(null);
   const [selectedAgentHistory, setSelectedAgentHistory] = useState<AgentHistory | null>(null);
   const [agentWaitHistory, setAgentWaitHistory] = useState<CarrierRecoveryHistory | null>(null);
   const [safetyHistories, setSafetyHistories] = useState<CargoSafetyHistory[]>([]);
@@ -183,7 +196,7 @@ export function useRecoveryConsole() {
     setDecisions(bundle.decisions);
     setAuditEvents(bundle.auditEvents);
     setCarrierCases(bundle.carrierCases);
-    setYardForecasts(bundle.yardForecasts); setAllocationRevisions(bundle.allocationRevisions); setExpediteCommitments(bundle.expediteCommitments); setReconsiderations(bundle.reconsiderations); setTradeoffReviews(bundle.tradeoffReviews); setTradeoffOptions(bundle.tradeoffOptions); setCargoSafetyReviews(bundle.cargoSafetyReviews); setAgentRuns(bundle.agentRuns);
+    setYardForecasts(bundle.yardForecasts); setAllocationRevisions(bundle.allocationRevisions); setExpediteCommitments(bundle.expediteCommitments); setReconsiderations(bundle.reconsiderations); setTradeoffReviews(bundle.tradeoffReviews); setTradeoffOptions(bundle.tradeoffOptions); setCargoSafetyReviews(bundle.cargoSafetyReviews); setAgentRuns(bundle.agentRuns); setCanonicalStage(bundle.canonicalStage);
     const currentRun = bundle.agentRuns.at(-1);
     setSelectedAgentHistory(currentRun ? await getAgentRunHistory(currentRun.id) : null);
     setAgentWaitHistory(currentRun?.wait_subject_id && ["REQUEST_APPROVAL", "COUNTER_APPROVAL", "CARRIER_RESPONSE_OR_TIMEOUT"].includes(currentRun.wait_kind ?? "") ? await getCarrierCaseHistory(currentRun.wait_subject_id) : null);
@@ -220,19 +233,23 @@ export function useRecoveryConsole() {
   }, [applyBundle, incident, selectedCarrierCaseId, selectedContainerId]);
 
   const runMutation = useCallback(
-    async (operation: () => Promise<void>) => {
+    async (operation: () => Promise<void>): Promise<MutationOutcome> => {
       setLoading(true);
       setError(null);
       try {
         await operation();
         await refresh();
+        return { ok: true, conflict: false, error: null };
       } catch (mutationError) {
         if (mutationError instanceof ApiError) {
           setError(mutationError);
           if (mutationError.status === 409) {
             await refresh();
+            return { ok: false, conflict: true, error: mutationError };
           }
+          return { ok: false, conflict: false, error: mutationError };
         }
+        return { ok: false, conflict: false, error: null };
       } finally {
         setLoading(false);
       }
@@ -348,11 +365,11 @@ export function useRecoveryConsole() {
   [],
 );
 
-  const approveRequestAction = useCallback(async () => {
+  const approveRequestAction = useCallback(async (operatorId: string = "operator-console"): Promise<MutationOutcome> => {
     if (!selectedCarrierCase) {
-      return;
+      return SKIPPED_MUTATION;
     }
-    await runMutation(async () => {
+    return runMutation(async () => {
       await withBinding(
         selectedCarrierCase.id,
         "OUTBOUND_REQUEST",
@@ -361,7 +378,7 @@ export function useRecoveryConsole() {
             proposal_decision_id: binding.proposal_decision_id,
             request_id: binding.request_id!,
             expected_payload_fingerprint: binding.expected_payload_fingerprint,
-            operator_id: "operator-console",
+            operator_id: operatorId,
             status: "APPROVED",
           });
         },
@@ -389,31 +406,31 @@ export function useRecoveryConsole() {
     });
   }, [runMutation, selectedCarrierCase, withBinding]);
 
-  const sendRequest = useCallback(async () => {
+  const sendRequest = useCallback(async (): Promise<MutationOutcome> => {
     if (!selectedCarrierCase) {
-      return;
+      return SKIPPED_MUTATION;
     }
-    await runMutation(async () => {
+    return runMutation(async () => {
       await sendCarrierRequest(selectedCarrierCase.id);
     });
   }, [runMutation, selectedCarrierCase]);
 
-  const simulateCarrierResponseAction = useCallback(async () => {
+  const simulateCarrierResponseAction = useCallback(async (effectiveAt: string = CARRIER_DEMO_TIMESTAMPS.simulateAt): Promise<MutationOutcome> => {
     if (!selectedCarrierCase) {
-      return;
+      return SKIPPED_MUTATION;
     }
-    await runMutation(async () => {
+    return runMutation(async () => {
       await simulateCarrierResponse(selectedCarrierCase.id, {
-        effective_at: CARRIER_DEMO_TIMESTAMPS.simulateAt,
+        effective_at: effectiveAt,
       });
     });
   }, [runMutation, selectedCarrierCase]);
 
-  const approveCounterAction = useCallback(async () => {
+  const approveCounterAction = useCallback(async (operatorId: string = "operator-console"): Promise<MutationOutcome> => {
     if (!selectedCarrierCase) {
-      return;
+      return SKIPPED_MUTATION;
     }
-    await runMutation(async () => {
+    return runMutation(async () => {
       await withBinding(
         selectedCarrierCase.id,
         "COUNTER_PROPOSAL",
@@ -422,7 +439,7 @@ export function useRecoveryConsole() {
             proposal_decision_id: binding.proposal_decision_id,
             carrier_response_id: binding.carrier_response_id!,
             expected_payload_fingerprint: binding.expected_payload_fingerprint,
-            operator_id: "operator-console",
+            operator_id: operatorId,
             status: "APPROVED",
           });
         },
@@ -461,13 +478,14 @@ export function useRecoveryConsole() {
     });
   }, [runMutation, selectedCarrierCase]);
 
-  const bootstrapYard = useCallback(async () => { if (incident) await runMutation(async () => { await bootstrapDynamicYard(incident.id); }); }, [incident, runMutation]);
-  const publishActive = useCallback(async () => { if (incident) await runMutation(async () => { await publishDischargeActive(incident.id); }); }, [incident, runMutation]);
-  const startAgent = useCallback(async () => { if (incident) await runMutation(async () => { await createAgentRun(incident.id); }); }, [incident, runMutation]);
-  const advanceAgent = useCallback(async () => { const run = agentRuns.at(-1); if (run) await runMutation(async () => { await advanceAgentRun(run.id); }); }, [agentRuns, runMutation]);
-  const chooseTradeoff = useCallback(async (review: AllocationTradeoffReview, selectedOptionId: string) => { await runMutation(async () => { await selectTradeoff(review.id, { selected_option_id: selectedOptionId, expected_options_fingerprint: review.options_fingerprint, operator_id: "operator-console" }); }); }, [runMutation]);
-  const createSafetyReview = useCallback(async (containerId: string) => { if (incident) await runMutation(async () => { await createCargoSafetyReview(incident.id, containerId, "Manifest declares general cargo; free-text handling note identifies corrosive material and requires safety review.", "synthetic-canonical-cargo-note"); }); }, [incident, runMutation]);
-  const evaluateSafety = useCallback(async (reviewId: string) => { await runMutation(async () => { await evaluateCargoSafetyReview(reviewId); }); }, [runMutation]);
+  const bootstrapYard = useCallback(async (): Promise<MutationOutcome> => { if (incident) return runMutation(async () => { await bootstrapDynamicYard(incident.id); }); return SKIPPED_MUTATION; }, [incident, runMutation]);
+  const publishActive = useCallback(async (): Promise<MutationOutcome> => { if (incident) return runMutation(async () => { await publishDischargeActive(incident.id); }); return SKIPPED_MUTATION; }, [incident, runMutation]);
+  const startAgent = useCallback(async (): Promise<MutationOutcome> => { if (incident) return runMutation(async () => { await createAgentRun(incident.id); }); return SKIPPED_MUTATION; }, [incident, runMutation]);
+  const startDemoAgentRun = useCallback(async (): Promise<MutationOutcome> => { if (incident) return runMutation(async () => { await createCanonicalDemoAgentRun(incident.id); }); return SKIPPED_MUTATION; }, [incident, runMutation]);
+  const advanceAgent = useCallback(async (): Promise<MutationOutcome> => { const run = agentRuns.at(-1); if (run) return runMutation(async () => { await advanceAgentRun(run.id); }); return SKIPPED_MUTATION; }, [agentRuns, runMutation]);
+  const chooseTradeoff = useCallback(async (review: AllocationTradeoffReview, selectedOptionId: string): Promise<MutationOutcome> => { return runMutation(async () => { await selectTradeoff(review.id, { selected_option_id: selectedOptionId, expected_options_fingerprint: review.options_fingerprint, operator_id: "operator-console" }); }); }, [runMutation]);
+  const createSafetyReview = useCallback(async (containerId: string): Promise<MutationOutcome> => { if (incident) return runMutation(async () => { await createCargoSafetyReview(incident.id, containerId, "Manifest declares general cargo; free-text handling note identifies corrosive material and requires safety review.", "synthetic-canonical-cargo-note"); }); return SKIPPED_MUTATION; }, [incident, runMutation]);
+  const evaluateSafety = useCallback(async (reviewId: string): Promise<MutationOutcome> => { return runMutation(async () => { await evaluateCargoSafetyReview(reviewId); }); }, [runMutation]);
 
   return {
     incident,
@@ -477,6 +495,7 @@ export function useRecoveryConsole() {
     auditEvents,
     carrierCases,
     yardForecasts, allocationRevisions, expediteCommitments, reconsiderations, tradeoffReviews, tradeoffOptions, cargoSafetyReviews, agentRuns, selectedAgentHistory, agentWaitHistory, safetyHistories,
+    canonicalStage: canonicalStage ?? initialCanonicalStageView(),
     selectedContainerId,
     selectedCarrierCaseId,
     selectedCaseHistory,
@@ -498,7 +517,7 @@ export function useRecoveryConsole() {
     approveCounter: approveCounterAction,
     rejectCounter: rejectCounterAction,
     evaluateTimeout: evaluateTimeoutAction,
-    bootstrapYard, publishActive, startAgent, advanceAgent, chooseTradeoff, createSafetyReview, evaluateSafety,
+    bootstrapYard, publishActive, startAgent, startDemoAgentRun, advanceAgent, chooseTradeoff, createSafetyReview, evaluateSafety,
     refresh,
     setIncident,
     setFixture,
