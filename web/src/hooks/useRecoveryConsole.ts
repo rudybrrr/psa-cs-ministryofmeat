@@ -208,10 +208,13 @@ export function useRecoveryConsole() {
   }, []);
 
   const refresh = useCallback(async () => {
-    if (!incident) {
+    // Read through the synchronous mirror so refresh works even when invoked
+    // before React has flushed the state update that created the incident.
+    const currentIncident = latestStateRef.current.incident;
+    if (!currentIncident) {
       return;
     }
-    const bundle = await loadIncidentBundle(incident.id);
+    const bundle = await loadIncidentBundle(currentIncident.id);
     await applyBundle(bundle);
 
     const activeCase =
@@ -234,7 +237,7 @@ export function useRecoveryConsole() {
         setSelectedCaseHistory(await getCarrierCaseHistory(matched.id));
       }
     }
-  }, [applyBundle, incident, selectedCarrierCaseId, selectedContainerId]);
+  }, [applyBundle, selectedCarrierCaseId, selectedContainerId]);
 
   const runMutation = useCallback(
     async (operation: () => Promise<void>): Promise<MutationOutcome> => {
@@ -500,7 +503,7 @@ export function useRecoveryConsole() {
   const startDemoAgentRun = useCallback(async (): Promise<MutationOutcome> => { if (latestStateRef.current.incident) return runMutation(async () => { await createCanonicalDemoAgentRun(latestStateRef.current.incident!.id); }); return SKIPPED_MUTATION; }, [runMutation]);
   const advanceAgent = useCallback(async (): Promise<MutationOutcome> => { const run = latestStateRef.current.agentRuns.at(-1); if (run) return runMutation(async () => { await advanceAgentRun(run.id); }); return SKIPPED_MUTATION; }, [runMutation]);
   const chooseTradeoff = useCallback(async (review: AllocationTradeoffReview, selectedOptionId: string): Promise<MutationOutcome> => { return runMutation(async () => { await selectTradeoff(review.id, { selected_option_id: selectedOptionId, expected_options_fingerprint: review.options_fingerprint, operator_id: "operator-console" }); }); }, [runMutation]);
-  const createSafetyReview = useCallback(async (containerId: string): Promise<MutationOutcome> => { if (incident) return runMutation(async () => { await createCargoSafetyReview(incident.id, containerId, "Manifest declares general cargo; free-text handling note identifies corrosive material and requires safety review.", "synthetic-canonical-cargo-note"); }); return SKIPPED_MUTATION; }, [incident, runMutation]);
+  const createSafetyReview = useCallback(async (containerId: string): Promise<MutationOutcome> => { const currentIncident = latestStateRef.current.incident; if (currentIncident) return runMutation(async () => { await createCargoSafetyReview(currentIncident.id, containerId, "Manifest declares general cargo; free-text handling note identifies corrosive material and requires safety review.", "synthetic-canonical-cargo-note"); }); return SKIPPED_MUTATION; }, [runMutation]);
   const evaluateSafety = useCallback(async (reviewId: string): Promise<MutationOutcome> => { return runMutation(async () => { await evaluateCargoSafetyReview(reviewId); }); }, [runMutation]);
 
   return {
@@ -535,6 +538,7 @@ export function useRecoveryConsole() {
     evaluateTimeout: evaluateTimeoutAction,
     bootstrapYard, publishActive, startAgent, startDemoAgentRun, advanceAgent, chooseTradeoff, createSafetyReview, evaluateSafety,
     refresh,
+    readLatestState: useCallback((): { incident: Incident | null; carrierCases: CarrierRecoveryCase[]; agentRuns: AgentRun[] } => latestStateRef.current, []),
     setIncident,
     setFixture,
     setScarcityEvaluation,

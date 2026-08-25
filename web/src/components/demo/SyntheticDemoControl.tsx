@@ -51,7 +51,8 @@ export function SyntheticDemoControl(props: SyntheticDemoControlProps) {
   };
 
   const isApprovalStage = stage.requires_human_authority && (stage.next_allowed_action === "APPROVE_REQUEST" || stage.next_allowed_action === "APPROVE_COUNTER");
-  const terminalSuccess = stage.stage === "SAFETY_BLOCKED" || stage.stage === "COMPLETE";
+  const terminalSuccess = stage.stage === "SAFETY_BLOCKED";
+  const completedRun = stage.stage === "COMPLETE";
 
   return (
     <section aria-labelledby="demo-control-heading" className="rounded border border-fuchsia-500/40 bg-fuchsia-950/20 px-4 py-4">
@@ -79,6 +80,12 @@ export function SyntheticDemoControl(props: SyntheticDemoControlProps) {
           <div className="mt-3 rounded border border-emerald-500/50 bg-emerald-950/30 px-3 py-2">
             <p className="font-mono text-xs font-semibold uppercase text-emerald-200">ESCALATED / SAFETY_REVIEW_REQUIRED</p>
             <p className="mt-1 text-xs text-emerald-100/80">Safe escalation reached. The deterministic cargo-safety policy blocked automation; success was never reinterpreted as automatic recovery.</p>
+          </div>
+        )}
+        {completedRun && (
+          <div className="mt-3 rounded border border-emerald-500/50 bg-emerald-950/30 px-3 py-2">
+            <p className="font-mono text-xs font-semibold uppercase text-emerald-200">RUN COMPLETED</p>
+            <p className="mt-1 text-xs text-emerald-100/80">All actionable recovery work resolved deterministically; the run completed without requiring escalation.</p>
           </div>
         )}
         {isApprovalStage && (

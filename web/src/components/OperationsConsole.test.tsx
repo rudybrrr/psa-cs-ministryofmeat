@@ -1596,11 +1596,7 @@ describe("OperationsConsole synthetic auto replay journey", () => {
     render(<OperationsConsole />);
 
     await user.click(screen.getByRole("button", { name: /^create canonical incident$/i }));
-    await waitFor(() => {
-      const el = document.body.textContent ?? "";
-      if (!el.includes("SYN-EVT-AUTO")) { console.log("PROBE-TEXT:", el.slice(0, 1200)); console.log("PROBE-POSTS:", JSON.stringify(backend.posts.map((p) => p.url))); }
-      expect(screen.getByText("SYN-EVT-AUTO")).toBeInTheDocument();
-    });
+    await waitFor(() => expect(screen.getByText("SYN-EVT-AUTO")).toBeInTheDocument());
 
     await user.click(screen.getByRole("button", { name: /^auto replay$/i }));
     await user.click(screen.getByRole("button", { name: /auto start/i }));
@@ -1621,4 +1617,76 @@ describe("OperationsConsole synthetic auto replay journey", () => {
     const productionStart = backend.posts.filter((post) => post.url.endsWith(`/incidents/${INCIDENT_ID}/agent-runs`));
     expect(productionStart).toHaveLength(0);
   }, 15000);
+
+  it("auto start is enabled from the clean READY_TO_CREATE state and its first action creates the canonical incident", async () => {
+    const backend = createAutoBackend();
+    vi.stubGlobal("fetch", backend.fetchMock);
+    const user = userEvent.setup();
+    render(<OperationsConsole />);
+
+    await user.click(screen.getByRole("button", { name: /^auto replay$/i }));
+    const autoStart = screen.getByRole("button", { name: /auto start/i });
+    expect(autoStart).toBeEnabled();
+    await user.click(autoStart);
+
+    await waitFor(() => expect(screen.getByText(/halt: terminal-success/i)).toBeInTheDocument(), { timeout: 3000 });
+    expect(screen.getByText("READY_TO_CREATE")).toBeInTheDocument();
+    const scarcityPosts = backend.posts.filter((post) => post.url.endsWith("/synthetic/scenarios/canonical-scarcity"));
+    expect(scarcityPosts).toHaveLength(1);
+    expect(backend.counts.startDemoRun).toBe(1);
+    expect(screen.getByText("ESCALATED / SAFETY_REVIEW_REQUIRED")).toBeInTheDocument();
+  }, 15000);
+
+  it("auto replay resumes from an existing incident without minting a new one", async () => {
+    const backend = createAutoBackend();
+    vi.stubGlobal("fetch", backend.fetchMock);
+    const first = userEvent.setup();
+    render(<OperationsConsole />);
+    await first.click(screen.getByRole("button", { name: /^create canonical incident$/i }));
+    await waitFor(() => expect(screen.getByText("SYN-EVT-AUTO")).toBeInTheDocument());
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: /^auto replay$/i }));
+    expect(screen.getByRole("button", { name: /auto start/i })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: /auto start/i }));
+
+    await waitFor(() => expect(screen.getByText(/halt: terminal-success/i)).toBeInTheDocument(), { timeout: 3000 });
+    const scarcityPosts = backend.posts.filter((post) => post.url.endsWith("/synthetic/scenarios/canonical-scarcity"));
+    expect(scarcityPosts).toHaveLength(1);
+    expect(backend.counts.bootstrap).toBe(1);
+    expect(screen.getByText("ESCALATED / SAFETY_REVIEW_REQUIRED")).toBeInTheDocument();
+  }, 15000);
+
+  it("halts with error when the projected stage fetch fails and never mints a fresh incident", async () => {
+    let breakStage = false;
+    const posts: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+      if (method === "POST") posts.push(url);
+      if (url.endsWith("/canonical-replay/stage")) {
+        if (breakStage) return jsonResponse({ detail: "stage projection unavailable" }, 500);
+        return jsonResponse(defaultStageView());
+      }
+      if (url.endsWith("/synthetic/scenarios/canonical-scarcity") && method === "POST") return jsonResponse({ incident_id: INCIDENT_ID, evaluation_id: "eval-1", decision_ids: [], reproducibility_key: "a".repeat(64) }, 201);
+      if (url.endsWith("/canonical-scarcity/fixture")) return jsonResponse(minimalFixture());
+      if (url.includes("/scarcity-evaluation")) return jsonResponse(report);
+      if (url.endsWith(`/incidents/${INCIDENT_ID}`)) return jsonResponse({ id: INCIDENT_ID, source_event_id: "SYN-EVT-FIX1", state: "RECOVERY_ANALYSIS", created_at: "" });
+      if (url.includes(`/incidents/${INCIDENT_ID}/`)) return jsonResponse([]);
+      return jsonResponse([]);
+    }));
+    const user = userEvent.setup();
+    render(<OperationsConsole />);
+
+    await user.click(screen.getByRole("button", { name: /^create canonical incident$/i }));
+    await waitFor(() => expect(screen.getByText("SYN-EVT-FIX1")).toBeInTheDocument());
+
+    await user.click(screen.getByRole("button", { name: /^auto replay$/i }));
+    breakStage = true;
+    await user.click(screen.getByRole("button", { name: /auto start/i }));
+
+    await waitFor(() => expect(screen.getByText(/halt: error/i)).toBeInTheDocument());
+    const scarcityPosts = posts.filter((postUrl) => postUrl.endsWith("/canonical-scarcity"));
+    expect(scarcityPosts).toHaveLength(1);
+    expect(screen.getByText("SYN-EVT-FIX1")).toBeInTheDocument();
+  });
 });

@@ -103,6 +103,13 @@ describe("SyntheticDemoControl guided demo (default and primary)", () => {
     expect(screen.getByText(/safe escalation/i)).toBeInTheDocument();
   });
 
+  it("renders stage-accurate completed-run copy instead of escalation copy", () => {
+    renderGuided(stage({ stage: "COMPLETE", ordinal: 16, status: "TERMINAL_SUCCESS", explanation: "AgentRun completed with all actionable recovery work resolved.", next_allowed_action: "NONE", guided_can_execute: false }));
+    expect(screen.getByText("RUN COMPLETED")).toBeInTheDocument();
+    expect(screen.getByText(/completed without requiring escalation/i)).toBeInTheDocument();
+    expect(screen.queryByText("ESCALATED / SAFETY_REVIEW_REQUIRED")).not.toBeInTheDocument();
+  });
+
   it("explains off-canonical deviations and offers a fresh canonical replay", async () => {
     const handlers = baseHandlers();
     renderGuided(stage({ stage: "OFF_CANONICAL_PATH", ordinal: 8, status: "TERMINAL_HALTED", explanation: "The outbound request was rejected.", next_allowed_action: "NONE", guided_can_execute: false, deviation_reason: "REQUEST_REJECTED" }), handlers);

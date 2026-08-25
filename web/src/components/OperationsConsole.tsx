@@ -36,12 +36,17 @@ export function OperationsConsole() {
   const autoCallbacks: AutoReplayCallbacks = {
     fetchStage: async () => {
       const current = consoleRef.current;
-      if (!current.incident) return initialCanonicalStageView();
-      try {
-        return await fetchCanonicalReplayStage(current.incident.id);
-      } catch {
+      // readLatestState mirrors applied bundle data synchronously, so the
+      // freshly created incident is visible to the controller without
+      // depending on React render timing.
+      const live = current.readLatestState();
+      if (!live.incident) {
         return initialCanonicalStageView();
       }
+      // Stage-fetch failures (404 / network / backend) must propagate to
+      // runAutoReplay, which owns error-halting. They must never be converted
+      // into READY_TO_CREATE or trigger a fresh incident.
+      return fetchCanonicalReplayStage(live.incident.id);
     },
     execute: async (action: CanonicalReplayActionType) => {
       const current = consoleRef.current;
@@ -183,7 +188,10 @@ export function OperationsConsole() {
           onCreateSafetyReview={() => void console.createSafetyReview("SYN-CNT-010")}
           autoReplay={{
             progress: autoReplay.progress,
-            canStart: Boolean(console.incident),
+            // Projector authority: start is permitted exactly when the
+            // projected stage permits auto execution (READY_TO_CREATE local
+            // view included); loading/terminal/off-canonical/tradeoff exclude it.
+            canStart: !console.loading && console.canonicalStage.auto_replay_may_execute,
             onStart: autoReplay.start,
             onStop: autoReplay.stop,
           }}
