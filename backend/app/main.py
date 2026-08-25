@@ -58,6 +58,13 @@ from backend.app.storage.cargo_safety import CargoSafetyHistory
 from backend.app.domain.agent_runtime import AgentHistory, AgentRun
 from backend.app.orchestration.agent_runtime import AgentRuntimeCoordinator, CanonicalAgentRuntimeConfiguration
 from backend.app.services.agent_model import AgentModel, OpenAIAgentModel
+from backend.app.domain.canonical_replay import CanonicalReplayStageView
+from backend.app.orchestration.canonical_replay import project_canonical_replay_stage
+from backend.app.services.canonical_replay import (
+    CANONICAL_REPLAY_MODEL_NAME,
+    CanonicalReplayAgentModel,
+    CanonicalReplaySemanticChecker,
+)
 from backend.app.storage.agent_runtime import AgentRuntimeConflict, AgentRuntimeRepository
 from backend.app.domain.dynamic_yard import AllocationRevision, AllocationTradeoffOption, AllocationTradeoffReview, ExpediteCommitment, ExpediteReconsiderationAssessment, YardForecastSnapshot
 from backend.app.orchestration.dynamic_yard import DynamicYardWorkflow
@@ -197,9 +204,22 @@ def create_app(*, database_engine: Engine | None = None, cargo_safety_checker: S
     def cargo_safety_workflow(session: Session) -> CargoSafetyWorkflow:
         return CargoSafetyWorkflow.for_session(session, checker=cargo_safety_checker)
 
-    def agent_runtime(session: Session) -> AgentRuntimeCoordinator:
+    def default_agent_runtime(session: Session) -> AgentRuntimeCoordinator:
         configuration = CanonicalAgentRuntimeConfiguration.load()
         return AgentRuntimeCoordinator(session=session, model=agent_model or OpenAIAgentModel(), clock=configuration.clock("before_deadline"), configuration=configuration)
+
+    def agent_runtime_for_run(session: Session, run: AgentRun) -> AgentRuntimeCoordinator:
+        configuration = CanonicalAgentRuntimeConfiguration.load()
+        if run.model_name == CANONICAL_REPLAY_MODEL_NAME:
+            return AgentRuntimeCoordinator(session=session, model=CanonicalReplayAgentModel(), clock=configuration.clock("before_deadline"), configuration=configuration, cargo_safety_checker=CanonicalReplaySemanticChecker())
+        return default_agent_runtime(session)
+
+    def agent_runtime(session: Session) -> AgentRuntimeCoordinator:
+        return default_agent_runtime(session)
+
+    def canonical_demo_runtime(session: Session) -> AgentRuntimeCoordinator:
+        configuration = CanonicalAgentRuntimeConfiguration.load()
+        return AgentRuntimeCoordinator(session=session, model=CanonicalReplayAgentModel(), clock=configuration.clock("before_deadline"), configuration=configuration, cargo_safety_checker=CanonicalReplaySemanticChecker())
 
     def dynamic_yard_workflow(session: Session) -> DynamicYardWorkflow:
         return DynamicYardWorkflow.for_session(session)
@@ -312,11 +332,31 @@ def create_app(*, database_engine: Engine | None = None, cargo_safety_checker: S
         if await request.body():
             raise HTTPException(status_code=422, detail="Agent advance accepts no request body")
         try:
-            return agent_runtime(session).advance(run_id)
+            run = AgentRuntimeRepository(session).get_run(run_id)
         except LookupError as error:
             raise HTTPException(status_code=404, detail="Agent run not found") from error
+        try:
+            return agent_runtime_for_run(session, run).advance(run_id)
         except AgentRuntimeConflict as error:
             raise HTTPException(status_code=409, detail=str(error)) from error
+
+    @application.post("/synthetic/scenarios/{incident_id}/canonical-replay/agent-runs", response_model=AgentRun, status_code=status.HTTP_201_CREATED)
+    async def create_canonical_demo_agent_run(incident_id: UUID, session: SessionDependency, request: Request) -> AgentRun:
+        if await request.body():
+            raise HTTPException(status_code=422, detail="Canonical demo agent run creation accepts no request body")
+        try:
+            return canonical_demo_runtime(session).create_run(incident_id)
+        except RecordNotFound as error:
+            raise HTTPException(status_code=404, detail="Incident not found") from error
+        except AgentRuntimeConflict as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+
+    @application.get("/synthetic/scenarios/{incident_id}/canonical-replay/stage", response_model=CanonicalReplayStageView)
+    def get_canonical_replay_stage(incident_id: UUID, session: SessionDependency) -> CanonicalReplayStageView:
+        try:
+            return project_canonical_replay_stage(session, incident_id)
+        except RecordNotFound as error:
+            raise HTTPException(status_code=404, detail="Incident not found") from error
 
     @application.get("/incidents/{incident_id}/agent-runs", response_model=list[AgentRun])
     def list_agent_runs(incident_id: UUID, session: SessionDependency) -> list[AgentRun]:
