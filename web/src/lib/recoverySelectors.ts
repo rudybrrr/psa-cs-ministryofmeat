@@ -6,6 +6,16 @@ import type {
   ScarcityEvaluationReport,
   StrategyEvaluation,
 } from "../api/types";
+import type { AgentRun, AllocationRevision, CargoSafetyHistory, ExpediteCommitment, YardForecastSnapshot } from "../api/types";
+
+export const latestSnapshot = (snapshots: YardForecastSnapshot[], stage: YardForecastSnapshot["stage"]) => [...snapshots].filter((item) => item.stage === stage).at(-1) ?? null;
+export const latestAllocationRevision = (revisions: AllocationRevision[]) => revisions.at(-1) ?? null;
+export const previousAllocationRevision = (revisions: AllocationRevision[]) => revisions.length > 1 ? revisions.at(-2) ?? null : null;
+export const allocationDelta = (revisions: AllocationRevision[]) => { const current = latestAllocationRevision(revisions); const prior = previousAllocationRevision(revisions); const before = new Set(prior?.allocated_container_ids ?? []); const after = new Set(current?.allocated_container_ids ?? []); return { added: [...after].filter((id) => !before.has(id)), removed: [...before].filter((id) => !after.has(id)) }; };
+export const commitmentByContainer = (items: ExpediteCommitment[]) => new Map(items.map((item) => [item.container_id, item.status]));
+export const forecastByContainer = (snapshot: YardForecastSnapshot | null) => new Map((snapshot?.container_forecasts ?? []).map((item) => [item.container_id, item]));
+export const safetyByContainer = (histories: CargoSafetyHistory[]) => new Map(histories.map((item) => [item.review.container_id, item.policy_result?.automation_blocked ?? false]));
+export function canAdvanceAgent(run: AgentRun | null, activeSnapshot: YardForecastSnapshot | null, carrierCases: CarrierRecoveryCase[], reviewsResolved = false, requestApproved = false, counterApproved = false) { if (!run || ["COMPLETED", "ESCALATED", "FAILED"].includes(run.state)) return false; if (run.state === "RUNNING") return true; if (run.wait_kind === "NEW_OPERATIONAL_EVIDENCE") return Boolean(activeSnapshot); if (run.wait_kind === "REQUEST_APPROVAL") return requestApproved; if (run.wait_kind === "COUNTER_APPROVAL") return counterApproved; if (run.wait_kind === "CARRIER_RESPONSE_OR_TIMEOUT") return carrierCases.some((item) => !["AWAITING_CARRIER"].includes(item.state)); if (run.wait_kind === "HUMAN_TRADEOFF_DECISION") return reviewsResolved; return false; }
 
 export interface RecoverySummary {
   containersAtRisk: number;

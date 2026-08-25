@@ -28,7 +28,7 @@ export function OperationsConsole() {
         />
 
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]">
-          <AgentRunPanel run={console.agentRuns.at(-1) ?? null} history={console.selectedAgentHistory} loading={console.loading} onStart={() => void console.startAgent()} onAdvance={() => void console.advanceAgent()} onRefresh={() => void console.refresh()} />
+          <AgentRunPanel run={console.agentRuns.at(-1) ?? null} history={console.selectedAgentHistory} loading={console.loading} canAdvance={console.agentRuns.at(-1)?.state === "RUNNING"} onStart={() => void console.startAgent()} onAdvance={() => void console.advanceAgent()} onRefresh={() => void console.refresh()} />
           <DynamicYardPanel snapshots={console.yardForecasts} revisions={console.allocationRevisions} commitments={console.expediteCommitments} loading={console.loading} onBootstrap={() => void console.bootstrapYard()} onActive={() => void console.publishActive()} />
         </div>
 
