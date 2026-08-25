@@ -283,3 +283,9 @@ Only the Windows Codex agent edits this file.
 - Backend addition: additive read-only `GET /incidents/{incident_id}/allocation-tradeoff-options`, exposing already-persisted tradeoff options required for the operator to select an exact backend-owned option. No workflow or authority behavior changed.
 - Verification: backend suite `332 passed, 2 skipped`; `uv lock --check` passed. Frontend suite `37 passed`; typecheck and production build passed; lint exited zero with the pre-existing AuditTimeline Fast Refresh warning. `git diff --check` passed.
 - Deviations: no browser/manual smoke was run in this environment. Existing console tests required optional new incident-bundle reads to tolerate absent/mock-unimplemented Phase 5 endpoints; base incident, scarcity, and carrier failures remain surfaced through the existing error state.
+# Phase 6 Run B (2026-08-25)
+
+- Run A head: `f7e838579facf44f709590003c719f9b22fb9e1c`.
+- Run B adds allocation-tradeoff-options route coverage and updates the console integration test to the approved guided controls.
+- Focused backend route tests, hook tests, console test, typecheck, build, and lint passed (lint retains the existing AuditTimeline Fast Refresh warning).
+- Phase 6 is not marked complete; Run C owns the exhaustive final gate.
