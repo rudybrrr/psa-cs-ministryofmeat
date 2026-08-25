@@ -176,11 +176,7 @@ export function useRecoveryConsole() {
     );
   }, [carrierCases, selectedCarrierCaseId, selectedContainer]);
 
-  const refresh = useCallback(async () => {
-    if (!incident) {
-      return;
-    }
-    const bundle = await loadIncidentBundle(incident.id);
+  const applyBundle = useCallback(async (bundle: Awaited<ReturnType<typeof loadIncidentBundle>>) => {
     setIncident(bundle.incident);
     setFixture(bundle.fixture);
     setScarcityEvaluation(bundle.scarcityEvaluation);
@@ -192,6 +188,14 @@ export function useRecoveryConsole() {
     setSelectedAgentHistory(currentRun ? await getAgentRunHistory(currentRun.id) : null);
     setAgentWaitHistory(currentRun?.wait_subject_id && ["REQUEST_APPROVAL", "COUNTER_APPROVAL", "CARRIER_RESPONSE_OR_TIMEOUT"].includes(currentRun.wait_kind ?? "") ? await getCarrierCaseHistory(currentRun.wait_subject_id) : null);
     setSafetyHistories(await Promise.all(bundle.cargoSafetyReviews.map((review) => getCargoSafetyHistory(review.id))));
+  }, []);
+
+  const refresh = useCallback(async () => {
+    if (!incident) {
+      return;
+    }
+    const bundle = await loadIncidentBundle(incident.id);
+    await applyBundle(bundle);
 
     const activeCase =
       selectedCarrierCaseId &&
@@ -213,7 +217,7 @@ export function useRecoveryConsole() {
         setSelectedCaseHistory(await getCarrierCaseHistory(matched.id));
       }
     }
-  }, [incident, selectedCarrierCaseId, selectedContainerId]);
+  }, [applyBundle, incident, selectedCarrierCaseId, selectedContainerId]);
 
   const runMutation = useCallback(
     async (operation: () => Promise<void>) => {
@@ -240,19 +244,12 @@ export function useRecoveryConsole() {
     await runMutation(async () => {
       const trigger = await triggerCanonicalScarcity();
       const bundle = await loadIncidentBundle(trigger.incident_id);
-      setIncident(bundle.incident);
-      setFixture(bundle.fixture);
-      setScarcityEvaluation(bundle.scarcityEvaluation);
-      setDecisions(bundle.decisions);
-      setAuditEvents(bundle.auditEvents);
-      setCarrierCases(bundle.carrierCases);
-      setYardForecasts(bundle.yardForecasts); setAllocationRevisions(bundle.allocationRevisions); setExpediteCommitments(bundle.expediteCommitments); setReconsiderations(bundle.reconsiderations); setTradeoffReviews(bundle.tradeoffReviews); setTradeoffOptions(bundle.tradeoffOptions); setCargoSafetyReviews(bundle.cargoSafetyReviews); setAgentRuns(bundle.agentRuns);
-      setSelectedAgentHistory(null); setAgentWaitHistory(null); setSafetyHistories([]);
+      await applyBundle(bundle);
       setSelectedContainerId(null);
       setSelectedCarrierCaseId(null);
       setSelectedCaseHistory(null);
     });
-  }, [runMutation]);
+  }, [applyBundle, runMutation]);
 
   const loadDemoRun = useCallback(
     async (runId: CanonicalDemoRunId) => {
@@ -260,13 +257,7 @@ export function useRecoveryConsole() {
         const run = demoRunById(runId);
         const trigger = await triggerCanonicalScarcity();
         const bundle = await loadIncidentBundle(trigger.incident_id);
-        setIncident(bundle.incident);
-        setFixture(bundle.fixture);
-        setScarcityEvaluation(bundle.scarcityEvaluation);
-        setDecisions(bundle.decisions);
-        setAuditEvents(bundle.auditEvents);
-        setCarrierCases(bundle.carrierCases);
-        setYardForecasts(bundle.yardForecasts); setAllocationRevisions(bundle.allocationRevisions); setExpediteCommitments(bundle.expediteCommitments); setReconsiderations(bundle.reconsiderations); setTradeoffReviews(bundle.tradeoffReviews); setTradeoffOptions(bundle.tradeoffOptions); setCargoSafetyReviews(bundle.cargoSafetyReviews); setAgentRuns(bundle.agentRuns);
+        await applyBundle(bundle);
         setActiveDemoRunId(runId);
 
         const profile = bundle.fixture.profiles.find(
@@ -276,11 +267,11 @@ export function useRecoveryConsole() {
           setSelectedContainerId(profile.container.id);
         }
         setSelectedCarrierCaseId(null);
-        setSelectedCaseHistory(null);
-      });
-    },
-    [runMutation],
-  );
+          setSelectedCaseHistory(null);
+        });
+      },
+      [applyBundle, runMutation],
+        );
 
   const selectContainer = useCallback(
     async (containerId: string) => {
