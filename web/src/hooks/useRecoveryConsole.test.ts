@@ -7,6 +7,10 @@ import * as scarcityApi from "../api/scarcity";
 import { ApiError } from "../api/client";
 import { useRecoveryConsole } from "./useRecoveryConsole";
 
+vi.mock("../api/agentRuntime", () => ({ createAgentRun: vi.fn(), advanceAgentRun: vi.fn(), listAgentRuns: vi.fn().mockResolvedValue([]), getAgentRunHistory: vi.fn() }));
+vi.mock("../api/dynamicYard", () => ({ bootstrapDynamicYard: vi.fn(), publishDischargeActive: vi.fn(), selectTradeoff: vi.fn(), listYardForecasts: vi.fn().mockResolvedValue([]), listAllocationRevisions: vi.fn().mockResolvedValue([]), listExpediteCommitments: vi.fn().mockResolvedValue([]), listReconsiderations: vi.fn().mockResolvedValue([]), listTradeoffReviews: vi.fn().mockResolvedValue([]), listTradeoffOptions: vi.fn().mockResolvedValue([]) }));
+vi.mock("../api/cargoSafety", () => ({ createCargoSafetyReview: vi.fn(), evaluateCargoSafetyReview: vi.fn(), listCargoSafetyReviews: vi.fn().mockResolvedValue([]), getCargoSafetyHistory: vi.fn() }));
+
 const INCIDENT_ID = "11111111-1111-4111-8111-111111111111";
 const CASE_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 
