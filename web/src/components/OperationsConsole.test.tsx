@@ -598,10 +598,10 @@ describe("RecoveryConsole persisted-state carrier flows", () => {
     await waitFor(() => {
       expect(screen.getByText(/carrier counter received — waiting for operator approval/i)).toBeInTheDocument();
       expect(screen.getByText(/06:45Z/)).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: /approve counter/i })).toBeInTheDocument();
+      expect(screen.getAllByRole("button", { name: /approve counter/i }).length).toBeGreaterThan(0);
     });
 
-    await user.click(screen.getByRole("button", { name: /approve counter/i }));
+    await user.click(screen.getAllByRole("button", { name: /approve counter/i })[0]);
 
     await waitFor(() => {
       const approval = posts.find((post) => post.url.endsWith("/counter-approval"));
@@ -839,7 +839,6 @@ function createGuidedBackend() {
     safetyNotes: {} as Record<string, { text: string; source: string }>,
     safetyAssessments: {} as Record<string, Record<string, unknown> | undefined>,
     decisions: [] as Array<Record<string, unknown>>,
-    canonicalStage: null as Record<string, unknown> | null,
     audit: [] as Array<Record<string, unknown>>,
     stepCount: 0,
   };
@@ -853,6 +852,18 @@ function createGuidedBackend() {
 
   function audit(actor: string, actorId: string, eventType: string, payload: Record<string, unknown>) {
     state.audit.push({ id: `audit-${state.audit.length + 1}`, actor, actor_id: actorId, incident_id: INCIDENT_ID, event_type: eventType, payload, timestamp: new Date().toISOString() });
+  }
+
+  function deriveStage() {
+    const activeRun = state.runs.at(-1) as { state?: string } | undefined;
+    const hasAny = state.snapshots.length > 0;
+    if (!activeRun) {
+      if (hasAny) {
+        return defaultStageView({ stage: "READY_TO_START_AGENT", ordinal: 3, progress_label: "Stage 3 of 16", next_allowed_action: "START_DEMO_AGENT_RUN" });
+      }
+      return defaultStageView();
+    }
+    return defaultStageView({ stage: "READY_TO_ADVANCE_TO_EVIDENCE_WAIT", ordinal: 4, progress_label: "Stage 4 of 16", next_allowed_action: "ADVANCE_AGENT" });
   }
 
   function recordStep(runRecord: Record<string, unknown>, tool: string, summary: string) {
@@ -1038,14 +1049,17 @@ function createGuidedBackend() {
       return jsonResponse({ incident_id: INCIDENT_ID, evaluation_id: "eval-1", decision_ids: [], reproducibility_key: "a".repeat(64) }, 201);
     }
     if (url.endsWith("/canonical-scarcity/fixture")) return jsonResponse(guidedFixture());
-    if (url.includes("/canonical-replay/stage")) {
-      return jsonResponse(state.canonicalStage ?? defaultStageView());
+    if (url.endsWith("/canonical-replay/stage")) {
+      return jsonResponse(deriveStage());
     }
     if (url.endsWith("/canonical-replay/agent-runs") && method === "POST") {
-      const run = { id: RUN_ID, incident_id: INCIDENT_ID, state: "CREATED", model_name: "canonical-replay-agent-v1", prompt_version: "incident-agent-v1", step_count: 0, max_steps: 16, wait_kind: null, wait_subject_id: null, escalation_reason: null, started_at: at(8, 10), updated_at: at(8, 10), completed_at: null };
-      state.agentRuns.push(run);
-      counts.startDemoRun = (counts.startDemoRun ?? 0) + 1;
-      return jsonResponse(run, 201);
+      counts.startDemoRun += 1;
+      state.runs.push({
+        id: RUN_ID, incident_id: INCIDENT_ID, state: "CREATED", model_name: "canonical-replay-agent-v1",
+        prompt_version: "incident-agent-v1", step_count: 0, max_steps: 16, wait_kind: null,
+        wait_subject_id: null, escalation_reason: null, started_at: at(8, 10), updated_at: at(8, 10), completed_at: null,
+      });
+      return jsonResponse(state.runs[0], 201);
     }
     if (url.endsWith(`/incidents/${INCIDENT_ID}/scarcity-evaluation`)) return jsonResponse(guidedReport());
     if (url.endsWith(`/incidents/${INCIDENT_ID}`)) return jsonResponse(state.incident);
@@ -1200,7 +1214,7 @@ describe("OperationsConsole full guided Phase 6 journey", () => {
   afterEach(() => cleanup());
 
   function advanceButton() {
-    return screen.getAllByRole("button", { name: /advance agent/i }).at(-1)!;
+    return screen.getByRole("button", { name: /advance agent once/i });
   }
 
   async function expectAdvanceDisabled() {
@@ -1229,9 +1243,10 @@ describe("OperationsConsole full guided Phase 6 journey", () => {
     });
     expect(backend.counts.bootstrap).toBe(1);
 
-    await user.click(screen.getByRole("button", { name: /start agentrun/i }));
+    await user.click(screen.getByRole("button", { name: /start canonical demo agentrun/i }));
     await waitFor(() => expect(screen.getByText("CREATED")).toBeInTheDocument());
-    expect(backend.counts.start).toBe(1);
+    expect(backend.counts.startDemoRun).toBe(1);
+    expect(backend.counts.start).toBe(0);
     expect(backend.counts.advance).toBe(0);
 
     await user.click(advanceButton());
@@ -1243,7 +1258,7 @@ describe("OperationsConsole full guided Phase 6 journey", () => {
     expect(backend.counts.advance).toBe(1);
     await expectAdvanceDisabled();
 
-    await user.click(screen.getAllByRole("button", { name: /publish discharge_active/i }).at(-1)!);
+    await user.click(screen.getAllByRole("button", { name: /publish discharge_active/i })[0]);
     await waitFor(() => {
       expect(screen.getByText(/tighter forecast band/)).toBeInTheDocument();
       expect(screen.getAllByText(/DISCHARGE_ACTIVE/).length).toBeGreaterThan(0);
@@ -1273,7 +1288,7 @@ describe("OperationsConsole full guided Phase 6 journey", () => {
     expect(backend.counts.advance).toBe(3);
     expect(backend.counts.prepare).toBe(0);
 
-    await user.click(screen.getByRole("button", { name: /approve request/i }));
+    await user.click(screen.getAllByRole("button", { name: /approve request/i })[0]);
     await waitFor(() => {
       const approval = backend.posts.find((post) => post.url.endsWith("/request-approval"));
       expect(approval?.body).toEqual({
@@ -1314,7 +1329,7 @@ describe("OperationsConsole full guided Phase 6 journey", () => {
     expect(backend.counts.advance).toBe(5);
     await expectAdvanceDisabled();
 
-    await user.click(screen.getByRole("button", { name: /approve counter/i }));
+    await user.click(screen.getAllByRole("button", { name: /approve counter/i })[0]);
     await waitFor(() => {
       const approval = backend.posts.find((post) => post.url.endsWith("/counter-approval"));
       expect(approval?.body).toEqual({
@@ -1335,7 +1350,7 @@ describe("OperationsConsole full guided Phase 6 journey", () => {
     });
     expect(backend.counts.advance).toBe(6);
 
-    await user.click(screen.getAllByRole("button", { name: /persist canonical syn-cnt-010 contradiction/i })[0]);
+    await user.click(screen.getByRole("button", { name: /persist syn-cnt-010 canonical contradiction/i }));
     await waitFor(() => {
       const created = backend.posts.find((post) => post.url.endsWith("/cargo-safety-reviews") && post.url.includes(INCIDENT_ID));
       expect(created?.body).toEqual({
@@ -1385,4 +1400,225 @@ describe("OperationsConsole full guided Phase 6 journey", () => {
     await new Promise((resolve) => setTimeout(resolve, 150));
     expect(backend.fetchMock.mock.calls.length).toBe(fetchCallsAfterSettle);
   });
+});
+
+describe("OperationsConsole synthetic auto replay journey", () => {
+  afterEach(() => cleanup());
+
+  function createAutoBackend() {
+    const counts = { bootstrap: 0, publishActive: 0, advance: 0, startDemoRun: 0, requestApproval: 0, counterApproval: 0, simulate: 0, safetyCreate: 0 };
+    const posts: Array<{ url: string; body?: unknown }> = [];
+    const st = {
+      snapshots: [] as Array<{ stage: string }>,
+      assessments: [] as Array<{ handled_at: string | null }>,
+      runs: [] as Array<Record<string, unknown>>,
+      caseState: null as string | null,
+      requestApproved: false,
+      counterApproved: false,
+      waitKind: null as string | null,
+      safetyReview: null as null | { state: string },
+      safetyBlocked: false,
+    };
+    const runShape = () => ({
+      id: RUN_ID, incident_id: INCIDENT_ID, state: "CREATED", model_name: "canonical-replay-agent-v1",
+      prompt_version: "incident-agent-v1", step_count: 0, max_steps: 16, wait_kind: null,
+      wait_subject_id: null, escalation_reason: null, started_at: "2026-08-22T08:00:00Z",
+      updated_at: "2026-08-22T08:00:00Z", completed_at: null,
+    });
+
+    function deriveStage() {
+      const run = st.runs.at(-1) as { state?: string } | undefined;
+      if (!run) {
+        if (st.snapshots.length > 0) return defaultStageView({ stage: "READY_TO_START_AGENT", ordinal: 3, progress_label: "Stage 3 of 16", next_allowed_action: "START_DEMO_AGENT_RUN" });
+        return defaultStageView();
+      }
+      if (run.state === "ESCALATED") {
+        return defaultStageView({ stage: "SAFETY_BLOCKED", ordinal: 16, progress_label: "Stage 16 of 16", status: "TERMINAL_SUCCESS", next_allowed_action: "NONE", guided_can_execute: false, auto_replay_may_execute: false });
+      }
+      if (run.state === "WAITING") {
+        if (st.waitKind === "NEW_OPERATIONAL_EVIDENCE") {
+          const unhandled = st.assessments.some((a) => a.handled_at === null);
+          return unhandled
+            ? defaultStageView({ stage: "WAITING_FOR_ACTIVE_EVIDENCE", ordinal: 5, status: "PENDING_ACTION", next_allowed_action: "ADVANCE_AGENT" })
+            : defaultStageView({ stage: "WAITING_FOR_ACTIVE_EVIDENCE", ordinal: 5, status: "WAITING_EXTERNAL", next_allowed_action: "PUBLISH_DISCHARGE_ACTIVE" });
+        }
+        if (st.waitKind === "REQUEST_APPROVAL") {
+          return st.requestApproved
+            ? defaultStageView({ stage: "REQUEST_APPROVED_READY_TO_SEND", ordinal: 9, next_allowed_action: "ADVANCE_AGENT" })
+            : defaultStageView({ stage: "REQUEST_APPROVAL_REQUIRED", ordinal: 8, status: "WAITING_HUMAN", next_allowed_action: "APPROVE_REQUEST", requires_human_authority: true });
+        }
+        if (st.waitKind === "CARRIER_RESPONSE_OR_TIMEOUT") {
+          if (st.caseState === "AWAITING_COUNTER_APPROVAL") {
+            return defaultStageView({ stage: "CARRIER_COUNTER_RECEIVED", ordinal: 11, next_allowed_action: "ADVANCE_AGENT" });
+          }
+          return defaultStageView({ stage: "WAITING_FOR_CARRIER", ordinal: 10, status: "WAITING_EXTERNAL", next_allowed_action: "SIMULATE_CARRIER_RESPONSE" });
+        }
+        if (st.waitKind === "COUNTER_APPROVAL") {
+          if (!st.counterApproved) {
+            return defaultStageView({ stage: "COUNTER_APPROVAL_REQUIRED", ordinal: 12, status: "WAITING_HUMAN", next_allowed_action: "APPROVE_COUNTER", requires_human_authority: true });
+          }
+          return st.safetyReview
+            ? defaultStageView({ stage: "COUNTER_APPROVED_READY_TO_RESUME", ordinal: 13, next_allowed_action: "ADVANCE_AGENT" })
+            : defaultStageView({ stage: "COUNTER_APPROVED_READY_TO_RESUME", ordinal: 13, next_allowed_action: "PERSIST_SAFETY_REVIEW" });
+        }
+      }
+      return defaultStageView({ stage: "READY_TO_ADVANCE_TO_EVIDENCE_WAIT", ordinal: 4, progress_label: "Stage 4 of 16", next_allowed_action: "ADVANCE_AGENT" });
+    }
+
+    async function route(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+      const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+
+      if (method === "POST") posts.push({ url, body });
+      if (url.endsWith("/synthetic/scenarios/canonical-scarcity") && method === "POST") return jsonResponse({ incident_id: INCIDENT_ID, evaluation_id: "eval-1", decision_ids: [], reproducibility_key: "a".repeat(64) }, 201);
+      if (url.endsWith("/canonical-scarcity/fixture")) return jsonResponse(minimalFixture());
+      if (url.includes("/canonical-replay/stage")) return jsonResponse(deriveStage());
+      if (url.endsWith("/canonical-replay/agent-runs") && method === "POST") {
+        counts.startDemoRun += 1;
+        const created = runShape();
+        st.runs.push(created);
+        return jsonResponse(created, 201);
+      }
+      if (url.endsWith(`/synthetic/scenarios/${INCIDENT_ID}/dynamic-yard/bootstrap`) && method === "POST") {
+        counts.bootstrap += 1;
+        st.snapshots.push({ stage: "PRE_DISCHARGE" });
+
+        return jsonResponse([], 201);
+      }
+      if (url.endsWith(`/synthetic/scenarios/${INCIDENT_ID}/dynamic-yard/discharge-active`) && method === "POST") {
+        counts.publishActive += 1;
+        st.snapshots.push({ stage: "DISCHARGE_ACTIVE" });
+        st.assessments.push({ handled_at: null });
+        return jsonResponse({}, 201);
+      }
+      if (url.endsWith(`/agent-runs/${RUN_ID}/advance`) && method === "POST") {
+        counts.advance += 1;
+        const run = st.runs.at(-1) as Record<string, unknown>;
+        const step = Number(run.step_count ?? 0);
+
+        const bump = (patch: Record<string, unknown>) => {
+          st.runs.pop();
+          st.runs.push({ ...run, ...patch });
+        };
+        if (st.waitKind === "NEW_OPERATIONAL_EVIDENCE") {
+          st.assessments.forEach((a) => { a.handled_at = "2026-08-22T09:00:00Z"; });
+          st.waitKind = null;
+          bump({ state: "RUNNING", step_count: step + 1, wait_kind: null, wait_subject_id: null });
+        } else if (step === 0) {
+          st.waitKind = "NEW_OPERATIONAL_EVIDENCE";
+          bump({ state: "WAITING", step_count: step + 1, wait_kind: "NEW_OPERATIONAL_EVIDENCE", updated_at: "" });
+        } else if (!st.caseState) {
+          st.caseState = "AWAITING_REQUEST_APPROVAL";
+          st.waitKind = "REQUEST_APPROVAL";
+          bump({ state: "WAITING", step_count: step + 1, wait_kind: "REQUEST_APPROVAL" });
+        } else if (st.waitKind === "REQUEST_APPROVAL" && st.requestApproved) {
+          st.caseState = "AWAITING_CARRIER";
+          st.waitKind = "CARRIER_RESPONSE_OR_TIMEOUT";
+          bump({ state: "WAITING", step_count: step + 1, wait_kind: "CARRIER_RESPONSE_OR_TIMEOUT" });
+        } else if (st.waitKind === "CARRIER_RESPONSE_OR_TIMEOUT" && st.caseState === "AWAITING_COUNTER_APPROVAL") {
+          st.waitKind = "COUNTER_APPROVAL";
+          bump({ state: "WAITING", wait_kind: "COUNTER_APPROVAL" });
+          return jsonResponse({ detail: "carrier counter approval is required before resuming" }, 409);
+        } else if (st.waitKind === "COUNTER_APPROVAL" && st.counterApproved) {
+          if (!st.safetyReview) st.safetyReview = { state: "PENDING_CHECK" };
+          st.safetyBlocked = true;
+          st.waitKind = null;
+          bump({ state: "ESCALATED", step_count: step + 1, wait_kind: null, escalation_reason: "SAFETY_REVIEW_REQUIRED", completed_at: "2026-08-22T10:00:00Z" });
+        } else {
+          return jsonResponse({ detail: "agent wait condition remains unresolved" }, 409);
+        }
+        return jsonResponse(st.runs.at(-1));
+      }
+      if (url.endsWith(`/incidents/${INCIDENT_ID}/agent-runs`) && method === "POST") throw new Error("production start must not be used by auto replay");
+      if (url.includes("/agent-runs/") && url.endsWith("/history")) return jsonResponse({ run: st.runs.at(-1) ?? {}, steps: [], tool_invocations: [] });
+      if (url.includes("/agent-runs/")) return jsonResponse(st.runs.at(-1) ?? {});
+      if (url.includes("/agent-runs")) return jsonResponse(st.runs);
+      if (url.includes("/carrier-recovery-cases/") && url.endsWith("/history")) {
+        const bindings: Array<Record<string, unknown>> = [];
+        if (st.caseState) bindings.push({ case_id: CASE_ID, proposal_decision_id: "dec-prop-1", subject_kind: "OUTBOUND_REQUEST", subject_id: "req-1", payload_fingerprint: "fp-request", created_at: "" });
+        if (st.caseState === "AWAITING_COUNTER_APPROVAL" || st.counterApproved || st.caseState === "COMPLETED") bindings.push({ case_id: CASE_ID, proposal_decision_id: "dec-prop-2", subject_kind: "COUNTER_PROPOSAL", subject_id: "cr-1", payload_fingerprint: "fp-counter", created_at: "" });
+        return jsonResponse({
+          case: { id: CASE_ID, incident_id: INCIDENT_ID, connection_id: "SYN-CONN-JV2", source_evaluation_id: "eval-1", affected_container_ids: ["SYN-CNT-017"], state: st.caseState ?? "PREPARED", created_at: "", updated_at: "" },
+          request: { id: "req-1", incident_id: INCIDENT_ID, connection_id: "SYN-CONN-JV2", requested_eta_pta: "", status: st.requestApproved ? "SENT" : "PENDING", created_at: "" },
+          request_context: null,
+          bindings,
+          approvals: [],
+          carrier_responses: [],
+          effective_timings: [],
+          decision_links: [],
+          decisions: [],
+          results: [],
+          audit_events: [],
+        });
+      }
+      if (url.includes("/request-approval") && method === "POST") {
+        counts.requestApproval += 1;
+        st.requestApproved = true;
+        return jsonResponse({}, 201);
+      }
+      if (url.includes("/simulate-carrier-response") && method === "POST") {
+        counts.simulate += 1;
+        st.caseState = "AWAITING_COUNTER_APPROVAL";
+        return jsonResponse({ case_id: CASE_ID, carrier_response_id: "cr-1", no_response_emitted: false }, 201);
+      }
+      if (url.includes("/counter-approval") && method === "POST") {
+        counts.counterApproval += 1;
+        st.counterApproved = true;
+        st.caseState = "COMPLETED";
+        return jsonResponse({}, 201);
+      }
+      if (url.includes("/cargo-safety-reviews") && method === "POST") {
+        counts.safetyCreate += 1;
+        st.safetyReview = { state: "PENDING_CHECK" };
+        return jsonResponse({ id: "review-syn-010", incident_id: INCIDENT_ID, container_id: "SYN-CNT-010", cargo_note_id: "note-1", state: "PENDING_CHECK", created_at: "", updated_at: "" }, 201);
+      }
+      if (url.includes("/cargo-safety-reviews/") && url.endsWith("/history")) return jsonResponse({ review: { id: "review-syn-010", incident_id: INCIDENT_ID, container_id: "SYN-CNT-010", cargo_note_id: "note-1", state: st.safetyBlocked ? "COMPLETED" : "PENDING_CHECK", created_at: "", updated_at: "" }, note: { id: "note-1", incident_id: INCIDENT_ID, container_id: "SYN-CNT-010", text: "corrosive material note", source: "synthetic-canonical-cargo-note", created_at: "" }, assessment: st.safetyBlocked ? { result: "CONTRADICTION_FOUND", structured_dangerous_goods: false, structured_un_number: null, structured_commodity: "x", evidence_excerpt: "corrosive", explanation: "contradiction" } : null, policy_result: st.safetyBlocked ? { disposition: "ESCALATE", automation_blocked: true, reason: "blocked" } : null, audit_events: [] });
+      if (url.includes("/cargo-safety-reviews")) return jsonResponse([]);
+      if (url.includes("/carrier-recovery-cases")) {
+        if (!st.caseState) return jsonResponse([]);
+        return jsonResponse([{ id: CASE_ID, incident_id: INCIDENT_ID, connection_id: "SYN-CONN-JV2", source_evaluation_id: "eval-1", affected_container_ids: ["SYN-CNT-017"], state: st.caseState, created_at: "", updated_at: "" }]);
+      }
+      if (url.includes("/scarcity-evaluation")) return jsonResponse(report);
+      if (url.endsWith(`/incidents/${INCIDENT_ID}`)) return jsonResponse({ id: INCIDENT_ID, source_event_id: "SYN-EVT-AUTO", state: "RECOVERY_ANALYSIS", created_at: "2026-08-22T08:00:00Z" });
+      if (url.startsWith("/synthetic/scenarios/canonical-scarcity")) return jsonResponse({});
+
+      return jsonResponse([]);
+    }
+
+    return { fetchMock: vi.fn(route), posts, counts };
+  }
+
+  it("auto replay drives the canonical hero and records synthetic-operator approvals only", async () => {
+    const backend = createAutoBackend();
+    vi.stubGlobal("fetch", backend.fetchMock);
+    const user = userEvent.setup();
+    render(<OperationsConsole />);
+
+    await user.click(screen.getByRole("button", { name: /^create canonical incident$/i }));
+    await waitFor(() => {
+      const el = document.body.textContent ?? "";
+      if (!el.includes("SYN-EVT-AUTO")) { console.log("PROBE-TEXT:", el.slice(0, 1200)); console.log("PROBE-POSTS:", JSON.stringify(backend.posts.map((p) => p.url))); }
+      expect(screen.getByText("SYN-EVT-AUTO")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: /^auto replay$/i }));
+    await user.click(screen.getByRole("button", { name: /auto start/i }));
+
+    await waitFor(() => expect(screen.getByText(/halt: terminal-success/i)).toBeInTheDocument(), { timeout: 3000 });
+    expect(screen.getByText("ESCALATED / SAFETY_REVIEW_REQUIRED")).toBeInTheDocument();
+
+    const requestApproval = backend.posts.find((post) => post.url.includes("/request-approval"));
+    const counterApproval = backend.posts.find((post) => post.url.includes("/counter-approval"));
+    expect((requestApproval?.body as Record<string, unknown>).operator_id).toBe("synthetic-demo-operator");
+    expect((counterApproval?.body as Record<string, unknown>).operator_id).toBe("synthetic-demo-operator");
+    expect(backend.counts.advance).toBeGreaterThanOrEqual(5);
+    expect(backend.counts.startDemoRun).toBe(1);
+    expect(backend.counts.bootstrap).toBe(1);
+    expect(backend.counts.publishActive).toBe(1);
+    expect(backend.counts.simulate).toBe(1);
+    expect(backend.counts.safetyCreate).toBe(1);
+    const productionStart = backend.posts.filter((post) => post.url.endsWith(`/incidents/${INCIDENT_ID}/agent-runs`));
+    expect(productionStart).toHaveLength(0);
+  }, 15000);
 });

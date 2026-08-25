@@ -1,5 +1,6 @@
 import type {
   CanonicalIncidentFixture,
+  CanonicalReplayStageView,
   CarrierRecoveryCase,
   CarrierRecoveryHistory,
   Decision,
@@ -7,6 +8,14 @@ import type {
   StrategyEvaluation,
 } from "../api/types";
 import type { AgentRun, AllocationRevision, AllocationTradeoffReview, CargoSafetyHistory, ExpediteCommitment, ExpediteReconsiderationAssessment, YardForecastSnapshot } from "../api/types";
+
+export function canonicalApprovalFingerprint(stage: CanonicalReplayStageView | null, history: CarrierRecoveryHistory | null): string | null {
+  if (!stage?.requires_human_authority || !history) return null;
+  const kind = stage.next_allowed_action === "APPROVE_COUNTER" ? "COUNTER_PROPOSAL" : stage.next_allowed_action === "APPROVE_REQUEST" ? "OUTBOUND_REQUEST" : null;
+  if (!kind) return null;
+  const binding = history.bindings.find((item) => item.subject_kind === kind);
+  return binding?.payload_fingerprint ?? null;
+}
 
 export const latestSnapshot = (snapshots: YardForecastSnapshot[], stage: YardForecastSnapshot["stage"]) => [...snapshots].filter((item) => item.stage === stage).at(-1) ?? null;
 export const latestAllocationRevision = (revisions: AllocationRevision[]) => revisions.at(-1) ?? null;
