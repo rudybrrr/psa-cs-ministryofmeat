@@ -1,0 +1,4 @@
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { ContainerRecoveryTable } from "./ContainerRecoveryTable";
+describe("ContainerRecoveryTable", () => { it("shows concise persisted operational state", () => { render(<ContainerRecoveryTable selectedContainerId={null} onSelect={vi.fn()} rows={[{ containerId: "C1", serviceId: "S", connectionId: "CONN", cargoKind: "DRY", expediteAllocated: true, decisionAction: "EXPEDITE", decisionStatus: "APPROVED", decisionId: "d", carrierCaseState: "COMPLETED", displayDisposition: "preserved", forecastBand: "p50 10:00 · ±15m", commitmentStatus: "COMMITTED", safetyWarning: "automation blocked" }]} />); expect(screen.getByText(/p50 10:00/)).toBeInTheDocument(); expect(screen.getByText(/COMMITTED/)).toBeInTheDocument(); expect(screen.getByText(/automation blocked/)).toBeInTheDocument(); }); });

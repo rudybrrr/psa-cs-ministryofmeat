@@ -56,8 +56,11 @@ export function ContainerRecoveryTable({
               <th className="px-3 py-2 font-normal">Connection</th>
               <th className="px-3 py-2 font-normal">Cargo</th>
               <th className="px-3 py-2 font-normal">Expedite</th>
+              <th className="px-3 py-2 font-normal">Forecast</th>
+              <th className="px-3 py-2 font-normal">Commitment</th>
               <th className="px-3 py-2 font-normal">Decision</th>
               <th className="px-3 py-2 font-normal">Carrier case</th>
+              <th className="px-3 py-2 font-normal">Safety</th>
               <th className="px-3 py-2 font-normal">Disposition</th>
             </tr>
           </thead>
@@ -88,6 +91,8 @@ export function ContainerRecoveryTable({
                       tone={row.expediteAllocated ? "success" : "neutral"}
                     />
                   </td>
+                  <td className="px-3 py-3 text-xs text-slate-300">{row.forecastBand ?? "—"}</td>
+                  <td className="px-3 py-3 text-xs text-slate-300">{row.commitmentStatus ?? "—"}</td>
                   <td className="px-3 py-3 font-mono text-xs text-slate-300">
                     {row.decisionAction ?? "—"}
                     {row.decisionStatus ? ` · ${row.decisionStatus}` : ""}
@@ -102,6 +107,7 @@ export function ContainerRecoveryTable({
                       <span className="text-slate-500">—</span>
                     )}
                   </td>
+                  <td className="px-3 py-3 text-xs text-rose-200">{row.safetyWarning ?? "—"}</td>
                   <td className="px-3 py-3 text-slate-300">{row.displayDisposition}</td>
                 </tr>
               );

@@ -11,9 +11,13 @@ import { DynamicYardPanel } from "./dynamic/DynamicYardPanel";
 import { TradeoffReviewPanel } from "./dynamic/TradeoffReviewPanel";
 import { CargoSafetyPanel } from "./safety/CargoSafetyPanel";
 import { useRecoveryConsole } from "../hooks/useRecoveryConsole";
+import { canAdvanceAgent, latestSnapshot } from "../lib/recoverySelectors";
 
 export function OperationsConsole() {
   const console = useRecoveryConsole();
+  const run = console.agentRuns.at(-1) ?? null;
+  const activeSnapshot = latestSnapshot(console.yardForecasts, "DISCHARGE_ACTIVE");
+  const canAdvance = canAdvanceAgent(run, { carrierHistory: console.agentWaitHistory, reconsiderations: console.reconsiderations, tradeoffReviews: console.tradeoffReviews });
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
@@ -28,7 +32,7 @@ export function OperationsConsole() {
         />
 
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]">
-          <AgentRunPanel run={console.agentRuns.at(-1) ?? null} history={console.selectedAgentHistory} loading={console.loading} canAdvance={console.agentRuns.at(-1)?.state === "RUNNING"} onStart={() => void console.startAgent()} onAdvance={() => void console.advanceAgent()} onRefresh={() => void console.refresh()} />
+          <AgentRunPanel run={run} history={console.selectedAgentHistory} loading={console.loading} canAdvance={canAdvance} onStart={() => void console.startAgent()} onAdvance={() => void console.advanceAgent()} onRefresh={() => void console.refresh()} />
           <DynamicYardPanel snapshots={console.yardForecasts} revisions={console.allocationRevisions} commitments={console.expediteCommitments} loading={console.loading} onBootstrap={() => void console.bootstrapYard()} onActive={() => void console.publishActive()} />
         </div>
 
@@ -106,12 +110,20 @@ export function OperationsConsole() {
         )}
 
         <SyntheticDemoControl
-          activeRunId={console.activeDemoRunId}
           incidentId={console.incident?.id ?? null}
           loading={console.loading}
-          onRunDemo={(runId) => void console.loadDemoRun(runId)}
           onCreateIncident={() => void console.createCanonicalIncident()}
           onRefresh={() => void console.refresh()}
+          onBootstrap={() => void console.bootstrapYard()}
+          onStartAgent={() => void console.startAgent()}
+          onAdvanceAgent={() => void console.advanceAgent()}
+          onPublishActive={() => void console.publishActive()}
+          onCreateSafetyReview={() => void console.createSafetyReview("SYN-CNT-010")}
+          canBootstrap={Boolean(console.incident && console.yardForecasts.length === 0)}
+          canStartAgent={Boolean(console.incident && !run)}
+          canAdvanceAgent={canAdvance}
+          canPublishActive={Boolean(console.incident && console.yardForecasts.length > 0 && !activeSnapshot)}
+          canCreateSafetyReview={Boolean(console.incident && !console.cargoSafetyReviews.some((review) => review.container_id === "SYN-CNT-010"))}
         />
       </main>
     </div>

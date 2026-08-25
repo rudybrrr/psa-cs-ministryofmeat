@@ -45,6 +45,8 @@ import {
   buildContainerRows,
   buildRecoverySummary,
   carrierCaseForConnection,
+  latestSnapshot,
+  latestAllocationRevision,
 } from "../lib/recoverySelectors";
 
 export interface RecoveryConsoleState {
@@ -116,6 +118,7 @@ export function useRecoveryConsole() {
   const [cargoSafetyReviews, setCargoSafetyReviews] = useState<CargoSafetyReview[]>([]);
   const [agentRuns, setAgentRuns] = useState<AgentRun[]>([]);
   const [selectedAgentHistory, setSelectedAgentHistory] = useState<AgentHistory | null>(null);
+  const [agentWaitHistory, setAgentWaitHistory] = useState<CarrierRecoveryHistory | null>(null);
   const [safetyHistories, setSafetyHistories] = useState<CargoSafetyHistory[]>([]);
   const [selectedContainerId, setSelectedContainerId] = useState<string | null>(
     null,
@@ -146,8 +149,12 @@ export function useRecoveryConsole() {
       scarcityEvaluation,
       decisions,
       carrierCases,
+      latestSnapshot(yardForecasts, "DISCHARGE_ACTIVE"),
+      expediteCommitments,
+      safetyHistories,
+      latestAllocationRevision(allocationRevisions),
     );
-  }, [fixture, scarcityEvaluation, decisions, carrierCases]);
+  }, [fixture, scarcityEvaluation, decisions, carrierCases, yardForecasts, expediteCommitments, safetyHistories, allocationRevisions]);
 
   const selectedContainer = useMemo(
     () =>
@@ -183,6 +190,7 @@ export function useRecoveryConsole() {
     setYardForecasts(bundle.yardForecasts); setAllocationRevisions(bundle.allocationRevisions); setExpediteCommitments(bundle.expediteCommitments); setReconsiderations(bundle.reconsiderations); setTradeoffReviews(bundle.tradeoffReviews); setTradeoffOptions(bundle.tradeoffOptions); setCargoSafetyReviews(bundle.cargoSafetyReviews); setAgentRuns(bundle.agentRuns);
     const currentRun = bundle.agentRuns.at(-1);
     setSelectedAgentHistory(currentRun ? await getAgentRunHistory(currentRun.id) : null);
+    setAgentWaitHistory(currentRun?.wait_subject_id && ["REQUEST_APPROVAL", "COUNTER_APPROVAL", "CARRIER_RESPONSE_OR_TIMEOUT"].includes(currentRun.wait_kind ?? "") ? await getCarrierCaseHistory(currentRun.wait_subject_id) : null);
     setSafetyHistories(await Promise.all(bundle.cargoSafetyReviews.map((review) => getCargoSafetyHistory(review.id))));
 
     const activeCase =
@@ -239,7 +247,7 @@ export function useRecoveryConsole() {
       setAuditEvents(bundle.auditEvents);
       setCarrierCases(bundle.carrierCases);
       setYardForecasts(bundle.yardForecasts); setAllocationRevisions(bundle.allocationRevisions); setExpediteCommitments(bundle.expediteCommitments); setReconsiderations(bundle.reconsiderations); setTradeoffReviews(bundle.tradeoffReviews); setTradeoffOptions(bundle.tradeoffOptions); setCargoSafetyReviews(bundle.cargoSafetyReviews); setAgentRuns(bundle.agentRuns);
-      setSelectedAgentHistory(null); setSafetyHistories([]);
+      setSelectedAgentHistory(null); setAgentWaitHistory(null); setSafetyHistories([]);
       setSelectedContainerId(null);
       setSelectedCarrierCaseId(null);
       setSelectedCaseHistory(null);
@@ -477,7 +485,7 @@ export function useRecoveryConsole() {
     decisions,
     auditEvents,
     carrierCases,
-    yardForecasts, allocationRevisions, expediteCommitments, reconsiderations, tradeoffReviews, tradeoffOptions, cargoSafetyReviews, agentRuns, selectedAgentHistory, safetyHistories,
+    yardForecasts, allocationRevisions, expediteCommitments, reconsiderations, tradeoffReviews, tradeoffOptions, cargoSafetyReviews, agentRuns, selectedAgentHistory, agentWaitHistory, safetyHistories,
     selectedContainerId,
     selectedCarrierCaseId,
     selectedCaseHistory,

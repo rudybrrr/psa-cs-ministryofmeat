@@ -6,7 +6,7 @@ import type {
   ScarcityEvaluationReport,
   StrategyEvaluation,
 } from "../api/types";
-import type { AgentRun, AllocationRevision, CargoSafetyHistory, ExpediteCommitment, YardForecastSnapshot } from "../api/types";
+import type { AgentRun, AllocationRevision, AllocationTradeoffReview, CargoSafetyHistory, ExpediteCommitment, ExpediteReconsiderationAssessment, YardForecastSnapshot } from "../api/types";
 
 export const latestSnapshot = (snapshots: YardForecastSnapshot[], stage: YardForecastSnapshot["stage"]) => [...snapshots].filter((item) => item.stage === stage).at(-1) ?? null;
 export const latestAllocationRevision = (revisions: AllocationRevision[]) => revisions.at(-1) ?? null;
@@ -15,7 +15,8 @@ export const allocationDelta = (revisions: AllocationRevision[]) => { const curr
 export const commitmentByContainer = (items: ExpediteCommitment[]) => new Map(items.map((item) => [item.container_id, item.status]));
 export const forecastByContainer = (snapshot: YardForecastSnapshot | null) => new Map((snapshot?.container_forecasts ?? []).map((item) => [item.container_id, item]));
 export const safetyByContainer = (histories: CargoSafetyHistory[]) => new Map(histories.map((item) => [item.review.container_id, item.policy_result?.automation_blocked ?? false]));
-export function canAdvanceAgent(run: AgentRun | null, activeSnapshot: YardForecastSnapshot | null, carrierCases: CarrierRecoveryCase[], reviewsResolved = false, requestApproved = false, counterApproved = false) { if (!run || ["COMPLETED", "ESCALATED", "FAILED"].includes(run.state)) return false; if (run.state === "RUNNING") return true; if (run.wait_kind === "NEW_OPERATIONAL_EVIDENCE") return Boolean(activeSnapshot); if (run.wait_kind === "REQUEST_APPROVAL") return requestApproved; if (run.wait_kind === "COUNTER_APPROVAL") return counterApproved; if (run.wait_kind === "CARRIER_RESPONSE_OR_TIMEOUT") return carrierCases.some((item) => !["AWAITING_CARRIER"].includes(item.state)); if (run.wait_kind === "HUMAN_TRADEOFF_DECISION") return reviewsResolved; return false; }
+export interface AgentAdvanceEvidence { carrierHistory: CarrierRecoveryHistory | null; reconsiderations: ExpediteReconsiderationAssessment[]; tradeoffReviews: AllocationTradeoffReview[]; }
+export function canAdvanceAgent(run: AgentRun | null, evidence: AgentAdvanceEvidence): boolean { if (!run || ["COMPLETED", "ESCALATED", "FAILED"].includes(run.state)) return false; if (run.state === "RUNNING") return true; if (run.wait_kind === "NEW_OPERATIONAL_EVIDENCE") return evidence.reconsiderations.some((assessment) => assessment.handled_at === null); if (run.wait_kind === "HUMAN_TRADEOFF_DECISION") { const review = evidence.tradeoffReviews.find((item) => item.id === run.wait_subject_id); return Boolean(review && review.state === "RESOLVED" && evidence.reconsiderations.some((assessment) => assessment.id === review.reconsideration_assessment_id && assessment.handled_at !== null)); } const history = evidence.carrierHistory; if (!history || history.case.id !== run.wait_subject_id) return false; if (run.wait_kind === "REQUEST_APPROVAL") return history.case.state === "AWAITING_REQUEST_APPROVAL" && history.approvals.some((approval) => approval.status === "APPROVED"); if (run.wait_kind === "CARRIER_RESPONSE_OR_TIMEOUT" || run.wait_kind === "COUNTER_APPROVAL") return ["COMPLETED", "ESCALATED", "RECOMPUTING"].includes(history.case.state); return false; }
 
 export interface RecoverySummary {
   containersAtRisk: number;
@@ -39,6 +40,9 @@ export interface ContainerRecoveryRow {
   decisionId: string | null;
   carrierCaseState: string | null;
   displayDisposition: string;
+  forecastBand: string | null;
+  commitmentStatus: string | null;
+  safetyWarning: string | null;
 }
 
 function findSelectedEvaluation(
@@ -149,15 +153,23 @@ export function buildContainerRows(
   report: ScarcityEvaluationReport,
   decisions: Decision[],
   carrierCases: CarrierRecoveryCase[],
+  activeSnapshot: YardForecastSnapshot | null = null,
+  commitments: ExpediteCommitment[] = [],
+  safetyHistories: CargoSafetyHistory[] = [],
+  allocationRevision: AllocationRevision | null = null,
 ): ContainerRecoveryRow[] {
-  const allocated = selectedAllocationSet(report.selected_allocation);
+  const allocated = new Set(allocationRevision?.allocated_container_ids ?? report.selected_allocation?.allocated_container_ids ?? []);
   const latestDecisions = selectLatestDecisionByContainer(decisions);
+  const forecasts = forecastByContainer(activeSnapshot);
+  const commitmentStatus = commitmentByContainer(commitments);
+  const safetyState = safetyByContainer(safetyHistories);
 
   return fixture.profiles.map((profile) => {
     const containerId = profile.container.id;
     const connectionId = profile.container.onward_connection.id;
     const carrierCase = carrierCaseForConnection(carrierCases, connectionId);
     const decision = latestDecisions.get(containerId);
+    const forecast = forecasts.get(containerId);
 
     let displayDisposition = "pending policy";
     if (decision) {
@@ -180,6 +192,9 @@ export function buildContainerRows(
       decisionId: decision?.id ?? null,
       carrierCaseState: carrierCase?.state ?? null,
       displayDisposition,
+      forecastBand: forecast ? `p50 ${forecast.p50_ready_at.slice(11, 16)} · p10–p90` : null,
+      commitmentStatus: commitmentStatus.get(containerId) ?? null,
+      safetyWarning: safetyState.get(containerId) ? "automation blocked" : null,
     };
   });
 }
