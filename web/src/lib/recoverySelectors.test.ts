@@ -323,12 +323,16 @@ describe("recoverySelectors", () => {
     const empty = { carrierHistory: null, reconsiderations: [], tradeoffReviews: [] };
     const history: any = { case: { id: "case", state: "AWAITING_REQUEST_APPROVAL" }, approvals: [{ status: "APPROVED" }] };
     expect(canAdvanceAgent(run("RUNNING"), empty)).toBe(true);
+    expect(canAdvanceAgent(run("CREATED"), empty)).toBe(true);
     expect(canAdvanceAgent(run("WAITING", "NEW_OPERATIONAL_EVIDENCE"), empty)).toBe(false);
     expect(canAdvanceAgent(run("WAITING", "NEW_OPERATIONAL_EVIDENCE"), { ...empty, reconsiderations: [{ id: "a", handled_at: null }] })).toBe(true);
     expect(canAdvanceAgent(run("WAITING", "REQUEST_APPROVAL", "case"), empty)).toBe(false);
     expect(canAdvanceAgent(run("WAITING", "REQUEST_APPROVAL", "case"), { ...empty, carrierHistory: history })).toBe(true);
     expect(canAdvanceAgent(run("WAITING", "REQUEST_APPROVAL", "other"), { ...empty, carrierHistory: history })).toBe(false);
     expect(canAdvanceAgent(run("WAITING", "COUNTER_APPROVAL", "case"), { ...empty, carrierHistory: { ...history, case: { id: "case", state: "COMPLETED" } } })).toBe(true);
+    expect(canAdvanceAgent(run("WAITING", "COUNTER_APPROVAL", "case"), { ...empty, carrierHistory: { ...history, case: { id: "case", state: "AWAITING_COUNTER_APPROVAL" } } })).toBe(false);
+    expect(canAdvanceAgent(run("WAITING", "CARRIER_RESPONSE_OR_TIMEOUT", "case"), { ...empty, carrierHistory: { ...history, case: { id: "case", state: "AWAITING_COUNTER_APPROVAL" } } })).toBe(true);
+    expect(canAdvanceAgent(run("WAITING", "CARRIER_RESPONSE_OR_TIMEOUT", "case"), { ...empty, carrierHistory: { ...history, case: { id: "case", state: "AWAITING_CARRIER" } } })).toBe(false);
     expect(canAdvanceAgent(run("WAITING", "HUMAN_TRADEOFF_DECISION", "review"), { ...empty, reconsiderations: [{ id: "a", handled_at: "now" }], tradeoffReviews: [{ id: "review", reconsideration_assessment_id: "a", state: "RESOLVED" }] })).toBe(true);
     expect(canAdvanceAgent(run("COMPLETED"), empty)).toBe(false);
   });
