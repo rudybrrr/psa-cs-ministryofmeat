@@ -23,6 +23,22 @@ export default defineConfig({
         target: "http://127.0.0.1:8000",
         changeOrigin: true,
       },
+      "/agent-runs": {
+        target: "http://127.0.0.1:8000",
+        changeOrigin: true,
+      },
+      "/carrier-recovery-cases": {
+        target: "http://127.0.0.1:8000",
+        changeOrigin: true,
+      },
+      "/allocation-tradeoff-reviews": {
+        target: "http://127.0.0.1:8000",
+        changeOrigin: true,
+      },
+      "/cargo-safety-reviews": {
+        target: "http://127.0.0.1:8000",
+        changeOrigin: true,
+      },
     },
   },
   test: {
