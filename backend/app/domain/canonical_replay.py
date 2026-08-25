@@ -1,0 +1,94 @@
+from __future__ import annotations
+
+from enum import StrEnum
+
+from pydantic import Field
+
+from backend.app.domain.models import FrozenContract
+
+
+class CanonicalReplayStage(StrEnum):
+    READY_TO_CREATE = "READY_TO_CREATE"
+    READY_FOR_PRE_DISCHARGE = "READY_FOR_PRE_DISCHARGE"
+    READY_TO_START_AGENT = "READY_TO_START_AGENT"
+    READY_TO_ADVANCE_TO_EVIDENCE_WAIT = "READY_TO_ADVANCE_TO_EVIDENCE_WAIT"
+    WAITING_FOR_ACTIVE_EVIDENCE = "WAITING_FOR_ACTIVE_EVIDENCE"
+    READY_TO_RECONSIDER = "READY_TO_RECONSIDER"
+    READY_TO_PREPARE_RTA = "READY_TO_PREPARE_RTA"
+    REQUEST_APPROVAL_REQUIRED = "REQUEST_APPROVAL_REQUIRED"
+    REQUEST_APPROVED_READY_TO_SEND = "REQUEST_APPROVED_READY_TO_SEND"
+    WAITING_FOR_CARRIER = "WAITING_FOR_CARRIER"
+    CARRIER_COUNTER_RECEIVED = "CARRIER_COUNTER_RECEIVED"
+    COUNTER_APPROVAL_REQUIRED = "COUNTER_APPROVAL_REQUIRED"
+    COUNTER_APPROVED_READY_TO_RESUME = "COUNTER_APPROVED_READY_TO_RESUME"
+    READY_FOR_SAFETY_EVIDENCE = "READY_FOR_SAFETY_EVIDENCE"
+    SAFETY_REVIEW_PENDING = "SAFETY_REVIEW_PENDING"
+    SAFETY_BLOCKED = "SAFETY_BLOCKED"
+    COMPLETE = "COMPLETE"
+    FAILED = "FAILED"
+    TRADEOFF_DECISION_REQUIRED = "TRADEOFF_DECISION_REQUIRED"
+    OFF_CANONICAL_PATH = "OFF_CANONICAL_PATH"
+
+
+class CanonicalReplayStatus(StrEnum):
+    PENDING_ACTION = "PENDING_ACTION"
+    WAITING_HUMAN = "WAITING_HUMAN"
+    WAITING_EXTERNAL = "WAITING_EXTERNAL"
+    TERMINAL_SUCCESS = "TERMINAL_SUCCESS"
+    TERMINAL_HALTED = "TERMINAL_HALTED"
+
+
+class CanonicalReplayActionType(StrEnum):
+    CREATE_CANONICAL_INCIDENT = "CREATE_CANONICAL_INCIDENT"
+    BOOTSTRAP_PRE_DISCHARGE = "BOOTSTRAP_PRE_DISCHARGE"
+    START_DEMO_AGENT_RUN = "START_DEMO_AGENT_RUN"
+    ADVANCE_AGENT = "ADVANCE_AGENT"
+    PUBLISH_DISCHARGE_ACTIVE = "PUBLISH_DISCHARGE_ACTIVE"
+    SIMULATE_CARRIER_RESPONSE = "SIMULATE_CARRIER_RESPONSE"
+    APPROVE_REQUEST = "APPROVE_REQUEST"
+    APPROVE_COUNTER = "APPROVE_COUNTER"
+    PERSIST_SAFETY_REVIEW = "PERSIST_SAFETY_REVIEW"
+    SELECT_TRADEOFF_OPTION = "SELECT_TRADEOFF_OPTION"
+    NONE = "NONE"
+
+
+CANONICAL_REPLAY_TOTAL_STAGES = 16
+
+_HERO_ORDINALS = {
+    CanonicalReplayStage.READY_TO_CREATE: 1,
+    CanonicalReplayStage.READY_FOR_PRE_DISCHARGE: 2,
+    CanonicalReplayStage.READY_TO_START_AGENT: 3,
+    CanonicalReplayStage.READY_TO_ADVANCE_TO_EVIDENCE_WAIT: 4,
+    CanonicalReplayStage.WAITING_FOR_ACTIVE_EVIDENCE: 5,
+    CanonicalReplayStage.READY_TO_RECONSIDER: 6,
+    CanonicalReplayStage.READY_TO_PREPARE_RTA: 7,
+    CanonicalReplayStage.REQUEST_APPROVAL_REQUIRED: 8,
+    CanonicalReplayStage.REQUEST_APPROVED_READY_TO_SEND: 9,
+    CanonicalReplayStage.WAITING_FOR_CARRIER: 10,
+    CanonicalReplayStage.CARRIER_COUNTER_RECEIVED: 11,
+    CanonicalReplayStage.COUNTER_APPROVAL_REQUIRED: 12,
+    CanonicalReplayStage.COUNTER_APPROVED_READY_TO_RESUME: 13,
+    CanonicalReplayStage.READY_FOR_SAFETY_EVIDENCE: 14,
+    CanonicalReplayStage.SAFETY_REVIEW_PENDING: 15,
+}
+
+
+def canonical_stage_ordinal(stage: CanonicalReplayStage) -> int:
+    return _HERO_ORDINALS.get(stage, CANONICAL_REPLAY_TOTAL_STAGES)
+
+
+def canonical_progress_label(ordinal: int) -> str:
+    return f"Stage {ordinal} of {CANONICAL_REPLAY_TOTAL_STAGES}"
+
+
+class CanonicalReplayStageView(FrozenContract):
+    stage: CanonicalReplayStage
+    ordinal: int = Field(ge=1, le=CANONICAL_REPLAY_TOTAL_STAGES)
+    progress_label: str = Field(min_length=1, max_length=64)
+    status: CanonicalReplayStatus
+    explanation: str = Field(min_length=1, max_length=1000)
+    next_allowed_action: CanonicalReplayActionType
+    guided_can_execute: bool
+    auto_replay_may_execute: bool
+    requires_human_authority: bool
+    deviation_reason: str | None = Field(default=None, max_length=128)
