@@ -78,8 +78,15 @@ def test_prepare_without_bootstrap_evidence_violates_sequence() -> None:
     assert outcome.error_kind == "CANONICAL_SEQUENCE_VIOLATION"
 
 
-def test_prepare_with_ambiguous_connection_enum_fails_closed() -> None:
-    tools = (_tool("prepare_rta_request", (CANONICAL_JV2_CONNECTION_ID, "SYN-CONN-SF1")),)
+def test_prepare_pins_canonical_jv2_within_a_multi_connection_legal_set() -> None:
+    tools = (_tool("prepare_rta_request", (CANONICAL_JV2_CONNECTION_ID, "SYN-CONN-EC3")),)
+    turn = _decide(_context(step_count=2, forecast_stages=["PRE_DISCHARGE"]), tools)
+    assert turn.tool_call.name == "prepare_rta_request"
+    assert turn.tool_call.arguments == {"connection_id": CANONICAL_JV2_CONNECTION_ID}
+
+
+def test_prepare_fails_closed_when_canonical_connection_is_not_compatible() -> None:
+    tools = (_tool("prepare_rta_request", ("SYN-CONN-SF1", "SYN-CONN-EC3")),)
     outcome = _decide(_context(step_count=2, forecast_stages=["PRE_DISCHARGE"]), tools)
     assert isinstance(outcome, InvalidAgentModelTurn)
     assert outcome.error_kind == "CANONICAL_AMBIGUOUS_CONNECTION"

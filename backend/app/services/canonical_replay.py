@@ -87,12 +87,19 @@ class CanonicalReplayAgentModel:
                 ((tools["prepare_rta_request"].parameters.get("properties") or {}).get("connection_id") or {}).get("enum")
                 or []
             )
-            if len(options) != 1:
+            if len(options) == 1:
+                selected = options[0]
+            elif CANONICAL_JV2_CONNECTION_ID in options:
+                # Multiple compatible connections are legal registry output;
+                # the canonical harness deterministically pins the frozen JV2
+                # constant, which the registry independently revalidates.
+                selected = CANONICAL_JV2_CONNECTION_ID
+            else:
                 return InvalidAgentModelTurn(
                     error_kind="CANONICAL_AMBIGUOUS_CONNECTION",
-                    detail=f"Expected exactly one compatible connection option, found {len(options)}.",
+                    detail="Canonical JV2 connection is not among the currently compatible options.",
                 )
-            return self._turn("prepare_rta_request", {"connection_id": options[0]})
+            return self._turn("prepare_rta_request", {"connection_id": selected})
 
         if "send_authorised_rta_request" in tools:
             candidates = [
