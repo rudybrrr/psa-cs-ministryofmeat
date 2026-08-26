@@ -176,7 +176,10 @@ def test_unhandled_evidence_precedes_carrier_mutation(session) -> None:
 
     assert invocation.status is AgentToolInvocationStatus.REJECTED
     assert invocation.error_kind == "ValueError"
-    assert invocation.result_summary == "Tool request rejected by durable state."
+    assert invocation.result_summary == (
+        "material dynamic-yard reconsideration must be handled before "
+        "carrier mutation"
+    )
     assert rejected.step_count == 1
     assert yard.latest_unhandled_assessment(incident_id) == assessment
     assert tuple(carrier.list_cases(incident_id)) == before_cases

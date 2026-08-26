@@ -66,6 +66,9 @@ _R1 = (
     "SYN-CNT-015",
 )
 _COMMITTED = ("SYN-CNT-002", "SYN-CNT-004")
+_UNHANDLED_CARRIER_MUTATION_ERROR = (
+    "material dynamic-yard reconsideration must be handled before carrier mutation"
+)
 
 
 class DynamicYardEvidenceResult(FrozenContract):
@@ -221,6 +224,7 @@ def _unhandled_evidence_probe() -> dict[str, object]:
         assert_verified(
             invocation.status is AgentToolInvocationStatus.REJECTED
             and invocation.error_kind == "ValueError"
+            and invocation.result_summary == _UNHANDLED_CARRIER_MUTATION_ERROR
             and rejected.step_count == 1,
             "dynamic_evidence_precedes_carrier_mutation",
             (
