@@ -53,6 +53,33 @@ EXPECTED_WAITS = (
     "COUNTER_APPROVAL",
 )
 
+_FORBIDDEN_REASONING_KEYS = {
+    "prompt",
+    "messages",
+    "reasoning",
+    "chain_of_thought",
+}
+
+
+def _nested_mapping_keys(value) -> set[str]:
+    if isinstance(value, dict):
+        return set(value) | {
+            nested_key
+            for nested_value in value.values()
+            for nested_key in _nested_mapping_keys(nested_value)
+        }
+    if isinstance(value, list):
+        return {
+            nested_key
+            for nested_value in value
+            for nested_key in _nested_mapping_keys(nested_value)
+        }
+    return set()
+
+
+def _reject_provider_client(*_args, **_kwargs):
+    raise AssertionError("provider client must not be constructed")
+
 
 def test_canonical_evidence_run_is_credential_free_and_exact(
     session, monkeypatch
@@ -60,6 +87,10 @@ def test_canonical_evidence_run_is_credential_free_and_exact(
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.delenv("OPENAI_MODEL", raising=False)
     monkeypatch.delenv("OPENAI_AGENT_MODEL", raising=False)
+    monkeypatch.setattr(
+        "backend.app.services.semantic_safety.OpenAI",
+        _reject_provider_client,
+    )
 
     result = run_canonical_evidence_scenario(session)
 
@@ -100,7 +131,62 @@ def test_canonical_evidence_run_is_credential_free_and_exact(
     assert persisted == result.agent_history
     serialized = persisted.model_dump(mode="json")
     assert set(serialized) == {"run", "steps", "tool_invocations"}
-    assert not ({"prompt", "messages", "reasoning", "chain_of_thought"} & set(serialized))
+    assert set(serialized["run"]) == {
+        "id",
+        "incident_id",
+        "state",
+        "model_name",
+        "prompt_version",
+        "step_count",
+        "max_steps",
+        "wait_kind",
+        "wait_subject_id",
+        "escalation_reason",
+        "started_at",
+        "updated_at",
+        "completed_at",
+    }
+    assert {
+        frozenset(step)
+        for step in serialized["steps"]
+    } == {
+        frozenset(
+            {
+                "id",
+                "run_id",
+                "step_number",
+                "kind",
+                "action_summary",
+                "evidence_refs",
+                "model_name",
+                "prompt_version",
+                "latency_ms",
+                "input_tokens",
+                "output_tokens",
+                "created_at",
+            }
+        )
+    }
+    assert {
+        frozenset(invocation)
+        for invocation in serialized["tool_invocations"]
+    } == {
+        frozenset(
+            {
+                "id",
+                "run_id",
+                "step_id",
+                "tool_name",
+                "arguments",
+                "status",
+                "result_summary",
+                "error_kind",
+                "started_at",
+                "completed_at",
+            }
+        )
+    }
+    assert not (_FORBIDDEN_REASONING_KEYS & _nested_mapping_keys(serialized))
 
 
 def test_exact_approval_constructors_copy_durable_bindings_only(
@@ -253,7 +339,6 @@ def test_claims_are_derived_from_canonical_histories(session, monkeypatch) -> No
         "safety_canonical_contradiction",
         "safety_automation_blocked",
         "safety_terminal_escalation",
-        "safety_checker_scope_limited",
         "safety_policy_owns_disposition",
         "safety_pending_review_blocks_bypass",
         "agent_terminal_state",
@@ -262,9 +347,10 @@ def test_claims_are_derived_from_canonical_histories(session, monkeypatch) -> No
         "agent_wait_kinds",
         "agent_approval_identities",
         "agent_no_unavailable_tool_execution",
-        "agent_zero_model_credentials",
         "deterministic_tool_call_count",
     }
+    assert "safety_checker_scope_limited" not in claims
+    assert "agent_zero_model_credentials" not in claims
     assert {claim.status for claim in claims.values()} == {ClaimStatus.VERIFIED}
     assert claims["agent_step_count"].observed_value == 6
     assert claims["deterministic_tool_call_count"].observed_value == 5
@@ -277,5 +363,4 @@ def test_claims_are_derived_from_canonical_histories(session, monkeypatch) -> No
         "operator-console",
     ]
     assert claims["safety_automation_blocked"].observed_value is True
-    assert claims["agent_zero_model_credentials"].observed_value is True
     assert all(claim.evidence_refs for claim in claims.values())

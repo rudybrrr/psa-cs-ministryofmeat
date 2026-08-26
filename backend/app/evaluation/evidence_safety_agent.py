@@ -29,7 +29,6 @@ from backend.app.domain.carrier_recovery import (
 )
 from backend.app.domain.cargo_safety import (
     SemanticCheckResult,
-    SemanticSafetyCheckInput,
 )
 from backend.app.domain.dynamic_yard import AllocationTradeoffHistory
 from backend.app.domain.enums import ApprovalStatus
@@ -400,21 +399,6 @@ def claims_from_canonical_run(
             "safety_canonical_contradiction", "canonical safety history is incomplete"
         )
 
-    checker_output = CanonicalReplaySemanticChecker().check(
-        SemanticSafetyCheckInput(
-            structured_dangerous_goods=assessment.structured_dangerous_goods,
-            structured_un_number=assessment.structured_un_number,
-            structured_commodity=assessment.structured_commodity,
-            note_text=result.safety_history.note.text,
-        )
-    )
-    checker_keys = tuple(checker_output.model_dump(mode="json"))
-    assert_verified(
-        checker_keys == ("result", "explanation", "evidence_excerpt"),
-        "safety_checker_scope_limited",
-        f"observed checker output keys {checker_keys}",
-    )
-
     final_inventory = result.registry_inventories[-1]
     final_tool = result.agent_history.tool_invocations[-1].tool_name
     assert_verified(
@@ -489,13 +473,6 @@ def claims_from_canonical_run(
             **shared,
         ),
         EvidenceClaim(
-            claim_id="safety_checker_scope_limited",
-            statement="The semantic checker emits evidence fields only.",
-            observed_value=list(checker_keys),
-            evidence_refs=(safety_reference,),
-            **shared,
-        ),
-        EvidenceClaim(
             claim_id="safety_policy_owns_disposition",
             statement="The policy, separate from checker evidence, owns disposition.",
             observed_value={
@@ -564,13 +541,6 @@ def claims_from_canonical_run(
                 "invoked": [],
             },
             evidence_refs=(agent_reference, registry_reference),
-            **shared,
-        ),
-        EvidenceClaim(
-            claim_id="agent_zero_model_credentials",
-            statement="The canonical model and checker require no provider credentials.",
-            observed_value=True,
-            evidence_refs=(agent_reference, safety_reference),
             **shared,
         ),
         EvidenceClaim(
