@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
+from hashlib import sha256
+import json
 from uuid import UUID, uuid4
 
 from sqlmodel import SQLModel, Session, create_engine
@@ -52,6 +54,7 @@ from backend.app.orchestration.agent_runtime import (
 from backend.app.orchestration.canonical_replay import project_canonical_replay_stage
 from backend.app.orchestration.carrier_recovery import (
     CarrierRecoveryConflict,
+    CarrierRecoveryWorkflow,
     build_carrier_recovery_workflow,
 )
 from backend.app.orchestration.dynamic_yard import DynamicYardWorkflow
@@ -62,8 +65,16 @@ from backend.app.services.carrier_simulator import (
     DeterministicCarrierSimulator,
     SyntheticCarrierResponsePlan,
 )
+from backend.app.services.scenarios import SeededScenarioGenerator
+from backend.app.storage.agent_runtime import AgentRuntimeConflict
+from backend.app.storage.carrier_recovery import CarrierRecoveryRepository
 from backend.app.storage.dynamic_yard import DynamicYardConflict, DynamicYardRepository
-from backend.app.storage.repositories import AuditRepository, IncidentRepository
+from backend.app.storage.repositories import (
+    AuditRepository,
+    DecisionRepository,
+    IncidentRepository,
+    ScarcityEvaluationRepository,
+)
 
 
 _FIXTURE_ID = "SYN-CANONICAL-24-V1"
@@ -75,6 +86,26 @@ _FORBIDDEN_TOOLS = frozenset(
         "set_yard_capacity",
     }
 )
+_AGENT_APPROVAL_AUTHORITY_TOOLS = frozenset(
+    {
+        "approve_request",
+        "approve_counter",
+        "approve_rta_request",
+        "approve_counter_proposal",
+        "record_request_approval",
+        "record_counter_approval",
+    }
+)
+
+
+class _SharedFixtureService:
+    """Makes one canonical fixture object the exact fixture exercised by a probe."""
+
+    def __init__(self, fixture) -> None:
+        self._fixture = fixture
+
+    def load(self):
+        return self._fixture
 
 
 @contextmanager
@@ -116,6 +147,31 @@ def _assert_dynamic_conflict(operation, claim_id: str, detail: str) -> str:
     except DynamicYardConflict as error:
         return type(error).__name__
     raise AssertionError(f"{claim_id}: {detail}")
+
+
+def _assert_agent_wait_conflict(operation, claim_id: str, detail: str) -> None:
+    try:
+        operation()
+    except AgentRuntimeConflict:
+        return
+    raise AssertionError(f"{claim_id}: {detail}")
+
+
+def _carrier_workflow_with_fixture(
+    session: Session,
+    *,
+    fixture_service: _SharedFixtureService,
+    simulator: DeterministicCarrierSimulator,
+) -> CarrierRecoveryWorkflow:
+    return CarrierRecoveryWorkflow(
+        fixture_service=fixture_service,
+        scenarios=SeededScenarioGenerator(),
+        cases=CarrierRecoveryRepository(session),
+        incidents=IncidentRepository(session),
+        evaluations=ScarcityEvaluationRepository(session),
+        decisions=DecisionRepository(session),
+        simulator=simulator,
+    )
 
 
 def _approve_request(workflow, case_id: UUID) -> None:
@@ -238,6 +294,7 @@ def _authority_probe() -> tuple[dict[str, object], dict[str, object], dict[str, 
         )
 
         silent_fixture = SyntheticCanonicalIncidentService().load()
+        silent_fixture_service = _SharedFixtureService(silent_fixture)
         silent_connection = next(
             profile.container.onward_connection
             for profile in silent_fixture.profiles
@@ -245,8 +302,9 @@ def _authority_probe() -> tuple[dict[str, object], dict[str, object], dict[str, 
         )
         silent_connection_before = silent_connection.model_dump(mode="json")
         silent_phase2 = build_scarce_capacity_workflow(session).run()
-        silent_workflow = build_carrier_recovery_workflow(
+        silent_workflow = _carrier_workflow_with_fixture(
             session,
+            fixture_service=silent_fixture_service,
             simulator=DeterministicCarrierSimulator(
                 SyntheticCarrierResponsePlan().load_run("SILENT-RUN")
             ),
@@ -267,6 +325,13 @@ def _authority_probe() -> tuple[dict[str, object], dict[str, object], dict[str, 
             silent_result.no_response_emitted and not silent_history.carrier_responses,
             "carrier_silence_timeout_and_runtime_scope",
             "SILENT-RUN persisted a CarrierResponse",
+        )
+        assert_verified(
+            silent_history.case.connection_id == silent_connection.id
+            and silent_history.request is not None
+            and silent_history.request.connection_id == silent_connection.id,
+            "carrier_silence_timeout_and_runtime_scope",
+            "silent carrier workflow did not exercise the snapshotted fixture connection",
         )
         configuration = CanonicalAgentRuntimeConfiguration.load()
         registry_before = AgentToolRegistry(clock=configuration.clock("before_deadline"))
@@ -308,6 +373,11 @@ def _authority_probe() -> tuple[dict[str, object], dict[str, object], dict[str, 
             "carrier_silence_timeout_and_runtime_scope",
             "runtime registry exposed forbidden operational authority",
         )
+        assert_verified(
+            captured_tools.isdisjoint(_AGENT_APPROVAL_AUTHORITY_TOOLS),
+            "carrier_silence_timeout_and_runtime_scope",
+            "runtime registry exposed agent approval authority",
+        )
 
         return (
             {
@@ -330,6 +400,9 @@ def _authority_probe() -> tuple[dict[str, object], dict[str, object], dict[str, 
                 "fixture_connection_unchanged": silent_connection_after
                 == silent_connection_before,
                 "forbidden_runtime_tools": sorted(captured_tools & _FORBIDDEN_TOOLS),
+                "agent_approval_authority_tools": sorted(
+                    captured_tools & _AGENT_APPROVAL_AUTHORITY_TOOLS
+                ),
             },
         )
 
@@ -438,12 +511,33 @@ def _human_review_fixture(session: Session):
     return incident, revision
 
 
+def _tradeoff_persisted_state_fingerprint(history, audit_events) -> str:
+    payload = {
+        "selections": [item.model_dump(mode="json") for item in history.selections],
+        "revisions": [item.model_dump(mode="json") for item in history.revisions],
+        "commitments": [item.model_dump(mode="json") for item in history.commitments],
+        "audit_events": [item.model_dump(mode="json") for item in audit_events],
+    }
+    return sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+
+
 def _tradeoff_probe() -> dict[str, object]:
     with _isolated_session() as session:
         incident, baseline = _human_review_fixture(session)
         configuration = CanonicalAgentRuntimeConfiguration.load()
         model = FakeAgentModel(
-            (AgentModelTurn(tool_call=AgentToolCall(name="escalate_agent_run", arguments={})),)
+            (
+                AgentModelTurn(
+                    tool_call=AgentToolCall(
+                        name="request_expedite_feasibility", arguments={}
+                    )
+                ),
+                AgentModelTurn(
+                    tool_call=AgentToolCall(name="escalate_agent_run", arguments={})
+                ),
+            )
         )
         runtime = AgentRuntimeCoordinator(
             session=session,
@@ -452,7 +546,7 @@ def _tradeoff_probe() -> dict[str, object]:
             configuration=configuration,
         )
         run = runtime.create_run(incident.id)
-        waiting = runtime._execute_turn(run, "request_expedite_feasibility", {})
+        waiting = runtime.advance(run.id)
         assert_verified(
             waiting.wait_kind is not None
             and waiting.wait_kind.value == "HUMAN_TRADEOFF_DECISION",
@@ -474,9 +568,23 @@ def _tradeoff_probe() -> dict[str, object]:
             )
         }
         assert_verified(
-            model.calls == 0 and "select_tradeoff_option" not in tool_names,
+            model.calls == 1
+            and "select_tradeoff_option" not in tool_names
+            and tool_names.isdisjoint(_AGENT_APPROVAL_AUTHORITY_TOOLS),
             "human_tradeoff_backend_authority_boundary",
-            "model ran early or runtime registry exposed operator selection",
+            "runtime did not reach the human wait through its public path or registry exposed human authority",
+        )
+        model_calls_at_human_wait = model.calls
+        _assert_agent_wait_conflict(
+            lambda: runtime.advance(waiting.id),
+            "human_tradeoff_backend_authority_boundary",
+            "unresolved human review resumed the public runtime",
+        )
+        model_calls_while_waiting = model.calls - model_calls_at_human_wait
+        assert_verified(
+            model_calls_while_waiting == 0,
+            "human_tradeoff_backend_authority_boundary",
+            "public runtime invoked the model while exact human selection was absent",
         )
         projector = project_canonical_replay_stage(session, incident.id)
         assert_verified(
@@ -490,6 +598,9 @@ def _tradeoff_probe() -> dict[str, object]:
         )
         audit_before = AuditRepository(session).list_for_incident(incident.id)
         history_before = DynamicYardWorkflow.for_session(session).history(incident.id)
+        state_before = _tradeoff_persisted_state_fingerprint(
+            history_before, audit_before
+        )
         stale_exception = _assert_dynamic_conflict(
             lambda: DynamicYardWorkflow.for_session(session).select_tradeoff(
                 review.id,
@@ -502,17 +613,10 @@ def _tradeoff_probe() -> dict[str, object]:
         )
         history_after_stale = DynamicYardWorkflow.for_session(session).history(incident.id)
         audit_after_stale = AuditRepository(session).list_for_incident(incident.id)
-        stale_unchanged = (
-            len(history_after_stale.selections),
-            len(history_after_stale.revisions),
-            len(history_after_stale.commitments),
-            len(audit_after_stale),
-        ) == (
-            len(history_before.selections),
-            len(history_before.revisions),
-            len(history_before.commitments),
-            len(audit_before),
+        state_after = _tradeoff_persisted_state_fingerprint(
+            history_after_stale, audit_after_stale
         )
+        stale_unchanged = state_after == state_before
         assert_verified(
             stale_unchanged,
             "human_tradeoff_backend_authority_boundary",
@@ -523,6 +627,13 @@ def _tradeoff_probe() -> dict[str, object]:
             selected_option_id=option.id,
             expected_options_fingerprint=review.options_fingerprint,
             operator_id="evidence-operator",
+        )
+        resumed = runtime.advance(waiting.id)
+        assert_verified(
+            model.calls == model_calls_at_human_wait + 1
+            and resumed.state is AgentRunState.ESCALATED,
+            "human_tradeoff_backend_authority_boundary",
+            "public runtime did not resume only after exact human selection",
         )
         resolved = DynamicYardWorkflow.for_session(session).history(incident.id)
         committed = sorted(
@@ -540,10 +651,14 @@ def _tradeoff_probe() -> dict[str, object]:
         )
         return {
             "review_state_before_selection": review.state.value,
-            "model_calls_before_selection": model.calls,
+            "model_calls_to_reach_human_wait": model_calls_at_human_wait,
+            "model_calls_while_waiting_before_selection": model_calls_while_waiting,
             "selection_tool_in_runtime_registry": "select_tradeoff_option" in tool_names,
+            "agent_approval_authority_tools": sorted(
+                tool_names & _AGENT_APPROVAL_AUTHORITY_TOOLS
+            ),
             "stale_selection_exception": stale_exception,
-            "stale_selection_mutated": not stale_unchanged,
+            "stale_selection_persisted_state_unchanged": stale_unchanged,
             "committed_slots_retained": committed,
             "projector_stage": projector.stage.value,
             "projector_action": projector.next_allowed_action.value,

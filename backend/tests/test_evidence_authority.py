@@ -30,8 +30,10 @@ def test_authority_collector_proves_exact_carrier_boundaries_and_runtime_scope(s
         "timeout_terminal_state",
         "fixture_connection_unchanged",
         "forbidden_runtime_tools",
+        "agent_approval_authority_tools",
     }
     assert silence["silent_carrier_response_count"] == 0
     assert silence["fixture_connection_unchanged"] is True
     assert silence["forbidden_runtime_tools"] == []
+    assert silence["agent_approval_authority_tools"] == []
     assert silence["timeout_terminal_state"] in {"COMPLETED", "ESCALATED"}

@@ -11,10 +11,12 @@ def test_tradeoff_collector_proves_backend_human_authority_boundary(session) -> 
     assert claim.status is ClaimStatus.VERIFIED
     assert claim.observed_value == {
         "review_state_before_selection": "OPEN",
-        "model_calls_before_selection": 0,
+        "model_calls_to_reach_human_wait": 1,
+        "model_calls_while_waiting_before_selection": 0,
         "selection_tool_in_runtime_registry": False,
+        "agent_approval_authority_tools": [],
         "stale_selection_exception": "DynamicYardConflict",
-        "stale_selection_mutated": False,
+        "stale_selection_persisted_state_unchanged": True,
         "committed_slots_retained": ["SYN-CNT-002", "SYN-CNT-004"],
         "projector_stage": "TRADEOFF_DECISION_REQUIRED",
         "projector_action": "SELECT_TRADEOFF_OPTION",
