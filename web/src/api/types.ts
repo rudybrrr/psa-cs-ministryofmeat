@@ -478,3 +478,67 @@ export interface SemanticSafetyAssessment { id: string; review_id: string; incid
 export interface SemanticSafetyPolicyResult { id: string; review_id: string; assessment_id: string; incident_id: string; container_id: string; disposition: string; automation_blocked: boolean; reason: string; replacement_decision_id: string | null; created_at: string; }
 export interface CargoSafetyEvaluationResult { review: CargoSafetyReview; assessment: SemanticSafetyAssessment; policy_result: SemanticSafetyPolicyResult; decision: Decision | null; }
 export interface CargoSafetyHistory { review: CargoSafetyReview; note: CargoNote; assessment: SemanticSafetyAssessment | null; policy_result: SemanticSafetyPolicyResult | null; audit_events: AuditEvent[]; }
+
+export const CanonicalReplayStage = {
+  READY_TO_CREATE: "READY_TO_CREATE",
+  READY_FOR_PRE_DISCHARGE: "READY_FOR_PRE_DISCHARGE",
+  READY_TO_START_AGENT: "READY_TO_START_AGENT",
+  READY_TO_ADVANCE_TO_EVIDENCE_WAIT: "READY_TO_ADVANCE_TO_EVIDENCE_WAIT",
+  WAITING_FOR_ACTIVE_EVIDENCE: "WAITING_FOR_ACTIVE_EVIDENCE",
+  READY_TO_RECONSIDER: "READY_TO_RECONSIDER",
+  READY_TO_PREPARE_RTA: "READY_TO_PREPARE_RTA",
+  REQUEST_APPROVAL_REQUIRED: "REQUEST_APPROVAL_REQUIRED",
+  REQUEST_APPROVED_READY_TO_SEND: "REQUEST_APPROVED_READY_TO_SEND",
+  WAITING_FOR_CARRIER: "WAITING_FOR_CARRIER",
+  CARRIER_COUNTER_RECEIVED: "CARRIER_COUNTER_RECEIVED",
+  COUNTER_APPROVAL_REQUIRED: "COUNTER_APPROVAL_REQUIRED",
+  COUNTER_APPROVED_READY_TO_RESUME: "COUNTER_APPROVED_READY_TO_RESUME",
+  READY_FOR_SAFETY_EVIDENCE: "READY_FOR_SAFETY_EVIDENCE",
+  SAFETY_REVIEW_PENDING: "SAFETY_REVIEW_PENDING",
+  SAFETY_BLOCKED: "SAFETY_BLOCKED",
+  COMPLETE: "COMPLETE",
+  FAILED: "FAILED",
+  TRADEOFF_DECISION_REQUIRED: "TRADEOFF_DECISION_REQUIRED",
+  OFF_CANONICAL_PATH: "OFF_CANONICAL_PATH",
+} as const;
+export type CanonicalReplayStage =
+  (typeof CanonicalReplayStage)[keyof typeof CanonicalReplayStage];
+
+export const CanonicalReplayStatus = {
+  PENDING_ACTION: "PENDING_ACTION",
+  WAITING_HUMAN: "WAITING_HUMAN",
+  WAITING_EXTERNAL: "WAITING_EXTERNAL",
+  TERMINAL_SUCCESS: "TERMINAL_SUCCESS",
+  TERMINAL_HALTED: "TERMINAL_HALTED",
+} as const;
+export type CanonicalReplayStatus =
+  (typeof CanonicalReplayStatus)[keyof typeof CanonicalReplayStatus];
+
+export const CanonicalReplayActionType = {
+  CREATE_CANONICAL_INCIDENT: "CREATE_CANONICAL_INCIDENT",
+  BOOTSTRAP_PRE_DISCHARGE: "BOOTSTRAP_PRE_DISCHARGE",
+  START_DEMO_AGENT_RUN: "START_DEMO_AGENT_RUN",
+  ADVANCE_AGENT: "ADVANCE_AGENT",
+  PUBLISH_DISCHARGE_ACTIVE: "PUBLISH_DISCHARGE_ACTIVE",
+  SIMULATE_CARRIER_RESPONSE: "SIMULATE_CARRIER_RESPONSE",
+  APPROVE_REQUEST: "APPROVE_REQUEST",
+  APPROVE_COUNTER: "APPROVE_COUNTER",
+  PERSIST_SAFETY_REVIEW: "PERSIST_SAFETY_REVIEW",
+  SELECT_TRADEOFF_OPTION: "SELECT_TRADEOFF_OPTION",
+  NONE: "NONE",
+} as const;
+export type CanonicalReplayActionType =
+  (typeof CanonicalReplayActionType)[keyof typeof CanonicalReplayActionType];
+
+export interface CanonicalReplayStageView {
+  stage: CanonicalReplayStage;
+  ordinal: number;
+  progress_label: string;
+  status: CanonicalReplayStatus;
+  explanation: string;
+  next_allowed_action: CanonicalReplayActionType;
+  guided_can_execute: boolean;
+  auto_replay_may_execute: boolean;
+  requires_human_authority: boolean;
+  deviation_reason: string | null;
+}

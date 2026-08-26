@@ -1,3 +1,5 @@
+import { useRef } from "react";
+
 import { SyntheticBanner } from "./SyntheticBanner";
 import { IncidentHeader } from "./IncidentHeader";
 import { AuditTimeline } from "./AuditTimeline";
@@ -11,13 +13,70 @@ import { DynamicYardPanel } from "./dynamic/DynamicYardPanel";
 import { TradeoffReviewPanel } from "./dynamic/TradeoffReviewPanel";
 import { CargoSafetyPanel } from "./safety/CargoSafetyPanel";
 import { useRecoveryConsole } from "../hooks/useRecoveryConsole";
-import { canAdvanceAgent, latestSnapshot } from "../lib/recoverySelectors";
+import {
+  CANONICAL_COUNTER_EFFECTIVE_AT,
+  CANONICAL_SAFETY_CONTAINER_ID,
+  SYNTHETIC_DEMO_OPERATOR_ID,
+  fetchCanonicalReplayStage,
+  initialCanonicalStageView,
+} from "../api/canonicalReplay";
+import type { CanonicalReplayActionType } from "../api/types";
+import { useAutoReplay } from "../hooks/useAutoReplay";
+import type { AutoReplayCallbacks } from "../lib/autoReplayController";
+import { canAdvanceAgent, canonicalApprovalFingerprint } from "../lib/recoverySelectors";
 
 export function OperationsConsole() {
   const console = useRecoveryConsole();
   const run = console.agentRuns.at(-1) ?? null;
-  const activeSnapshot = latestSnapshot(console.yardForecasts, "DISCHARGE_ACTIVE");
   const canAdvance = canAdvanceAgent(run, { carrierHistory: console.agentWaitHistory, reconsiderations: console.reconsiderations, tradeoffReviews: console.tradeoffReviews });
+
+  const consoleRef = useRef(console);
+  consoleRef.current = console;
+
+  const autoCallbacks: AutoReplayCallbacks = {
+    fetchStage: async () => {
+      const current = consoleRef.current;
+      // readLatestState mirrors applied bundle data synchronously, so the
+      // freshly created incident is visible to the controller without
+      // depending on React render timing.
+      const live = current.readLatestState();
+      if (!live.incident) {
+        return initialCanonicalStageView();
+      }
+      // Stage-fetch failures (404 / network / backend) must propagate to
+      // runAutoReplay, which owns error-halting. They must never be converted
+      // into READY_TO_CREATE or trigger a fresh incident.
+      return fetchCanonicalReplayStage(live.incident.id);
+    },
+    execute: async (action: CanonicalReplayActionType) => {
+      const current = consoleRef.current;
+      switch (action) {
+        case "CREATE_CANONICAL_INCIDENT":
+          return current.createCanonicalIncident();
+        case "BOOTSTRAP_PRE_DISCHARGE":
+          return current.bootstrapYard();
+        case "START_DEMO_AGENT_RUN":
+          return current.startDemoAgentRun();
+        case "ADVANCE_AGENT":
+          return current.advanceAgent();
+        case "PUBLISH_DISCHARGE_ACTIVE":
+          return current.publishActive();
+        case "SIMULATE_CARRIER_RESPONSE":
+          return current.simulateCarrierResponse(CANONICAL_COUNTER_EFFECTIVE_AT);
+        case "APPROVE_REQUEST":
+          return current.approveRequest(SYNTHETIC_DEMO_OPERATOR_ID);
+        case "APPROVE_COUNTER":
+          return current.approveCounter(SYNTHETIC_DEMO_OPERATOR_ID);
+        case "PERSIST_SAFETY_REVIEW":
+          return current.createSafetyReview(CANONICAL_SAFETY_CONTAINER_ID);
+        default:
+          return { ok: false, conflict: false };
+      }
+    },
+  };
+  const autoReplay = useAutoReplay(autoCallbacks);
+
+  const fingerprint = canonicalApprovalFingerprint(console.canonicalStage, console.agentWaitHistory);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
@@ -112,18 +171,30 @@ export function OperationsConsole() {
         <SyntheticDemoControl
           incidentId={console.incident?.id ?? null}
           loading={console.loading}
+          stage={console.canonicalStage}
+          error={console.error ? { status: console.error.status, detail: console.error.detail } : null}
+          approvalFingerprint={fingerprint}
           onCreateIncident={() => void console.createCanonicalIncident()}
           onRefresh={() => void console.refresh()}
           onBootstrap={() => void console.bootstrapYard()}
-          onStartAgent={() => void console.startAgent()}
+          onStartDemoAgentRun={() => void console.startDemoAgentRun()}
           onAdvanceAgent={() => void console.advanceAgent()}
           onPublishActive={() => void console.publishActive()}
+          onSimulateCarrierResponse={() => void console.simulateCarrierResponse(CANONICAL_COUNTER_EFFECTIVE_AT)}
+          onApproveRequest={() => void console.approveRequest()}
+          onRejectRequest={() => void console.rejectRequest()}
+          onApproveCounter={() => void console.approveCounter()}
+          onRejectCounter={() => void console.rejectCounter()}
           onCreateSafetyReview={() => void console.createSafetyReview("SYN-CNT-010")}
-          canBootstrap={Boolean(console.incident && console.yardForecasts.length === 0)}
-          canStartAgent={Boolean(console.incident && !run)}
-          canAdvanceAgent={canAdvance}
-          canPublishActive={Boolean(console.incident && console.yardForecasts.length > 0 && !activeSnapshot)}
-          canCreateSafetyReview={Boolean(console.incident && !console.cargoSafetyReviews.some((review) => review.container_id === "SYN-CNT-010"))}
+          autoReplay={{
+            progress: autoReplay.progress,
+            // Projector authority: start is permitted exactly when the
+            // projected stage permits auto execution (READY_TO_CREATE local
+            // view included); loading/terminal/off-canonical/tradeoff exclude it.
+            canStart: !console.loading && console.canonicalStage.auto_replay_may_execute,
+            onStart: autoReplay.start,
+            onStop: autoReplay.stop,
+          }}
         />
       </main>
     </div>

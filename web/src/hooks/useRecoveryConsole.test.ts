@@ -7,6 +7,7 @@ import * as clientApi from "../api/client";
 import * as scarcityApi from "../api/scarcity";
 import * as dynamicYardApi from "../api/dynamicYard";
 import * as cargoSafetyApi from "../api/cargoSafety";
+import * as canonicalReplayApi from "../api/canonicalReplay";
 import { ApiError } from "../api/client";
 import type { AgentRun, CargoSafetyReview } from "../api/types";
 import { useRecoveryConsole } from "./useRecoveryConsole";
@@ -14,6 +15,22 @@ import { useRecoveryConsole } from "./useRecoveryConsole";
 vi.mock("../api/agentRuntime", () => ({ createAgentRun: vi.fn(), advanceAgentRun: vi.fn(), listAgentRuns: vi.fn().mockResolvedValue([]), getAgentRunHistory: vi.fn() }));
 vi.mock("../api/dynamicYard", () => ({ bootstrapDynamicYard: vi.fn(), publishDischargeActive: vi.fn(), selectTradeoff: vi.fn(), listYardForecasts: vi.fn().mockResolvedValue([]), listAllocationRevisions: vi.fn().mockResolvedValue([]), listExpediteCommitments: vi.fn().mockResolvedValue([]), listReconsiderations: vi.fn().mockResolvedValue([]), listTradeoffReviews: vi.fn().mockResolvedValue([]), listTradeoffOptions: vi.fn().mockResolvedValue([]) }));
 vi.mock("../api/cargoSafety", () => ({ createCargoSafetyReview: vi.fn(), evaluateCargoSafetyReview: vi.fn(), listCargoSafetyReviews: vi.fn().mockResolvedValue([]), getCargoSafetyHistory: vi.fn() }));
+vi.mock("../api/canonicalReplay", () => ({
+  fetchCanonicalReplayStage: vi.fn().mockResolvedValue(null),
+  createCanonicalDemoAgentRun: vi.fn(),
+  initialCanonicalStageView: vi.fn(() => ({
+    stage: "READY_TO_CREATE",
+    ordinal: 1,
+    progress_label: "Stage 1 of 16",
+    status: "PENDING_ACTION",
+    explanation: "No incident is loaded yet.",
+    next_allowed_action: "CREATE_CANONICAL_INCIDENT",
+    guided_can_execute: true,
+    auto_replay_may_execute: true,
+    requires_human_authority: false,
+    deviation_reason: null,
+  })),
+}));
 
 const INCIDENT_ID = "11111111-1111-4111-8111-111111111111";
 const CASE_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -193,6 +210,7 @@ function mockBaseReads(overrides: {
   incident?: typeof incident;
   agentRuns?: AgentRun[];
   safetyReviews?: CargoSafetyReview[];
+  carrierCasesOverride?: unknown[];
 } = {}) {
   vi.spyOn(scarcityApi, "triggerCanonicalScarcity").mockResolvedValue({
     incident_id: INCIDENT_ID,
@@ -205,7 +223,7 @@ function mockBaseReads(overrides: {
   vi.spyOn(clientApi, "getIncident").mockResolvedValue(overrides.incident ?? incident);
   vi.spyOn(clientApi, "getDecisions").mockResolvedValue([]);
   vi.spyOn(clientApi, "getAuditEvents").mockResolvedValue([]);
-  vi.spyOn(carrierApi, "listCarrierCases").mockResolvedValue([]);
+  vi.spyOn(carrierApi, "listCarrierCases").mockResolvedValue(overrides.carrierCasesOverride ?? []);
   vi.mocked(dynamicYardApi.listYardForecasts).mockResolvedValue([]);
   vi.mocked(dynamicYardApi.listAllocationRevisions).mockResolvedValue([]);
   vi.mocked(dynamicYardApi.listExpediteCommitments).mockResolvedValue([]);
@@ -214,6 +232,18 @@ function mockBaseReads(overrides: {
   vi.mocked(dynamicYardApi.listTradeoffOptions).mockResolvedValue([]);
   vi.mocked(cargoSafetyApi.listCargoSafetyReviews).mockResolvedValue(overrides.safetyReviews ?? []);
   vi.mocked(agentApi.listAgentRuns).mockResolvedValue(overrides.agentRuns ?? []);
+  vi.mocked(canonicalReplayApi.fetchCanonicalReplayStage).mockResolvedValue({
+    stage: "READY_FOR_PRE_DISCHARGE",
+    ordinal: 2,
+    progress_label: "Stage 2 of 16",
+    status: "PENDING_ACTION",
+    explanation: "bootstrap",
+    next_allowed_action: "BOOTSTRAP_PRE_DISCHARGE",
+    guided_can_execute: true,
+    auto_replay_may_execute: true,
+    requires_human_authority: false,
+    deviation_reason: null,
+  });
 }
 
 describe("useRecoveryConsole", () => {
@@ -717,5 +747,149 @@ describe("useRecoveryConsole", () => {
     expect(vi.mocked(cargoSafetyApi.getCargoSafetyHistory).mock.calls.length).toBe(
       safetyHistoryReadsAfterCreate + 1,
     );
+  });
+
+  it("loads the projected canonical replay stage with the incident bundle", async () => {
+    mockBaseReads();
+    const { result } = renderHook(() => useRecoveryConsole());
+    expect(result.current.canonicalStage.stage).toBe("READY_TO_CREATE");
+    await act(async () => {
+      await result.current.createCanonicalIncident();
+    });
+    expect(canonicalReplayApi.fetchCanonicalReplayStage).toHaveBeenCalledWith(INCIDENT_ID);
+    expect(result.current.canonicalStage.stage).toBe("READY_FOR_PRE_DISCHARGE");
+  });
+
+  it("startDemoAgentRun posts once to the synthetic demo route and refreshes", async () => {
+    mockBaseReads();
+    const { result } = renderHook(() => useRecoveryConsole());
+    await act(async () => {
+      await result.current.createCanonicalIncident();
+    });
+    const agentListReadsAfterCreate = vi.mocked(agentApi.listAgentRuns).mock.calls.length;
+    vi.mocked(canonicalReplayApi.createCanonicalDemoAgentRun).mockResolvedValue(
+      agentRun({ model_name: "canonical-replay-agent-v1", state: "CREATED", step_count: 0 }),
+    );
+
+    await act(async () => {
+      await result.current.startDemoAgentRun();
+    });
+
+    expect(canonicalReplayApi.createCanonicalDemoAgentRun).toHaveBeenCalledTimes(1);
+    expect(canonicalReplayApi.createCanonicalDemoAgentRun).toHaveBeenCalledWith(INCIDENT_ID);
+    expect(agentApi.createAgentRun).not.toHaveBeenCalled();
+    expect(vi.mocked(agentApi.listAgentRuns).mock.calls.length).toBe(agentListReadsAfterCreate + 1);
+  });
+
+  it("approvals accept an explicit synthetic operator identity", async () => {
+    const run = agentRun({ wait_kind: "REQUEST_APPROVAL", wait_subject_id: CASE_ID });
+    mockBaseReads({
+      agentRuns: [run],
+      carrierCasesOverride: [
+        {
+          id: CASE_ID,
+          incident_id: INCIDENT_ID,
+          connection_id: "SYN-CONN-JV2",
+          source_evaluation_id: "eval-1",
+          affected_container_ids: ["SYN-CNT-017"],
+          state: "AWAITING_REQUEST_APPROVAL" as const,
+          created_at: "2026-08-22T07:00:00Z",
+          updated_at: "2026-08-22T07:00:00Z",
+        },
+      ],
+    });
+    vi.mocked(agentApi.getAgentRunHistory).mockResolvedValue(agentHistoryFor(run));
+    vi.spyOn(carrierApi, "getCarrierCaseHistory").mockResolvedValue({
+      ...emptyCarrierHistory,
+      bindings: [
+        {
+          case_id: CASE_ID,
+          proposal_decision_id: "decision-1",
+          subject_kind: "OUTBOUND_REQUEST" as const,
+          subject_id: "request-1",
+          payload_fingerprint: "fingerprint-abc",
+          created_at: "2026-08-22T07:00:00Z",
+        },
+      ],
+      request: { id: "request-1", incident_id: INCIDENT_ID, connection_id: "SYN-CONN-JV2", requested_eta_pta: "2026-08-22T08:00:00Z", status: "PENDING" as const, created_at: "2026-08-22T07:00:00Z" },
+    });
+    const { result } = renderHook(() => useRecoveryConsole());
+    await act(async () => {
+      await result.current.createCanonicalIncident();
+      result.current.setSelectedCarrierCaseId(CASE_ID);
+    });
+    vi.spyOn(carrierApi, "approveRequest").mockResolvedValue({ id: "approval", decision_id: "decision-1", operator_id: "synthetic-demo-operator", status: "APPROVED" as const, reason: null, created_at: "2026-08-22T09:00:00Z" });
+
+    await act(async () => {
+      await result.current.approveRequest("synthetic-demo-operator");
+    });
+
+    expect(carrierApi.approveRequest).toHaveBeenCalledWith(
+      CASE_ID,
+      expect.objectContaining({ operator_id: "synthetic-demo-operator", expected_payload_fingerprint: "fingerprint-abc" }),
+    );
+  });
+
+  it("simulateCarrierResponse override sends the canonical effective_at and default keeps legacy timing", async () => {
+    const run = agentRun({ wait_kind: "CARRIER_RESPONSE_OR_TIMEOUT", wait_subject_id: CASE_ID });
+    mockBaseReads({
+      agentRuns: [run],
+      carrierCasesOverride: [
+        {
+          id: CASE_ID,
+          incident_id: INCIDENT_ID,
+          connection_id: "SYN-CONN-JV2",
+          source_evaluation_id: "eval-1",
+          affected_container_ids: ["SYN-CNT-017"],
+          state: "AWAITING_CARRIER" as const,
+          created_at: "2026-08-22T07:00:00Z",
+          updated_at: "2026-08-22T07:00:00Z",
+        },
+      ],
+    });
+    vi.mocked(agentApi.getAgentRunHistory).mockResolvedValue(agentHistoryFor(run));
+    vi.spyOn(carrierApi, "getCarrierCaseHistory").mockResolvedValue(emptyCarrierHistory);
+    const { result } = renderHook(() => useRecoveryConsole());
+    await act(async () => {
+      await result.current.createCanonicalIncident();
+      result.current.setSelectedCarrierCaseId(CASE_ID);
+    });
+    vi.spyOn(carrierApi, "simulateCarrierResponse").mockResolvedValue({ case_id: CASE_ID, carrier_response_id: null, no_response_emitted: true });
+
+    await act(async () => {
+      await result.current.simulateCarrierResponse("2026-08-23T05:00:00Z");
+    });
+    expect(carrierApi.simulateCarrierResponse).toHaveBeenLastCalledWith(CASE_ID, { effective_at: "2026-08-23T05:00:00Z" });
+
+    await act(async () => {
+      await result.current.simulateCarrierResponse();
+    });
+    expect(carrierApi.simulateCarrierResponse).toHaveBeenLastCalledWith(CASE_ID, { effective_at: "2026-08-22T08:30:00Z" });
+  });
+
+  it("mutation outcomes expose ok and conflict flags without breaking refresh semantics", async () => {
+    const run = agentRun();
+    mockBaseReads({ agentRuns: [run] });
+    vi.mocked(agentApi.getAgentRunHistory).mockResolvedValue(agentHistoryFor(run));
+    const { result } = renderHook(() => useRecoveryConsole());
+    await act(async () => {
+      await result.current.createCanonicalIncident();
+    });
+    vi.mocked(agentApi.advanceAgentRun).mockRejectedValue(new ApiError(409, "wait upgrade"));
+
+    let outcome: { ok: boolean; conflict: boolean } | undefined;
+    await act(async () => {
+      outcome = await result.current.advanceAgent();
+    });
+    expect(outcome?.ok).toBe(false);
+    expect(outcome?.conflict).toBe(true);
+    expect(result.current.error?.status).toBe(409);
+
+    vi.mocked(agentApi.advanceAgentRun).mockResolvedValue(run);
+    await act(async () => {
+      outcome = await result.current.advanceAgent();
+    });
+    expect(outcome?.ok).toBe(true);
+    expect(outcome?.conflict).toBe(false);
   });
 });
