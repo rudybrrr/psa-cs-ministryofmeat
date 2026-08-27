@@ -422,3 +422,19 @@ def test_cli_rejects_runtime_repetition_below_one(tmp_path: Path) -> None:
         )
 
     assert exc.value.code == 2
+
+
+def test_committed_artifacts_are_validated_and_consistent() -> None:
+    from backend.app.evaluation.evidence_markdown import render_evidence_summary
+
+    report = Phase8EvidenceReport.model_validate_json(
+        (
+            REPO_ROOT / "docs/evaluations/phase8-evidence-report.json"
+        ).read_text(encoding="utf-8")
+    )
+    markdown = (
+        REPO_ROOT / "docs/evaluations/phase8-evidence-summary.md"
+    ).read_text(encoding="utf-8")
+
+    assert markdown == render_evidence_summary(report)
+    assert report.deterministic_fingerprint in markdown
