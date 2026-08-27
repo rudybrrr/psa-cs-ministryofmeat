@@ -5,8 +5,8 @@
 - Schema: `phase8-evidence-v1`
 - Suite: `phase8-deterministic-evidence`
 - Evaluation base: `71716a0eee8413358dfc1e125a942945fc4be18c`
-- Source revision: `5cdce26b85e2922d23fe79d23d5d8bc8909ef775`
-- Generated at: `2026-08-27T16:17:19.256269+00:00`
+- Source revision: `6677dbbac0f9e5ef6ccb1d751519e9a18f5ed5ec`
+- Generated at: `2026-08-27T16:43:19.225757+00:00`
 - Fixture IDs: `SYN-CANONICAL-24-V1`
 - Seed manifest: `SYN-CANONICAL-24-HOLDOUT-V1`
 - Canonical model: `canonical-replay-agent-v1`
@@ -135,7 +135,7 @@ Frozen expected-preserved improvement: `0.4952` (`+4.1220%`).
 
 - Label: `LOCAL_MACHINE_DEPENDENT`
 - Production SLA claimed: `false`
-- `deterministic_local_runtime` — **VERIFIED** — {"canonical_run_wall_clock_ms":581.8809,"p50_local_runtime_ms":584.2552499999999,"p95_local_runtime_ms":649.7983,"platform":"Windows-11-10.0.26200-SP0","python_version":"3.12.13 (main, Jun 23 2026, 15:23:43) [MSC v.1944 64 bit (AMD64)]","repetitions":20,"run_durations_ms":[581.8809,599.7952,574.6901,621.8905,576.0751,565.3981,580.2071,625.3673,574.9517,568.3983,649.7983,579.2247,605.7488,587.8216,578.9117,586.6296,594.9913,658.3812,579.7915,587.0338]} — LOCAL_MACHINE_DEPENDENT measurement only; it is not a production SLA or a deterministic timing claim.
+- `deterministic_local_runtime` — **VERIFIED** — {"canonical_run_wall_clock_ms":579.8507,"p50_local_runtime_ms":610.0260000000001,"p95_local_runtime_ms":671.7716,"platform":"Windows-11-10.0.26200-SP0","python_version":"3.12.13 (main, Jun 23 2026, 15:23:43) [MSC v.1944 64 bit (AMD64)]","repetitions":20,"run_durations_ms":[579.8507,605.5361,544.3329,624.0044,532.3369,638.929,603.3304,601.6444,613.9197,633.9367,671.7716,622.1912,584.8642,582.1826,648.1194,582.7135,606.1323,618.9343,685.1354,648.9133]} — LOCAL_MACHINE_DEPENDENT measurement only; it is not a production SLA or a deterministic timing claim.
 
 ## NOT_ESTABLISHED
 

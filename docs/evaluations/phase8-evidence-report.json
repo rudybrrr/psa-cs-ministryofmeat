@@ -2,8 +2,8 @@
   "schema_version": "phase8-evidence-v1",
   "suite_id": "phase8-deterministic-evidence",
   "evaluation_base_sha": "71716a0eee8413358dfc1e125a942945fc4be18c",
-  "source_revision": "5cdce26b85e2922d23fe79d23d5d8bc8909ef775",
-  "generated_at": "2026-08-27T16:17:19.256269Z",
+  "source_revision": "6677dbbac0f9e5ef6ccb1d751519e9a18f5ed5ec",
+  "generated_at": "2026-08-27T16:43:19.225757Z",
   "command": "uv run --python 3.12 --extra dev python -m backend.app.evaluation.evidence --output-json docs/evaluations/phase8-evidence-report.json --output-markdown docs/evaluations/phase8-evidence-summary.md --runtime-repetitions 20",
   "cli_version": "phase8-evidence-v1",
   "fixture_ids": [
@@ -26,7 +26,7 @@
           "record_type": "CarrierRecoveryHistory",
           "stable_key": "canonical-run:carrier-history",
           "source": "CarrierRecoveryRepository.history",
-          "record_id": "2b1d96c9-fae9-49e6-bd28-05f740f2aa60"
+          "record_id": "6f1d6d94-deeb-4b42-b2f3-02cded012835"
         }
       ],
       "caveat": "Credential-free deterministic canonical replay only.",
@@ -59,13 +59,13 @@
           "record_type": "AgentHistory",
           "stable_key": "canonical-run:agent-history",
           "source": "AgentRuntimeRepository.history",
-          "record_id": "c7ae98e0-9246-4fbe-a191-f42475c88de5"
+          "record_id": "597ccb58-cc30-42a4-a20b-481a1eb4e010"
         },
         {
           "record_type": "AgentToolRegistryInventory",
           "stable_key": "canonical-run:registry-inventories",
           "source": "AgentToolRegistry.available_tools",
-          "record_id": "c7ae98e0-9246-4fbe-a191-f42475c88de5"
+          "record_id": "597ccb58-cc30-42a4-a20b-481a1eb4e010"
         }
       ],
       "caveat": "Credential-free deterministic canonical replay only.",
@@ -89,7 +89,7 @@
           "record_type": "AgentHistory",
           "stable_key": "canonical-run:agent-history",
           "source": "AgentRuntimeRepository.history",
-          "record_id": "c7ae98e0-9246-4fbe-a191-f42475c88de5"
+          "record_id": "597ccb58-cc30-42a4-a20b-481a1eb4e010"
         }
       ],
       "caveat": "Credential-free deterministic canonical replay only.",
@@ -119,13 +119,13 @@
           "record_type": "AgentHistory",
           "stable_key": "canonical-run:agent-history",
           "source": "AgentRuntimeRepository.history",
-          "record_id": "c7ae98e0-9246-4fbe-a191-f42475c88de5"
+          "record_id": "597ccb58-cc30-42a4-a20b-481a1eb4e010"
         },
         {
           "record_type": "AgentToolRegistryInventory",
           "stable_key": "canonical-run:registry-inventories",
           "source": "AgentToolRegistry.available_tools",
-          "record_id": "c7ae98e0-9246-4fbe-a191-f42475c88de5"
+          "record_id": "597ccb58-cc30-42a4-a20b-481a1eb4e010"
         }
       ],
       "caveat": "Credential-free deterministic canonical replay only.",
@@ -152,7 +152,7 @@
           "record_type": "AgentHistory",
           "stable_key": "canonical-run:agent-history",
           "source": "AgentRuntimeRepository.history",
-          "record_id": "c7ae98e0-9246-4fbe-a191-f42475c88de5"
+          "record_id": "597ccb58-cc30-42a4-a20b-481a1eb4e010"
         }
       ],
       "caveat": "Credential-free deterministic canonical replay only.",
@@ -181,7 +181,7 @@
           "record_type": "AgentHistory",
           "stable_key": "canonical-run:agent-history",
           "source": "AgentRuntimeRepository.history",
-          "record_id": "c7ae98e0-9246-4fbe-a191-f42475c88de5"
+          "record_id": "597ccb58-cc30-42a4-a20b-481a1eb4e010"
         }
       ],
       "caveat": "Credential-free deterministic canonical replay only.",
@@ -238,283 +238,283 @@
           "record_type": "Incident",
           "stable_key": "canonical-run:incident",
           "source": "CanonicalEvidenceRun",
-          "record_id": "710f2ff0-9fa6-4e75-8797-fec85af7ecfb"
+          "record_id": "d099ce7f-aaa6-49d8-a852-eb1cf3fae7aa"
         },
         {
           "record_type": "ScarcityEvaluationReport",
           "stable_key": "canonical-run:phase2-evaluation",
           "source": "build_scarce_capacity_workflow.run",
-          "record_id": "e876c425-23bc-47f1-b4dd-bde45729d1c3"
+          "record_id": "a0ecf564-809f-4925-a8c4-17905476d3a1"
         },
         {
           "record_type": "Decision",
           "stable_key": "canonical-run:phase2-decision",
           "source": "build_scarce_capacity_workflow.run",
-          "record_id": "21724ecd-9738-4be3-85df-1de8a9e2d7a2"
+          "record_id": "8db7c908-c484-41f0-825f-3253f8b8c2e6"
         },
         {
           "record_type": "YardForecastSnapshot",
           "stable_key": "canonical-run:yard-snapshot",
           "source": "DynamicYardRepository.history",
-          "record_id": "c9a09279-c81e-4a48-97e6-c8daeabd5dc0"
+          "record_id": "e87ba212-811c-49c0-a308-de8159448012"
         },
         {
           "record_type": "AllocationRevision",
           "stable_key": "canonical-run:allocation-revision",
           "source": "DynamicYardRepository.history",
-          "record_id": "eee9f33c-59f1-4ad3-b513-e6a867e011b5"
+          "record_id": "346558b2-03e4-48a8-acc1-e9f2ea6db6c8"
         },
         {
           "record_type": "ExpediteCommitment",
           "stable_key": "canonical-run:expedite-commitment",
           "source": "DynamicYardRepository.history",
-          "record_id": "d0c1cf34-4dd6-4fcf-a11b-8db41a9968b2"
+          "record_id": "4c5964a7-63c1-40b9-b2d0-cf337be94973"
         },
         {
           "record_type": "ExpediteReconsiderationAssessment",
           "stable_key": "canonical-run:reconsideration-assessment",
           "source": "DynamicYardRepository.history",
-          "record_id": "bd064bb8-d519-4562-aba7-3d1fc87f599b"
+          "record_id": "92e4bb16-2894-42c0-826c-cd509cbf4308"
         },
         {
           "record_type": "AllocationTradeoffHistory",
           "stable_key": "canonical-run:dynamic-history",
           "source": "DynamicYardWorkflow.history",
-          "record_id": "710f2ff0-9fa6-4e75-8797-fec85af7ecfb"
+          "record_id": "d099ce7f-aaa6-49d8-a852-eb1cf3fae7aa"
         },
         {
           "record_type": "AllocationTradeoffReview",
           "stable_key": "supplemental-tradeoff:review",
           "source": "DynamicYardWorkflow.select_tradeoff",
-          "record_id": "7818d834-e0aa-4e1b-8cec-2f34cc874641"
+          "record_id": "38b4d280-80d1-4b25-a4fa-31fabbd6253c"
         },
         {
           "record_type": "AllocationTradeoffOption",
           "stable_key": "supplemental-tradeoff:option",
           "source": "DynamicYardWorkflow.select_tradeoff",
-          "record_id": "a7363307-aa51-4b1d-a8ba-f4fae5a347e9"
+          "record_id": "31b9e82f-393c-4843-bbe2-6870272dfebf"
         },
         {
           "record_type": "AllocationTradeoffSelection",
           "stable_key": "supplemental-tradeoff:selection",
           "source": "DynamicYardWorkflow.select_tradeoff",
-          "record_id": "bb997bb4-f9c0-4bf0-a5e0-8a6d4422de45"
+          "record_id": "4b370cfc-440d-4270-912b-2734c9cfb3be"
         },
         {
           "record_type": "AllocationRevision",
           "stable_key": "supplemental-tradeoff:child-revision",
           "source": "DynamicYardWorkflow.select_tradeoff",
-          "record_id": "0e6afcf8-413a-43f1-88b4-eeffca93afec"
+          "record_id": "f82a02de-933c-416a-a076-ed790edf1c85"
         },
         {
           "record_type": "ApprovalBinding",
           "stable_key": "canonical-run:approval-binding",
           "source": "CarrierRecoveryRepository.history",
-          "record_id": "155f04ef-9556-4d84-ad59-963518877a0b"
+          "record_id": "fe41d465-4a5d-4d1b-a581-9c78ebb76fc1"
         },
         {
           "record_type": "Approval",
           "stable_key": "canonical-run:operator-approval",
           "source": "CarrierRecoveryRepository.history",
-          "record_id": "64ef3c48-632c-4247-a23c-8ca9e0c7b7b6"
+          "record_id": "fe4a2794-ef30-4124-8b50-56e5f997403e"
         },
         {
           "record_type": "RTARequest",
           "stable_key": "canonical-run:rta-request",
           "source": "CarrierRecoveryRepository.history",
-          "record_id": "abd3b88b-cdbe-4279-98c4-1a5be318411a"
+          "record_id": "3d7c7935-7e89-4acc-831a-0ea6a2deed6d"
         },
         {
           "record_type": "RTARequestContext",
           "stable_key": "canonical-run:rta-request-context",
           "source": "CarrierRecoveryRepository.history",
-          "record_id": "2b1d96c9-fae9-49e6-bd28-05f740f2aa60"
+          "record_id": "6f1d6d94-deeb-4b42-b2f3-02cded012835"
         },
         {
           "record_type": "ContainerReconsiderationResult",
           "stable_key": "canonical-run:carrier-reconsideration-result",
           "source": "CarrierRecoveryRepository.history",
-          "record_id": "75823474-d299-434a-9b4e-0dc6c4d82901"
+          "record_id": "b2910f0e-e9ed-4fbf-bf8b-297e38437f10"
         },
         {
           "record_type": "Decision",
           "stable_key": "canonical-run:carrier-replacement-decision",
           "source": "CarrierRecoveryRepository.history",
-          "record_id": "088d36e7-ef13-4cba-a60d-a807c2e286fe"
+          "record_id": "1c88c4fd-2590-40ac-a6f4-bdde43b3e411"
         },
         {
           "record_type": "CarrierRecoveryDecisionLink",
           "stable_key": "canonical-run:carrier-decision-link",
           "source": "CarrierRecoveryRepository.history",
-          "record_id": "088d36e7-ef13-4cba-a60d-a807c2e286fe"
+          "record_id": "1c88c4fd-2590-40ac-a6f4-bdde43b3e411"
         },
         {
           "record_type": "CarrierRecoveryHistory",
           "stable_key": "canonical-run:carrier-history",
           "source": "CarrierRecoveryRepository.history",
-          "record_id": "2b1d96c9-fae9-49e6-bd28-05f740f2aa60"
+          "record_id": "6f1d6d94-deeb-4b42-b2f3-02cded012835"
         },
         {
           "record_type": "CargoNote",
           "stable_key": "canonical-run:cargo-note",
           "source": "CargoSafetyRepository.history",
-          "record_id": "0bd528a5-04b0-44ea-b4ba-0b42ad4f1ee0"
+          "record_id": "cec9c682-a75a-415a-952d-c1a025606102"
         },
         {
           "record_type": "CargoSafetyReview",
           "stable_key": "canonical-run:cargo-safety-review",
           "source": "CargoSafetyRepository.history",
-          "record_id": "1e7c83b5-3144-4f49-b94a-fa736079e701"
+          "record_id": "2ddacd04-2d3a-4dd4-916a-7d79a3f26096"
         },
         {
           "record_type": "SemanticSafetyAssessment",
           "stable_key": "canonical-run:semantic-safety-assessment",
           "source": "CargoSafetyRepository.history",
-          "record_id": "0323b69f-0c0b-48b9-b1cc-61652d43f98a"
+          "record_id": "fabc7368-d5ed-48cb-964a-df6623d9269e"
         },
         {
           "record_type": "SemanticSafetyPolicyResult",
           "stable_key": "canonical-run:semantic-safety-policy",
           "source": "CargoSafetyRepository.history",
-          "record_id": "d640315d-e06b-47e8-ae22-e5562f0670ee"
+          "record_id": "58dbe63d-4382-4bb8-9955-0416bb38a0ac"
         },
         {
           "record_type": "CargoSafetyHistory",
           "stable_key": "canonical-run:safety-history",
           "source": "CargoSafetyRepository.history",
-          "record_id": "1e7c83b5-3144-4f49-b94a-fa736079e701"
+          "record_id": "2ddacd04-2d3a-4dd4-916a-7d79a3f26096"
         },
         {
           "record_type": "Decision",
           "stable_key": "canonical-run:safety-escalation-decision",
           "source": "CargoSafetyHistory.policy_result",
-          "record_id": "360106ee-0dad-47e2-a7b0-de4980c356bd"
+          "record_id": "ad5688d0-de79-4233-b952-2495fec96d62"
         },
         {
           "record_type": "AgentRun",
           "stable_key": "canonical-run:agent-run",
           "source": "AgentRuntimeRepository.history",
-          "record_id": "c7ae98e0-9246-4fbe-a191-f42475c88de5"
+          "record_id": "597ccb58-cc30-42a4-a20b-481a1eb4e010"
         },
         {
           "record_type": "AgentStep",
           "stable_key": "canonical-run:agent-step",
           "source": "AgentRuntimeRepository.history",
-          "record_id": "f37f2de2-53cc-423b-8dcf-578c645a4124"
+          "record_id": "b9a94a31-fd43-4f77-a489-95e8dbaab9b5"
         },
         {
           "record_type": "AgentToolInvocation",
           "stable_key": "canonical-run:agent-tool-invocation",
           "source": "AgentRuntimeRepository.history",
-          "record_id": "037f195e-4741-4dbf-be68-2902876ed1aa"
+          "record_id": "0dcfe1a8-491a-42f3-9858-0377ef8e650e"
         },
         {
           "record_type": "AgentHistory",
           "stable_key": "canonical-run:agent-history",
           "source": "AgentRuntimeRepository.history",
-          "record_id": "c7ae98e0-9246-4fbe-a191-f42475c88de5"
+          "record_id": "597ccb58-cc30-42a4-a20b-481a1eb4e010"
         },
         {
           "record_type": "CarrierResponse",
           "stable_key": "canonical-run:carrier-response",
           "source": "CarrierRecoveryRepository.history",
-          "record_id": "3ddd72f7-53f9-4de8-bb67-20b36a63b053"
+          "record_id": "943185bb-2aa4-4855-bd7d-232350913567"
         },
         {
           "record_type": "EffectiveConnectionTiming",
           "stable_key": "canonical-run:effective-connection-timing",
           "source": "CarrierRecoveryRepository.history",
-          "record_id": "ab4450b1-c975-4c8a-8e55-66a95eef1eec"
+          "record_id": "ac587e2c-3fc4-4ca5-b1b2-2a9b43b15646"
         },
         {
           "record_type": "AuditEvent",
           "stable_key": "canonical-run:audit:incident.created",
           "source": "AuditRepository.list_for_incident",
-          "record_id": "c99119ba-ed0e-4009-aab7-642c6157bab7"
+          "record_id": "db280be5-f295-43a1-8250-b623ab554f41"
         },
         {
           "record_type": "AuditEvent",
           "stable_key": "canonical-run:audit:scarcity.evaluation_persisted",
           "source": "AuditRepository.list_for_incident",
-          "record_id": "8aa347b2-2e80-4d89-bbf0-ac0996d1bebd"
+          "record_id": "17c02f9c-0874-4775-8f4c-4ec062c5ad08"
         },
         {
           "record_type": "AuditEvent",
           "stable_key": "canonical-run:audit:decision.created",
           "source": "AuditRepository.list_for_incident",
-          "record_id": "2304e75b-f636-4a40-b833-d11a100f3d26"
+          "record_id": "747a82b2-6af1-42e8-904e-f8edbe03f080"
         },
         {
           "record_type": "AuditEvent",
           "stable_key": "canonical-run:audit:yard_forecast.snapshot_ingested",
           "source": "AuditRepository.list_for_incident",
-          "record_id": "88340fc3-4708-4acc-ab7d-478eccd7fb49"
+          "record_id": "894771d6-f86f-4a4d-9140-e1e51626bb1c"
         },
         {
           "record_type": "AuditEvent",
           "stable_key": "canonical-run:audit:expedite_reconsideration.assessed",
           "source": "AuditRepository.list_for_incident",
-          "record_id": "b758e495-a2d4-440a-97ca-d4694cd40a05"
+          "record_id": "ec0a05b0-f5c3-47b1-afaa-80ae28d3108b"
         },
         {
           "record_type": "AuditEvent",
           "stable_key": "canonical-run:audit:allocation_revision.applied",
           "source": "AuditRepository.list_for_incident",
-          "record_id": "add3c645-c18e-48fe-958b-0ca21e715dc9"
+          "record_id": "1616a732-47a6-43de-b3ce-760d552dd426"
         },
         {
           "record_type": "AuditEvent",
           "stable_key": "supplemental-tradeoff:audit:option_selected",
           "source": "AuditRepository.list_for_incident",
-          "record_id": "d2e23c53-320f-4cc8-a471-a06996c83aeb"
+          "record_id": "f0c86660-3e58-418a-972e-a91e56e50fd0"
         },
         {
           "record_type": "AuditEvent",
           "stable_key": "supplemental-tradeoff:audit:allocation_revision.applied",
           "source": "AuditRepository.list_for_incident",
-          "record_id": "f1e0323a-3fb2-4f8b-acff-4db4d4134608"
+          "record_id": "103d05dc-5e87-458b-8781-8b050f0fbc49"
         },
         {
           "record_type": "AuditEvent",
           "stable_key": "canonical-run:audit:carrier_recovery.request_approval_recorded",
           "source": "CarrierRecoveryRepository.history",
-          "record_id": "229049c9-5509-44fc-8dee-cf9d1bb65608"
+          "record_id": "53d83e91-97ed-405c-bb47-cbd829984529"
         },
         {
           "record_type": "AuditEvent",
           "stable_key": "canonical-run:audit:carrier.counter_approval_recorded",
           "source": "CarrierRecoveryRepository.history",
-          "record_id": "cfa61f74-2214-406b-84ab-cd77d5de01c2"
+          "record_id": "f40ae18b-128a-49b6-a52c-350d1514d7d9"
         },
         {
           "record_type": "AuditEvent",
           "stable_key": "canonical-run:audit:carrier.response_received",
           "source": "CarrierRecoveryRepository.history",
-          "record_id": "1400c035-d9ec-4e19-9e59-5e2217b8ce16"
+          "record_id": "f94b22af-c9a7-46dd-961f-5ecf2b615956"
         },
         {
           "record_type": "AuditEvent",
           "stable_key": "canonical-run:audit:carrier_recovery.replacement_recorded",
           "source": "CarrierRecoveryRepository.history",
-          "record_id": "23405548-48e3-4057-950c-48b2c3d13d2c"
+          "record_id": "d0af7e06-bcf9-4651-b2da-958db1468d0b"
         },
         {
           "record_type": "AuditEvent",
           "stable_key": "canonical-run:audit:cargo.semantic_assessment_completed",
           "source": "CargoSafetyRepository.history",
-          "record_id": "c66051e2-a051-414a-8bf5-b88110baf812"
+          "record_id": "6202e057-5631-4432-a0aa-e900e5c5a6ef"
         },
         {
           "record_type": "AuditEvent",
           "stable_key": "canonical-run:audit:cargo.semantic_safety_evaluated",
           "source": "CargoSafetyRepository.history",
-          "record_id": "6c014345-edd2-47fc-91f3-79ea9062ad64"
+          "record_id": "5eb46f73-4280-4d66-95b0-c6eb2a65dcb4"
         },
         {
           "record_type": "AuditEvent",
           "stable_key": "canonical-run:audit:decision.escalated_for_cargo_review",
           "source": "CargoSafetyRepository.history",
-          "record_id": "80994052-4882-473a-985a-7f071a2e8a7d"
+          "record_id": "08d7f680-0356-43c2-81f9-78b1af82b146"
         }
       ],
       "caveat": "Credential-free deterministic canonical replay with a retained same-session supplemental human-tradeoff fixture.",
@@ -801,30 +801,30 @@
       "observed_value": {
         "repetitions": 20,
         "run_durations_ms": [
-          581.8809,
-          599.7952,
-          574.6901,
-          621.8905,
-          576.0751,
-          565.3981,
-          580.2071,
-          625.3673,
-          574.9517,
-          568.3983,
-          649.7983,
-          579.2247,
-          605.7488,
-          587.8216,
-          578.9117,
-          586.6296,
-          594.9913,
-          658.3812,
-          579.7915,
-          587.0338
+          579.8507,
+          605.5361,
+          544.3329,
+          624.0044,
+          532.3369,
+          638.929,
+          603.3304,
+          601.6444,
+          613.9197,
+          633.9367,
+          671.7716,
+          622.1912,
+          584.8642,
+          582.1826,
+          648.1194,
+          582.7135,
+          606.1323,
+          618.9343,
+          685.1354,
+          648.9133
         ],
-        "canonical_run_wall_clock_ms": 581.8809,
-        "p50_local_runtime_ms": 584.2552499999999,
-        "p95_local_runtime_ms": 649.7983,
+        "canonical_run_wall_clock_ms": 579.8507,
+        "p50_local_runtime_ms": 610.0260000000001,
+        "p95_local_runtime_ms": 671.7716,
         "python_version": "3.12.13 (main, Jun 23 2026, 15:23:43) [MSC v.1944 64 bit (AMD64)]",
         "platform": "Windows-11-10.0.26200-SP0"
       },
@@ -855,7 +855,7 @@
           "record_type": "AgentHistory",
           "stable_key": "canonical-run:agent-history",
           "source": "AgentRuntimeRepository.history",
-          "record_id": "c7ae98e0-9246-4fbe-a191-f42475c88de5"
+          "record_id": "597ccb58-cc30-42a4-a20b-481a1eb4e010"
         }
       ],
       "caveat": "Credential-free deterministic canonical replay only.",
@@ -893,7 +893,7 @@
           "record_type": "AllocationTradeoffHistory",
           "stable_key": "dynamic-yard:SYN-CANONICAL-24-V1",
           "source": "DynamicYardRepository.history",
-          "record_id": "ac868bc6-8ab7-49fb-bfb2-37a3a94781a0"
+          "record_id": "c62b6304-ea0e-4fa1-8e63-080a680e77a7"
         }
       ],
       "caveat": "Synthetic canonical dynamic-yard scenarios only.",
@@ -925,7 +925,7 @@
           "record_type": "AllocationTradeoffHistory",
           "stable_key": "dynamic-yard:SYN-CANONICAL-24-V1",
           "source": "DynamicYardRepository.history",
-          "record_id": "ac868bc6-8ab7-49fb-bfb2-37a3a94781a0"
+          "record_id": "c62b6304-ea0e-4fa1-8e63-080a680e77a7"
         }
       ],
       "caveat": "Synthetic canonical dynamic-yard scenarios only.",
@@ -952,7 +952,7 @@
           "record_type": "AllocationTradeoffHistory",
           "stable_key": "dynamic-yard:SYN-CANONICAL-24-V1",
           "source": "DynamicYardRepository.history",
-          "record_id": "ac868bc6-8ab7-49fb-bfb2-37a3a94781a0"
+          "record_id": "c62b6304-ea0e-4fa1-8e63-080a680e77a7"
         }
       ],
       "caveat": "Synthetic canonical dynamic-yard scenarios only.",
@@ -980,7 +980,7 @@
           "record_type": "ScarcityEvaluationReport",
           "stable_key": "phase2:SYN-CANONICAL-24-V1:20260822",
           "source": "ScarcityEvaluationRepository",
-          "record_id": "2704eea3-cbac-46f7-aec3-8444778c151a"
+          "record_id": "b11c5600-2633-4e23-a841-8d09114fb38e"
         }
       ],
       "caveat": "Synthetic canonical Phase 2 fixture and seed only.",
@@ -1012,7 +1012,7 @@
           "record_type": "AllocationTradeoffHistory",
           "stable_key": "dynamic-yard:SYN-CANONICAL-24-V1",
           "source": "DynamicYardRepository.history",
-          "record_id": "ac868bc6-8ab7-49fb-bfb2-37a3a94781a0"
+          "record_id": "c62b6304-ea0e-4fa1-8e63-080a680e77a7"
         }
       ],
       "caveat": "Synthetic canonical dynamic-yard scenarios only.",
@@ -1039,7 +1039,7 @@
           "record_type": "AllocationTradeoffHistory",
           "stable_key": "dynamic-yard:SYN-CANONICAL-24-V1",
           "source": "DynamicYardRepository.history",
-          "record_id": "ac868bc6-8ab7-49fb-bfb2-37a3a94781a0"
+          "record_id": "c62b6304-ea0e-4fa1-8e63-080a680e77a7"
         }
       ],
       "caveat": "Synthetic canonical dynamic-yard scenarios only.",
@@ -1094,7 +1094,7 @@
           "record_type": "AllocationTradeoffHistory",
           "stable_key": "dynamic-yard:SYN-CANONICAL-24-V1",
           "source": "DynamicYardRepository.history",
-          "record_id": "ac868bc6-8ab7-49fb-bfb2-37a3a94781a0"
+          "record_id": "c62b6304-ea0e-4fa1-8e63-080a680e77a7"
         }
       ],
       "caveat": "Synthetic canonical dynamic-yard scenarios only.",
@@ -1126,19 +1126,19 @@
           "record_type": "AllocationTradeoffHistory",
           "stable_key": "dynamic-yard:SYN-CANONICAL-24-V1",
           "source": "DynamicYardRepository.history",
-          "record_id": "ac868bc6-8ab7-49fb-bfb2-37a3a94781a0"
+          "record_id": "c62b6304-ea0e-4fa1-8e63-080a680e77a7"
         },
         {
           "record_type": "CarrierRecoveryHistory",
           "stable_key": "canonical-run:carrier-history",
           "source": "CarrierRecoveryRepository.history",
-          "record_id": "2b1d96c9-fae9-49e6-bd28-05f740f2aa60"
+          "record_id": "6f1d6d94-deeb-4b42-b2f3-02cded012835"
         },
         {
           "record_type": "CargoSafetyHistory",
           "stable_key": "canonical-run:safety-history",
           "source": "CargoSafetyRepository.history",
-          "record_id": "1e7c83b5-3144-4f49-b94a-fa736079e701"
+          "record_id": "2ddacd04-2d3a-4dd4-916a-7d79a3f26096"
         }
       ],
       "caveat": "NOT_ESTABLISHED: no complete disjoint durable terminal ledger classifies all 24 containers.",
@@ -1348,7 +1348,7 @@
           "record_type": "CargoSafetyHistory",
           "stable_key": "canonical-run:safety-history",
           "source": "CargoSafetyRepository.history",
-          "record_id": "1e7c83b5-3144-4f49-b94a-fa736079e701"
+          "record_id": "2ddacd04-2d3a-4dd4-916a-7d79a3f26096"
         }
       ],
       "caveat": "Credential-free deterministic canonical replay only.",
@@ -1372,7 +1372,7 @@
           "record_type": "CargoSafetyHistory",
           "stable_key": "canonical-run:safety-history",
           "source": "CargoSafetyRepository.history",
-          "record_id": "1e7c83b5-3144-4f49-b94a-fa736079e701"
+          "record_id": "2ddacd04-2d3a-4dd4-916a-7d79a3f26096"
         }
       ],
       "caveat": "Credential-free deterministic canonical replay only.",
@@ -1399,7 +1399,7 @@
           "record_type": "CargoSafetyHistory",
           "stable_key": "phase8-probe:safety-checker-failure",
           "source": "CargoSafetyRepository.history",
-          "record_id": "f8fe4ac2-6101-40e7-add5-df272ba6cf44"
+          "record_id": "0e02915f-e643-48cd-8f0f-2bbebaee6870"
         }
       ],
       "caveat": "Isolated deterministic failure probe; no provider client or network call.",
@@ -1460,19 +1460,19 @@
           "record_type": "AgentHistory",
           "stable_key": "canonical-run:agent-history",
           "source": "AgentRuntimeRepository.history",
-          "record_id": "c7ae98e0-9246-4fbe-a191-f42475c88de5"
+          "record_id": "597ccb58-cc30-42a4-a20b-481a1eb4e010"
         },
         {
           "record_type": "AgentToolRegistryInventory",
           "stable_key": "canonical-run:registry-inventories",
           "source": "AgentToolRegistry.available_tools",
-          "record_id": "c7ae98e0-9246-4fbe-a191-f42475c88de5"
+          "record_id": "597ccb58-cc30-42a4-a20b-481a1eb4e010"
         },
         {
           "record_type": "CargoSafetyHistory",
           "stable_key": "canonical-run:safety-history",
           "source": "CargoSafetyRepository.history",
-          "record_id": "1e7c83b5-3144-4f49-b94a-fa736079e701"
+          "record_id": "2ddacd04-2d3a-4dd4-916a-7d79a3f26096"
         }
       ],
       "caveat": "Credential-free deterministic canonical replay only.",
@@ -1500,7 +1500,7 @@
           "record_type": "CargoSafetyHistory",
           "stable_key": "canonical-run:safety-history",
           "source": "CargoSafetyRepository.history",
-          "record_id": "1e7c83b5-3144-4f49-b94a-fa736079e701"
+          "record_id": "2ddacd04-2d3a-4dd4-916a-7d79a3f26096"
         }
       ],
       "caveat": "Credential-free deterministic canonical replay only.",
@@ -1527,13 +1527,13 @@
           "record_type": "AgentHistory",
           "stable_key": "canonical-run:agent-history",
           "source": "AgentRuntimeRepository.history",
-          "record_id": "c7ae98e0-9246-4fbe-a191-f42475c88de5"
+          "record_id": "597ccb58-cc30-42a4-a20b-481a1eb4e010"
         },
         {
           "record_type": "CargoSafetyHistory",
           "stable_key": "canonical-run:safety-history",
           "source": "CargoSafetyRepository.history",
-          "record_id": "1e7c83b5-3144-4f49-b94a-fa736079e701"
+          "record_id": "2ddacd04-2d3a-4dd4-916a-7d79a3f26096"
         }
       ],
       "caveat": "Credential-free deterministic canonical replay only.",
@@ -1745,7 +1745,7 @@
       "record_type": "CarrierRecoveryHistory",
       "stable_key": "canonical-run:carrier-history",
       "source": "CarrierRecoveryRepository.history",
-      "record_id": "2b1d96c9-fae9-49e6-bd28-05f740f2aa60",
+      "record_id": "6f1d6d94-deeb-4b42-b2f3-02cded012835",
       "coverage_role": "TYPED_HISTORY"
     },
     {
@@ -1753,7 +1753,7 @@
       "record_type": "AgentHistory",
       "stable_key": "canonical-run:agent-history",
       "source": "AgentRuntimeRepository.history",
-      "record_id": "c7ae98e0-9246-4fbe-a191-f42475c88de5",
+      "record_id": "597ccb58-cc30-42a4-a20b-481a1eb4e010",
       "coverage_role": "TYPED_HISTORY"
     },
     {
@@ -1761,7 +1761,7 @@
       "record_type": "AgentToolRegistryInventory",
       "stable_key": "canonical-run:registry-inventories",
       "source": "AgentToolRegistry.available_tools",
-      "record_id": "c7ae98e0-9246-4fbe-a191-f42475c88de5",
+      "record_id": "597ccb58-cc30-42a4-a20b-481a1eb4e010",
       "coverage_role": "PRIMARY_RECORD"
     },
     {
@@ -1769,7 +1769,7 @@
       "record_type": "AgentHistory",
       "stable_key": "canonical-run:agent-history",
       "source": "AgentRuntimeRepository.history",
-      "record_id": "c7ae98e0-9246-4fbe-a191-f42475c88de5",
+      "record_id": "597ccb58-cc30-42a4-a20b-481a1eb4e010",
       "coverage_role": "TYPED_HISTORY"
     },
     {
@@ -1777,7 +1777,7 @@
       "record_type": "AgentHistory",
       "stable_key": "canonical-run:agent-history",
       "source": "AgentRuntimeRepository.history",
-      "record_id": "c7ae98e0-9246-4fbe-a191-f42475c88de5",
+      "record_id": "597ccb58-cc30-42a4-a20b-481a1eb4e010",
       "coverage_role": "TYPED_HISTORY"
     },
     {
@@ -1785,7 +1785,7 @@
       "record_type": "AgentToolRegistryInventory",
       "stable_key": "canonical-run:registry-inventories",
       "source": "AgentToolRegistry.available_tools",
-      "record_id": "c7ae98e0-9246-4fbe-a191-f42475c88de5",
+      "record_id": "597ccb58-cc30-42a4-a20b-481a1eb4e010",
       "coverage_role": "PRIMARY_RECORD"
     },
     {
@@ -1793,7 +1793,7 @@
       "record_type": "AgentHistory",
       "stable_key": "canonical-run:agent-history",
       "source": "AgentRuntimeRepository.history",
-      "record_id": "c7ae98e0-9246-4fbe-a191-f42475c88de5",
+      "record_id": "597ccb58-cc30-42a4-a20b-481a1eb4e010",
       "coverage_role": "TYPED_HISTORY"
     },
     {
@@ -1801,7 +1801,7 @@
       "record_type": "AgentHistory",
       "stable_key": "canonical-run:agent-history",
       "source": "AgentRuntimeRepository.history",
-      "record_id": "c7ae98e0-9246-4fbe-a191-f42475c88de5",
+      "record_id": "597ccb58-cc30-42a4-a20b-481a1eb4e010",
       "coverage_role": "TYPED_HISTORY"
     },
     {
@@ -1817,7 +1817,7 @@
       "record_type": "AgentHistory",
       "stable_key": "canonical-run:agent-history",
       "source": "AgentRuntimeRepository.history",
-      "record_id": "c7ae98e0-9246-4fbe-a191-f42475c88de5",
+      "record_id": "597ccb58-cc30-42a4-a20b-481a1eb4e010",
       "coverage_role": "TYPED_HISTORY"
     },
     {
@@ -1825,7 +1825,7 @@
       "record_type": "AgentRun",
       "stable_key": "canonical-run:agent-run",
       "source": "AgentRuntimeRepository.history",
-      "record_id": "c7ae98e0-9246-4fbe-a191-f42475c88de5",
+      "record_id": "597ccb58-cc30-42a4-a20b-481a1eb4e010",
       "coverage_role": "PRIMARY_RECORD"
     },
     {
@@ -1833,7 +1833,7 @@
       "record_type": "AgentStep",
       "stable_key": "canonical-run:agent-step",
       "source": "AgentRuntimeRepository.history",
-      "record_id": "f37f2de2-53cc-423b-8dcf-578c645a4124",
+      "record_id": "b9a94a31-fd43-4f77-a489-95e8dbaab9b5",
       "coverage_role": "PRIMARY_RECORD"
     },
     {
@@ -1841,7 +1841,7 @@
       "record_type": "AgentToolInvocation",
       "stable_key": "canonical-run:agent-tool-invocation",
       "source": "AgentRuntimeRepository.history",
-      "record_id": "037f195e-4741-4dbf-be68-2902876ed1aa",
+      "record_id": "0dcfe1a8-491a-42f3-9858-0377ef8e650e",
       "coverage_role": "PRIMARY_RECORD"
     },
     {
@@ -1849,7 +1849,7 @@
       "record_type": "AllocationRevision",
       "stable_key": "canonical-run:allocation-revision",
       "source": "DynamicYardRepository.history",
-      "record_id": "eee9f33c-59f1-4ad3-b513-e6a867e011b5",
+      "record_id": "346558b2-03e4-48a8-acc1-e9f2ea6db6c8",
       "coverage_role": "PRIMARY_RECORD"
     },
     {
@@ -1857,7 +1857,7 @@
       "record_type": "AllocationRevision",
       "stable_key": "supplemental-tradeoff:child-revision",
       "source": "DynamicYardWorkflow.select_tradeoff",
-      "record_id": "0e6afcf8-413a-43f1-88b4-eeffca93afec",
+      "record_id": "f82a02de-933c-416a-a076-ed790edf1c85",
       "coverage_role": "PRIMARY_RECORD"
     },
     {
@@ -1865,7 +1865,7 @@
       "record_type": "AllocationTradeoffHistory",
       "stable_key": "canonical-run:dynamic-history",
       "source": "DynamicYardWorkflow.history",
-      "record_id": "710f2ff0-9fa6-4e75-8797-fec85af7ecfb",
+      "record_id": "d099ce7f-aaa6-49d8-a852-eb1cf3fae7aa",
       "coverage_role": "TYPED_HISTORY"
     },
     {
@@ -1873,7 +1873,7 @@
       "record_type": "AllocationTradeoffOption",
       "stable_key": "supplemental-tradeoff:option",
       "source": "DynamicYardWorkflow.select_tradeoff",
-      "record_id": "a7363307-aa51-4b1d-a8ba-f4fae5a347e9",
+      "record_id": "31b9e82f-393c-4843-bbe2-6870272dfebf",
       "coverage_role": "PRIMARY_RECORD"
     },
     {
@@ -1881,7 +1881,7 @@
       "record_type": "AllocationTradeoffReview",
       "stable_key": "supplemental-tradeoff:review",
       "source": "DynamicYardWorkflow.select_tradeoff",
-      "record_id": "7818d834-e0aa-4e1b-8cec-2f34cc874641",
+      "record_id": "38b4d280-80d1-4b25-a4fa-31fabbd6253c",
       "coverage_role": "PRIMARY_RECORD"
     },
     {
@@ -1889,7 +1889,7 @@
       "record_type": "AllocationTradeoffSelection",
       "stable_key": "supplemental-tradeoff:selection",
       "source": "DynamicYardWorkflow.select_tradeoff",
-      "record_id": "bb997bb4-f9c0-4bf0-a5e0-8a6d4422de45",
+      "record_id": "4b370cfc-440d-4270-912b-2734c9cfb3be",
       "coverage_role": "PRIMARY_RECORD"
     },
     {
@@ -1897,7 +1897,7 @@
       "record_type": "Approval",
       "stable_key": "canonical-run:operator-approval",
       "source": "CarrierRecoveryRepository.history",
-      "record_id": "64ef3c48-632c-4247-a23c-8ca9e0c7b7b6",
+      "record_id": "fe4a2794-ef30-4124-8b50-56e5f997403e",
       "coverage_role": "PRIMARY_RECORD"
     },
     {
@@ -1905,7 +1905,7 @@
       "record_type": "ApprovalBinding",
       "stable_key": "canonical-run:approval-binding",
       "source": "CarrierRecoveryRepository.history",
-      "record_id": "155f04ef-9556-4d84-ad59-963518877a0b",
+      "record_id": "fe41d465-4a5d-4d1b-a581-9c78ebb76fc1",
       "coverage_role": "PRIMARY_RECORD"
     },
     {
@@ -1913,7 +1913,7 @@
       "record_type": "AuditEvent",
       "stable_key": "canonical-run:audit:allocation_revision.applied",
       "source": "AuditRepository.list_for_incident",
-      "record_id": "add3c645-c18e-48fe-958b-0ca21e715dc9",
+      "record_id": "1616a732-47a6-43de-b3ce-760d552dd426",
       "coverage_role": "AUDIT_EVENT"
     },
     {
@@ -1921,7 +1921,7 @@
       "record_type": "AuditEvent",
       "stable_key": "canonical-run:audit:cargo.semantic_assessment_completed",
       "source": "CargoSafetyRepository.history",
-      "record_id": "c66051e2-a051-414a-8bf5-b88110baf812",
+      "record_id": "6202e057-5631-4432-a0aa-e900e5c5a6ef",
       "coverage_role": "AUDIT_EVENT"
     },
     {
@@ -1929,7 +1929,7 @@
       "record_type": "AuditEvent",
       "stable_key": "canonical-run:audit:cargo.semantic_safety_evaluated",
       "source": "CargoSafetyRepository.history",
-      "record_id": "6c014345-edd2-47fc-91f3-79ea9062ad64",
+      "record_id": "5eb46f73-4280-4d66-95b0-c6eb2a65dcb4",
       "coverage_role": "AUDIT_EVENT"
     },
     {
@@ -1937,7 +1937,7 @@
       "record_type": "AuditEvent",
       "stable_key": "canonical-run:audit:carrier.counter_approval_recorded",
       "source": "CarrierRecoveryRepository.history",
-      "record_id": "cfa61f74-2214-406b-84ab-cd77d5de01c2",
+      "record_id": "f40ae18b-128a-49b6-a52c-350d1514d7d9",
       "coverage_role": "AUDIT_EVENT"
     },
     {
@@ -1945,7 +1945,7 @@
       "record_type": "AuditEvent",
       "stable_key": "canonical-run:audit:carrier.response_received",
       "source": "CarrierRecoveryRepository.history",
-      "record_id": "1400c035-d9ec-4e19-9e59-5e2217b8ce16",
+      "record_id": "f94b22af-c9a7-46dd-961f-5ecf2b615956",
       "coverage_role": "AUDIT_EVENT"
     },
     {
@@ -1953,7 +1953,7 @@
       "record_type": "AuditEvent",
       "stable_key": "canonical-run:audit:carrier_recovery.replacement_recorded",
       "source": "CarrierRecoveryRepository.history",
-      "record_id": "23405548-48e3-4057-950c-48b2c3d13d2c",
+      "record_id": "d0af7e06-bcf9-4651-b2da-958db1468d0b",
       "coverage_role": "AUDIT_EVENT"
     },
     {
@@ -1961,7 +1961,7 @@
       "record_type": "AuditEvent",
       "stable_key": "canonical-run:audit:carrier_recovery.request_approval_recorded",
       "source": "CarrierRecoveryRepository.history",
-      "record_id": "229049c9-5509-44fc-8dee-cf9d1bb65608",
+      "record_id": "53d83e91-97ed-405c-bb47-cbd829984529",
       "coverage_role": "AUDIT_EVENT"
     },
     {
@@ -1969,7 +1969,7 @@
       "record_type": "AuditEvent",
       "stable_key": "canonical-run:audit:decision.created",
       "source": "AuditRepository.list_for_incident",
-      "record_id": "2304e75b-f636-4a40-b833-d11a100f3d26",
+      "record_id": "747a82b2-6af1-42e8-904e-f8edbe03f080",
       "coverage_role": "AUDIT_EVENT"
     },
     {
@@ -1977,7 +1977,7 @@
       "record_type": "AuditEvent",
       "stable_key": "canonical-run:audit:decision.escalated_for_cargo_review",
       "source": "CargoSafetyRepository.history",
-      "record_id": "80994052-4882-473a-985a-7f071a2e8a7d",
+      "record_id": "08d7f680-0356-43c2-81f9-78b1af82b146",
       "coverage_role": "AUDIT_EVENT"
     },
     {
@@ -1985,7 +1985,7 @@
       "record_type": "AuditEvent",
       "stable_key": "canonical-run:audit:expedite_reconsideration.assessed",
       "source": "AuditRepository.list_for_incident",
-      "record_id": "b758e495-a2d4-440a-97ca-d4694cd40a05",
+      "record_id": "ec0a05b0-f5c3-47b1-afaa-80ae28d3108b",
       "coverage_role": "AUDIT_EVENT"
     },
     {
@@ -1993,7 +1993,7 @@
       "record_type": "AuditEvent",
       "stable_key": "canonical-run:audit:incident.created",
       "source": "AuditRepository.list_for_incident",
-      "record_id": "c99119ba-ed0e-4009-aab7-642c6157bab7",
+      "record_id": "db280be5-f295-43a1-8250-b623ab554f41",
       "coverage_role": "AUDIT_EVENT"
     },
     {
@@ -2001,7 +2001,7 @@
       "record_type": "AuditEvent",
       "stable_key": "canonical-run:audit:scarcity.evaluation_persisted",
       "source": "AuditRepository.list_for_incident",
-      "record_id": "8aa347b2-2e80-4d89-bbf0-ac0996d1bebd",
+      "record_id": "17c02f9c-0874-4775-8f4c-4ec062c5ad08",
       "coverage_role": "AUDIT_EVENT"
     },
     {
@@ -2009,7 +2009,7 @@
       "record_type": "AuditEvent",
       "stable_key": "canonical-run:audit:yard_forecast.snapshot_ingested",
       "source": "AuditRepository.list_for_incident",
-      "record_id": "88340fc3-4708-4acc-ab7d-478eccd7fb49",
+      "record_id": "894771d6-f86f-4a4d-9140-e1e51626bb1c",
       "coverage_role": "AUDIT_EVENT"
     },
     {
@@ -2017,7 +2017,7 @@
       "record_type": "AuditEvent",
       "stable_key": "supplemental-tradeoff:audit:allocation_revision.applied",
       "source": "AuditRepository.list_for_incident",
-      "record_id": "f1e0323a-3fb2-4f8b-acff-4db4d4134608",
+      "record_id": "103d05dc-5e87-458b-8781-8b050f0fbc49",
       "coverage_role": "AUDIT_EVENT"
     },
     {
@@ -2025,7 +2025,7 @@
       "record_type": "AuditEvent",
       "stable_key": "supplemental-tradeoff:audit:option_selected",
       "source": "AuditRepository.list_for_incident",
-      "record_id": "d2e23c53-320f-4cc8-a471-a06996c83aeb",
+      "record_id": "f0c86660-3e58-418a-972e-a91e56e50fd0",
       "coverage_role": "AUDIT_EVENT"
     },
     {
@@ -2033,7 +2033,7 @@
       "record_type": "CargoNote",
       "stable_key": "canonical-run:cargo-note",
       "source": "CargoSafetyRepository.history",
-      "record_id": "0bd528a5-04b0-44ea-b4ba-0b42ad4f1ee0",
+      "record_id": "cec9c682-a75a-415a-952d-c1a025606102",
       "coverage_role": "PRIMARY_RECORD"
     },
     {
@@ -2041,7 +2041,7 @@
       "record_type": "CargoSafetyHistory",
       "stable_key": "canonical-run:safety-history",
       "source": "CargoSafetyRepository.history",
-      "record_id": "1e7c83b5-3144-4f49-b94a-fa736079e701",
+      "record_id": "2ddacd04-2d3a-4dd4-916a-7d79a3f26096",
       "coverage_role": "TYPED_HISTORY"
     },
     {
@@ -2049,7 +2049,7 @@
       "record_type": "CargoSafetyReview",
       "stable_key": "canonical-run:cargo-safety-review",
       "source": "CargoSafetyRepository.history",
-      "record_id": "1e7c83b5-3144-4f49-b94a-fa736079e701",
+      "record_id": "2ddacd04-2d3a-4dd4-916a-7d79a3f26096",
       "coverage_role": "PRIMARY_RECORD"
     },
     {
@@ -2057,7 +2057,7 @@
       "record_type": "CarrierRecoveryDecisionLink",
       "stable_key": "canonical-run:carrier-decision-link",
       "source": "CarrierRecoveryRepository.history",
-      "record_id": "088d36e7-ef13-4cba-a60d-a807c2e286fe",
+      "record_id": "1c88c4fd-2590-40ac-a6f4-bdde43b3e411",
       "coverage_role": "PRIMARY_RECORD"
     },
     {
@@ -2065,7 +2065,7 @@
       "record_type": "CarrierRecoveryHistory",
       "stable_key": "canonical-run:carrier-history",
       "source": "CarrierRecoveryRepository.history",
-      "record_id": "2b1d96c9-fae9-49e6-bd28-05f740f2aa60",
+      "record_id": "6f1d6d94-deeb-4b42-b2f3-02cded012835",
       "coverage_role": "TYPED_HISTORY"
     },
     {
@@ -2073,7 +2073,7 @@
       "record_type": "CarrierResponse",
       "stable_key": "canonical-run:carrier-response",
       "source": "CarrierRecoveryRepository.history",
-      "record_id": "3ddd72f7-53f9-4de8-bb67-20b36a63b053",
+      "record_id": "943185bb-2aa4-4855-bd7d-232350913567",
       "coverage_role": "PRIMARY_RECORD"
     },
     {
@@ -2081,7 +2081,7 @@
       "record_type": "ContainerReconsiderationResult",
       "stable_key": "canonical-run:carrier-reconsideration-result",
       "source": "CarrierRecoveryRepository.history",
-      "record_id": "75823474-d299-434a-9b4e-0dc6c4d82901",
+      "record_id": "b2910f0e-e9ed-4fbf-bf8b-297e38437f10",
       "coverage_role": "PRIMARY_RECORD"
     },
     {
@@ -2089,7 +2089,7 @@
       "record_type": "Decision",
       "stable_key": "canonical-run:carrier-replacement-decision",
       "source": "CarrierRecoveryRepository.history",
-      "record_id": "088d36e7-ef13-4cba-a60d-a807c2e286fe",
+      "record_id": "1c88c4fd-2590-40ac-a6f4-bdde43b3e411",
       "coverage_role": "PRIMARY_RECORD"
     },
     {
@@ -2097,7 +2097,7 @@
       "record_type": "Decision",
       "stable_key": "canonical-run:phase2-decision",
       "source": "build_scarce_capacity_workflow.run",
-      "record_id": "21724ecd-9738-4be3-85df-1de8a9e2d7a2",
+      "record_id": "8db7c908-c484-41f0-825f-3253f8b8c2e6",
       "coverage_role": "PRIMARY_RECORD"
     },
     {
@@ -2105,7 +2105,7 @@
       "record_type": "Decision",
       "stable_key": "canonical-run:safety-escalation-decision",
       "source": "CargoSafetyHistory.policy_result",
-      "record_id": "360106ee-0dad-47e2-a7b0-de4980c356bd",
+      "record_id": "ad5688d0-de79-4233-b952-2495fec96d62",
       "coverage_role": "PRIMARY_RECORD"
     },
     {
@@ -2113,7 +2113,7 @@
       "record_type": "EffectiveConnectionTiming",
       "stable_key": "canonical-run:effective-connection-timing",
       "source": "CarrierRecoveryRepository.history",
-      "record_id": "ab4450b1-c975-4c8a-8e55-66a95eef1eec",
+      "record_id": "ac587e2c-3fc4-4ca5-b1b2-2a9b43b15646",
       "coverage_role": "PRIMARY_RECORD"
     },
     {
@@ -2121,7 +2121,7 @@
       "record_type": "ExpediteCommitment",
       "stable_key": "canonical-run:expedite-commitment",
       "source": "DynamicYardRepository.history",
-      "record_id": "d0c1cf34-4dd6-4fcf-a11b-8db41a9968b2",
+      "record_id": "4c5964a7-63c1-40b9-b2d0-cf337be94973",
       "coverage_role": "PRIMARY_RECORD"
     },
     {
@@ -2129,7 +2129,7 @@
       "record_type": "ExpediteReconsiderationAssessment",
       "stable_key": "canonical-run:reconsideration-assessment",
       "source": "DynamicYardRepository.history",
-      "record_id": "bd064bb8-d519-4562-aba7-3d1fc87f599b",
+      "record_id": "92e4bb16-2894-42c0-826c-cd509cbf4308",
       "coverage_role": "PRIMARY_RECORD"
     },
     {
@@ -2137,7 +2137,7 @@
       "record_type": "Incident",
       "stable_key": "canonical-run:incident",
       "source": "CanonicalEvidenceRun",
-      "record_id": "710f2ff0-9fa6-4e75-8797-fec85af7ecfb",
+      "record_id": "d099ce7f-aaa6-49d8-a852-eb1cf3fae7aa",
       "coverage_role": "PRIMARY_RECORD"
     },
     {
@@ -2145,7 +2145,7 @@
       "record_type": "RTARequest",
       "stable_key": "canonical-run:rta-request",
       "source": "CarrierRecoveryRepository.history",
-      "record_id": "abd3b88b-cdbe-4279-98c4-1a5be318411a",
+      "record_id": "3d7c7935-7e89-4acc-831a-0ea6a2deed6d",
       "coverage_role": "PRIMARY_RECORD"
     },
     {
@@ -2153,7 +2153,7 @@
       "record_type": "RTARequestContext",
       "stable_key": "canonical-run:rta-request-context",
       "source": "CarrierRecoveryRepository.history",
-      "record_id": "2b1d96c9-fae9-49e6-bd28-05f740f2aa60",
+      "record_id": "6f1d6d94-deeb-4b42-b2f3-02cded012835",
       "coverage_role": "PRIMARY_RECORD"
     },
     {
@@ -2161,7 +2161,7 @@
       "record_type": "ScarcityEvaluationReport",
       "stable_key": "canonical-run:phase2-evaluation",
       "source": "build_scarce_capacity_workflow.run",
-      "record_id": "e876c425-23bc-47f1-b4dd-bde45729d1c3",
+      "record_id": "a0ecf564-809f-4925-a8c4-17905476d3a1",
       "coverage_role": "PRIMARY_RECORD"
     },
     {
@@ -2169,7 +2169,7 @@
       "record_type": "SemanticSafetyAssessment",
       "stable_key": "canonical-run:semantic-safety-assessment",
       "source": "CargoSafetyRepository.history",
-      "record_id": "0323b69f-0c0b-48b9-b1cc-61652d43f98a",
+      "record_id": "fabc7368-d5ed-48cb-964a-df6623d9269e",
       "coverage_role": "PRIMARY_RECORD"
     },
     {
@@ -2177,7 +2177,7 @@
       "record_type": "SemanticSafetyPolicyResult",
       "stable_key": "canonical-run:semantic-safety-policy",
       "source": "CargoSafetyRepository.history",
-      "record_id": "d640315d-e06b-47e8-ae22-e5562f0670ee",
+      "record_id": "58dbe63d-4382-4bb8-9955-0416bb38a0ac",
       "coverage_role": "PRIMARY_RECORD"
     },
     {
@@ -2185,7 +2185,7 @@
       "record_type": "YardForecastSnapshot",
       "stable_key": "canonical-run:yard-snapshot",
       "source": "DynamicYardRepository.history",
-      "record_id": "c9a09279-c81e-4a48-97e6-c8daeabd5dc0",
+      "record_id": "e87ba212-811c-49c0-a308-de8159448012",
       "coverage_role": "PRIMARY_RECORD"
     },
     {
@@ -2281,7 +2281,7 @@
       "record_type": "AgentHistory",
       "stable_key": "canonical-run:agent-history",
       "source": "AgentRuntimeRepository.history",
-      "record_id": "c7ae98e0-9246-4fbe-a191-f42475c88de5",
+      "record_id": "597ccb58-cc30-42a4-a20b-481a1eb4e010",
       "coverage_role": "TYPED_HISTORY"
     },
     {
@@ -2289,7 +2289,7 @@
       "record_type": "AllocationTradeoffHistory",
       "stable_key": "dynamic-yard:SYN-CANONICAL-24-V1",
       "source": "DynamicYardRepository.history",
-      "record_id": "ac868bc6-8ab7-49fb-bfb2-37a3a94781a0",
+      "record_id": "c62b6304-ea0e-4fa1-8e63-080a680e77a7",
       "coverage_role": "TYPED_HISTORY"
     },
     {
@@ -2297,7 +2297,7 @@
       "record_type": "AllocationTradeoffHistory",
       "stable_key": "dynamic-yard:SYN-CANONICAL-24-V1",
       "source": "DynamicYardRepository.history",
-      "record_id": "ac868bc6-8ab7-49fb-bfb2-37a3a94781a0",
+      "record_id": "c62b6304-ea0e-4fa1-8e63-080a680e77a7",
       "coverage_role": "TYPED_HISTORY"
     },
     {
@@ -2305,7 +2305,7 @@
       "record_type": "AllocationTradeoffHistory",
       "stable_key": "dynamic-yard:SYN-CANONICAL-24-V1",
       "source": "DynamicYardRepository.history",
-      "record_id": "ac868bc6-8ab7-49fb-bfb2-37a3a94781a0",
+      "record_id": "c62b6304-ea0e-4fa1-8e63-080a680e77a7",
       "coverage_role": "TYPED_HISTORY"
     },
     {
@@ -2313,7 +2313,7 @@
       "record_type": "ScarcityEvaluationReport",
       "stable_key": "phase2:SYN-CANONICAL-24-V1:20260822",
       "source": "ScarcityEvaluationRepository",
-      "record_id": "2704eea3-cbac-46f7-aec3-8444778c151a",
+      "record_id": "b11c5600-2633-4e23-a841-8d09114fb38e",
       "coverage_role": "PRIMARY_RECORD"
     },
     {
@@ -2321,7 +2321,7 @@
       "record_type": "AllocationTradeoffHistory",
       "stable_key": "dynamic-yard:SYN-CANONICAL-24-V1",
       "source": "DynamicYardRepository.history",
-      "record_id": "ac868bc6-8ab7-49fb-bfb2-37a3a94781a0",
+      "record_id": "c62b6304-ea0e-4fa1-8e63-080a680e77a7",
       "coverage_role": "TYPED_HISTORY"
     },
     {
@@ -2329,7 +2329,7 @@
       "record_type": "AllocationTradeoffHistory",
       "stable_key": "dynamic-yard:SYN-CANONICAL-24-V1",
       "source": "DynamicYardRepository.history",
-      "record_id": "ac868bc6-8ab7-49fb-bfb2-37a3a94781a0",
+      "record_id": "c62b6304-ea0e-4fa1-8e63-080a680e77a7",
       "coverage_role": "TYPED_HISTORY"
     },
     {
@@ -2337,7 +2337,7 @@
       "record_type": "AllocationTradeoffHistory",
       "stable_key": "dynamic-yard:SYN-CANONICAL-24-V1",
       "source": "DynamicYardRepository.history",
-      "record_id": "ac868bc6-8ab7-49fb-bfb2-37a3a94781a0",
+      "record_id": "c62b6304-ea0e-4fa1-8e63-080a680e77a7",
       "coverage_role": "TYPED_HISTORY"
     },
     {
@@ -2345,7 +2345,7 @@
       "record_type": "AllocationTradeoffHistory",
       "stable_key": "dynamic-yard:SYN-CANONICAL-24-V1",
       "source": "DynamicYardRepository.history",
-      "record_id": "ac868bc6-8ab7-49fb-bfb2-37a3a94781a0",
+      "record_id": "c62b6304-ea0e-4fa1-8e63-080a680e77a7",
       "coverage_role": "TYPED_HISTORY"
     },
     {
@@ -2353,7 +2353,7 @@
       "record_type": "CargoSafetyHistory",
       "stable_key": "canonical-run:safety-history",
       "source": "CargoSafetyRepository.history",
-      "record_id": "1e7c83b5-3144-4f49-b94a-fa736079e701",
+      "record_id": "2ddacd04-2d3a-4dd4-916a-7d79a3f26096",
       "coverage_role": "TYPED_HISTORY"
     },
     {
@@ -2361,7 +2361,7 @@
       "record_type": "CarrierRecoveryHistory",
       "stable_key": "canonical-run:carrier-history",
       "source": "CarrierRecoveryRepository.history",
-      "record_id": "2b1d96c9-fae9-49e6-bd28-05f740f2aa60",
+      "record_id": "6f1d6d94-deeb-4b42-b2f3-02cded012835",
       "coverage_role": "TYPED_HISTORY"
     },
     {
@@ -2409,7 +2409,7 @@
       "record_type": "CargoSafetyHistory",
       "stable_key": "canonical-run:safety-history",
       "source": "CargoSafetyRepository.history",
-      "record_id": "1e7c83b5-3144-4f49-b94a-fa736079e701",
+      "record_id": "2ddacd04-2d3a-4dd4-916a-7d79a3f26096",
       "coverage_role": "TYPED_HISTORY"
     },
     {
@@ -2417,7 +2417,7 @@
       "record_type": "CargoSafetyHistory",
       "stable_key": "canonical-run:safety-history",
       "source": "CargoSafetyRepository.history",
-      "record_id": "1e7c83b5-3144-4f49-b94a-fa736079e701",
+      "record_id": "2ddacd04-2d3a-4dd4-916a-7d79a3f26096",
       "coverage_role": "TYPED_HISTORY"
     },
     {
@@ -2425,7 +2425,7 @@
       "record_type": "CargoSafetyHistory",
       "stable_key": "phase8-probe:safety-checker-failure",
       "source": "CargoSafetyRepository.history",
-      "record_id": "f8fe4ac2-6101-40e7-add5-df272ba6cf44",
+      "record_id": "0e02915f-e643-48cd-8f0f-2bbebaee6870",
       "coverage_role": "TYPED_HISTORY"
     },
     {
@@ -2441,7 +2441,7 @@
       "record_type": "AgentHistory",
       "stable_key": "canonical-run:agent-history",
       "source": "AgentRuntimeRepository.history",
-      "record_id": "c7ae98e0-9246-4fbe-a191-f42475c88de5",
+      "record_id": "597ccb58-cc30-42a4-a20b-481a1eb4e010",
       "coverage_role": "TYPED_HISTORY"
     },
     {
@@ -2449,7 +2449,7 @@
       "record_type": "AgentToolRegistryInventory",
       "stable_key": "canonical-run:registry-inventories",
       "source": "AgentToolRegistry.available_tools",
-      "record_id": "c7ae98e0-9246-4fbe-a191-f42475c88de5",
+      "record_id": "597ccb58-cc30-42a4-a20b-481a1eb4e010",
       "coverage_role": "PRIMARY_RECORD"
     },
     {
@@ -2457,7 +2457,7 @@
       "record_type": "CargoSafetyHistory",
       "stable_key": "canonical-run:safety-history",
       "source": "CargoSafetyRepository.history",
-      "record_id": "1e7c83b5-3144-4f49-b94a-fa736079e701",
+      "record_id": "2ddacd04-2d3a-4dd4-916a-7d79a3f26096",
       "coverage_role": "TYPED_HISTORY"
     },
     {
@@ -2465,7 +2465,7 @@
       "record_type": "CargoSafetyHistory",
       "stable_key": "canonical-run:safety-history",
       "source": "CargoSafetyRepository.history",
-      "record_id": "1e7c83b5-3144-4f49-b94a-fa736079e701",
+      "record_id": "2ddacd04-2d3a-4dd4-916a-7d79a3f26096",
       "coverage_role": "TYPED_HISTORY"
     },
     {
@@ -2473,7 +2473,7 @@
       "record_type": "AgentHistory",
       "stable_key": "canonical-run:agent-history",
       "source": "AgentRuntimeRepository.history",
-      "record_id": "c7ae98e0-9246-4fbe-a191-f42475c88de5",
+      "record_id": "597ccb58-cc30-42a4-a20b-481a1eb4e010",
       "coverage_role": "TYPED_HISTORY"
     },
     {
@@ -2481,7 +2481,7 @@
       "record_type": "CargoSafetyHistory",
       "stable_key": "canonical-run:safety-history",
       "source": "CargoSafetyRepository.history",
-      "record_id": "1e7c83b5-3144-4f49-b94a-fa736079e701",
+      "record_id": "2ddacd04-2d3a-4dd4-916a-7d79a3f26096",
       "coverage_role": "TYPED_HISTORY"
     },
     {
@@ -2544,30 +2544,30 @@
   "runtime": {
     "repetitions": 20,
     "run_durations_ms": [
-      581.8809,
-      599.7952,
-      574.6901,
-      621.8905,
-      576.0751,
-      565.3981,
-      580.2071,
-      625.3673,
-      574.9517,
-      568.3983,
-      649.7983,
-      579.2247,
-      605.7488,
-      587.8216,
-      578.9117,
-      586.6296,
-      594.9913,
-      658.3812,
-      579.7915,
-      587.0338
+      579.8507,
+      605.5361,
+      544.3329,
+      624.0044,
+      532.3369,
+      638.929,
+      603.3304,
+      601.6444,
+      613.9197,
+      633.9367,
+      671.7716,
+      622.1912,
+      584.8642,
+      582.1826,
+      648.1194,
+      582.7135,
+      606.1323,
+      618.9343,
+      685.1354,
+      648.9133
     ],
-    "canonical_run_wall_clock_ms": 581.8809,
-    "p50_local_runtime_ms": 584.2552499999999,
-    "p95_local_runtime_ms": 649.7983,
+    "canonical_run_wall_clock_ms": 579.8507,
+    "p50_local_runtime_ms": 610.0260000000001,
+    "p95_local_runtime_ms": 671.7716,
     "step_count": 6,
     "successful_tool_call_count": 5,
     "label": "LOCAL_MACHINE_DEPENDENT",
