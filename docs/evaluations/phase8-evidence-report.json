@@ -1,0 +1,2579 @@
+{
+  "schema_version": "phase8-evidence-v1",
+  "suite_id": "phase8-deterministic-evidence",
+  "evaluation_base_sha": "71716a0eee8413358dfc1e125a942945fc4be18c",
+  "source_revision": "6677dbbac0f9e5ef6ccb1d751519e9a18f5ed5ec",
+  "generated_at": "2026-08-27T16:43:19.225757Z",
+  "command": "uv run --python 3.12 --extra dev python -m backend.app.evaluation.evidence --output-json docs/evaluations/phase8-evidence-report.json --output-markdown docs/evaluations/phase8-evidence-summary.md --runtime-repetitions 20",
+  "cli_version": "phase8-evidence-v1",
+  "fixture_ids": [
+    "SYN-CANONICAL-24-V1"
+  ],
+  "seed_manifest_id": "SYN-CANONICAL-24-HOLDOUT-V1",
+  "canonical_model_identity": "canonical-replay-agent-v1",
+  "canonical_checker_identity": "canonical-replay-deterministic",
+  "claims": [
+    {
+      "claim_id": "agent_approval_identities",
+      "statement": "Both canonical approvals belong to the guided operator.",
+      "status": "VERIFIED",
+      "observed_value": [
+        "operator-console",
+        "operator-console"
+      ],
+      "evidence_refs": [
+        {
+          "record_type": "CarrierRecoveryHistory",
+          "stable_key": "canonical-run:carrier-history",
+          "source": "CarrierRecoveryRepository.history",
+          "record_id": "6f1d6d94-deeb-4b42-b2f3-02cded012835"
+        }
+      ],
+      "caveat": "Credential-free deterministic canonical replay only.",
+      "reproducibility": {
+        "deterministic": true,
+        "included_in_fingerprint": true,
+        "fixture_ids": [
+          "SYN-CANONICAL-24-V1"
+        ],
+        "seed_manifest_id": null,
+        "benchmark_reproducibility_key": null
+      }
+    },
+    {
+      "claim_id": "agent_no_unavailable_tool_execution",
+      "statement": "Unavailable operational-authority tools are neither exposed nor invoked.",
+      "status": "VERIFIED",
+      "observed_value": {
+        "unavailable_tools": [
+          "change_carrier_schedule",
+          "hold_feeder",
+          "override_dg_rule",
+          "set_yard_capacity"
+        ],
+        "exposed": [],
+        "invoked": []
+      },
+      "evidence_refs": [
+        {
+          "record_type": "AgentHistory",
+          "stable_key": "canonical-run:agent-history",
+          "source": "AgentRuntimeRepository.history",
+          "record_id": "597ccb58-cc30-42a4-a20b-481a1eb4e010"
+        },
+        {
+          "record_type": "AgentToolRegistryInventory",
+          "stable_key": "canonical-run:registry-inventories",
+          "source": "AgentToolRegistry.available_tools",
+          "record_id": "597ccb58-cc30-42a4-a20b-481a1eb4e010"
+        }
+      ],
+      "caveat": "Credential-free deterministic canonical replay only.",
+      "reproducibility": {
+        "deterministic": true,
+        "included_in_fingerprint": true,
+        "fixture_ids": [
+          "SYN-CANONICAL-24-V1"
+        ],
+        "seed_manifest_id": null,
+        "benchmark_reproducibility_key": null
+      }
+    },
+    {
+      "claim_id": "agent_step_count",
+      "statement": "The canonical agent terminates after exactly six steps.",
+      "status": "VERIFIED",
+      "observed_value": 6,
+      "evidence_refs": [
+        {
+          "record_type": "AgentHistory",
+          "stable_key": "canonical-run:agent-history",
+          "source": "AgentRuntimeRepository.history",
+          "record_id": "597ccb58-cc30-42a4-a20b-481a1eb4e010"
+        }
+      ],
+      "caveat": "Credential-free deterministic canonical replay only.",
+      "reproducibility": {
+        "deterministic": true,
+        "included_in_fingerprint": true,
+        "fixture_ids": [
+          "SYN-CANONICAL-24-V1"
+        ],
+        "seed_manifest_id": null,
+        "benchmark_reproducibility_key": null
+      }
+    },
+    {
+      "claim_id": "agent_successful_tool_order",
+      "statement": "All five canonical tool calls succeed in the pinned order.",
+      "status": "VERIFIED",
+      "observed_value": [
+        "pause_agent_run",
+        "request_expedite_feasibility",
+        "prepare_rta_request",
+        "send_authorised_rta_request",
+        "request_cargo_safety_review"
+      ],
+      "evidence_refs": [
+        {
+          "record_type": "AgentHistory",
+          "stable_key": "canonical-run:agent-history",
+          "source": "AgentRuntimeRepository.history",
+          "record_id": "597ccb58-cc30-42a4-a20b-481a1eb4e010"
+        },
+        {
+          "record_type": "AgentToolRegistryInventory",
+          "stable_key": "canonical-run:registry-inventories",
+          "source": "AgentToolRegistry.available_tools",
+          "record_id": "597ccb58-cc30-42a4-a20b-481a1eb4e010"
+        }
+      ],
+      "caveat": "Credential-free deterministic canonical replay only.",
+      "reproducibility": {
+        "deterministic": true,
+        "included_in_fingerprint": true,
+        "fixture_ids": [
+          "SYN-CANONICAL-24-V1"
+        ],
+        "seed_manifest_id": null,
+        "benchmark_reproducibility_key": null
+      }
+    },
+    {
+      "claim_id": "agent_terminal_state",
+      "statement": "The canonical agent terminates in the required safe state.",
+      "status": "VERIFIED",
+      "observed_value": {
+        "state": "ESCALATED",
+        "reason": "SAFETY_REVIEW_REQUIRED"
+      },
+      "evidence_refs": [
+        {
+          "record_type": "AgentHistory",
+          "stable_key": "canonical-run:agent-history",
+          "source": "AgentRuntimeRepository.history",
+          "record_id": "597ccb58-cc30-42a4-a20b-481a1eb4e010"
+        }
+      ],
+      "caveat": "Credential-free deterministic canonical replay only.",
+      "reproducibility": {
+        "deterministic": true,
+        "included_in_fingerprint": true,
+        "fixture_ids": [
+          "SYN-CANONICAL-24-V1"
+        ],
+        "seed_manifest_id": null,
+        "benchmark_reproducibility_key": null
+      }
+    },
+    {
+      "claim_id": "agent_wait_kinds",
+      "statement": "The canonical agent crosses the four exact durable waits.",
+      "status": "VERIFIED",
+      "observed_value": [
+        "NEW_OPERATIONAL_EVIDENCE",
+        "REQUEST_APPROVAL",
+        "CARRIER_RESPONSE_OR_TIMEOUT",
+        "COUNTER_APPROVAL"
+      ],
+      "evidence_refs": [
+        {
+          "record_type": "AgentHistory",
+          "stable_key": "canonical-run:agent-history",
+          "source": "AgentRuntimeRepository.history",
+          "record_id": "597ccb58-cc30-42a4-a20b-481a1eb4e010"
+        }
+      ],
+      "caveat": "Credential-free deterministic canonical replay only.",
+      "reproducibility": {
+        "deterministic": true,
+        "included_in_fingerprint": true,
+        "fixture_ids": [
+          "SYN-CANONICAL-24-V1"
+        ],
+        "seed_manifest_id": null,
+        "benchmark_reproducibility_key": null
+      }
+    },
+    {
+      "claim_id": "agent_zero_model_credentials",
+      "statement": "The canonical evaluation runs with no model credential or provider client construction.",
+      "status": "VERIFIED",
+      "observed_value": {
+        "openai_api_key_present": false,
+        "provider_client_construction_count": 0,
+        "canonical_model_identity": "canonical-replay-agent-v1",
+        "canonical_checker_identity": "canonical-replay-deterministic"
+      },
+      "evidence_refs": [
+        {
+          "record_type": "ProviderIsolationProbe",
+          "stable_key": "phase8-probe:provider-isolation",
+          "source": "backend.app.evaluation.evidence._provider_isolation_probe",
+          "record_id": null
+        }
+      ],
+      "caveat": "Credential-free deterministic canonical replay only; live use is deferred.",
+      "reproducibility": {
+        "deterministic": true,
+        "included_in_fingerprint": true,
+        "fixture_ids": [
+          "SYN-CANONICAL-24-V1"
+        ],
+        "seed_manifest_id": null,
+        "benchmark_reproducibility_key": null
+      }
+    },
+    {
+      "claim_id": "audit_material_action_coverage",
+      "statement": "Every material action in the canonical recovery journey has a durable primary record and linked audit or typed-history provenance.",
+      "status": "VERIFIED",
+      "observed_value": {
+        "required_categories": 8,
+        "covered_categories": 8,
+        "missing_categories": []
+      },
+      "evidence_refs": [
+        {
+          "record_type": "Incident",
+          "stable_key": "canonical-run:incident",
+          "source": "CanonicalEvidenceRun",
+          "record_id": "d099ce7f-aaa6-49d8-a852-eb1cf3fae7aa"
+        },
+        {
+          "record_type": "ScarcityEvaluationReport",
+          "stable_key": "canonical-run:phase2-evaluation",
+          "source": "build_scarce_capacity_workflow.run",
+          "record_id": "a0ecf564-809f-4925-a8c4-17905476d3a1"
+        },
+        {
+          "record_type": "Decision",
+          "stable_key": "canonical-run:phase2-decision",
+          "source": "build_scarce_capacity_workflow.run",
+          "record_id": "8db7c908-c484-41f0-825f-3253f8b8c2e6"
+        },
+        {
+          "record_type": "YardForecastSnapshot",
+          "stable_key": "canonical-run:yard-snapshot",
+          "source": "DynamicYardRepository.history",
+          "record_id": "e87ba212-811c-49c0-a308-de8159448012"
+        },
+        {
+          "record_type": "AllocationRevision",
+          "stable_key": "canonical-run:allocation-revision",
+          "source": "DynamicYardRepository.history",
+          "record_id": "346558b2-03e4-48a8-acc1-e9f2ea6db6c8"
+        },
+        {
+          "record_type": "ExpediteCommitment",
+          "stable_key": "canonical-run:expedite-commitment",
+          "source": "DynamicYardRepository.history",
+          "record_id": "4c5964a7-63c1-40b9-b2d0-cf337be94973"
+        },
+        {
+          "record_type": "ExpediteReconsiderationAssessment",
+          "stable_key": "canonical-run:reconsideration-assessment",
+          "source": "DynamicYardRepository.history",
+          "record_id": "92e4bb16-2894-42c0-826c-cd509cbf4308"
+        },
+        {
+          "record_type": "AllocationTradeoffHistory",
+          "stable_key": "canonical-run:dynamic-history",
+          "source": "DynamicYardWorkflow.history",
+          "record_id": "d099ce7f-aaa6-49d8-a852-eb1cf3fae7aa"
+        },
+        {
+          "record_type": "AllocationTradeoffReview",
+          "stable_key": "supplemental-tradeoff:review",
+          "source": "DynamicYardWorkflow.select_tradeoff",
+          "record_id": "38b4d280-80d1-4b25-a4fa-31fabbd6253c"
+        },
+        {
+          "record_type": "AllocationTradeoffOption",
+          "stable_key": "supplemental-tradeoff:option",
+          "source": "DynamicYardWorkflow.select_tradeoff",
+          "record_id": "31b9e82f-393c-4843-bbe2-6870272dfebf"
+        },
+        {
+          "record_type": "AllocationTradeoffSelection",
+          "stable_key": "supplemental-tradeoff:selection",
+          "source": "DynamicYardWorkflow.select_tradeoff",
+          "record_id": "4b370cfc-440d-4270-912b-2734c9cfb3be"
+        },
+        {
+          "record_type": "AllocationRevision",
+          "stable_key": "supplemental-tradeoff:child-revision",
+          "source": "DynamicYardWorkflow.select_tradeoff",
+          "record_id": "f82a02de-933c-416a-a076-ed790edf1c85"
+        },
+        {
+          "record_type": "ApprovalBinding",
+          "stable_key": "canonical-run:approval-binding",
+          "source": "CarrierRecoveryRepository.history",
+          "record_id": "fe41d465-4a5d-4d1b-a581-9c78ebb76fc1"
+        },
+        {
+          "record_type": "Approval",
+          "stable_key": "canonical-run:operator-approval",
+          "source": "CarrierRecoveryRepository.history",
+          "record_id": "fe4a2794-ef30-4124-8b50-56e5f997403e"
+        },
+        {
+          "record_type": "RTARequest",
+          "stable_key": "canonical-run:rta-request",
+          "source": "CarrierRecoveryRepository.history",
+          "record_id": "3d7c7935-7e89-4acc-831a-0ea6a2deed6d"
+        },
+        {
+          "record_type": "RTARequestContext",
+          "stable_key": "canonical-run:rta-request-context",
+          "source": "CarrierRecoveryRepository.history",
+          "record_id": "6f1d6d94-deeb-4b42-b2f3-02cded012835"
+        },
+        {
+          "record_type": "ContainerReconsiderationResult",
+          "stable_key": "canonical-run:carrier-reconsideration-result",
+          "source": "CarrierRecoveryRepository.history",
+          "record_id": "b2910f0e-e9ed-4fbf-bf8b-297e38437f10"
+        },
+        {
+          "record_type": "Decision",
+          "stable_key": "canonical-run:carrier-replacement-decision",
+          "source": "CarrierRecoveryRepository.history",
+          "record_id": "1c88c4fd-2590-40ac-a6f4-bdde43b3e411"
+        },
+        {
+          "record_type": "CarrierRecoveryDecisionLink",
+          "stable_key": "canonical-run:carrier-decision-link",
+          "source": "CarrierRecoveryRepository.history",
+          "record_id": "1c88c4fd-2590-40ac-a6f4-bdde43b3e411"
+        },
+        {
+          "record_type": "CarrierRecoveryHistory",
+          "stable_key": "canonical-run:carrier-history",
+          "source": "CarrierRecoveryRepository.history",
+          "record_id": "6f1d6d94-deeb-4b42-b2f3-02cded012835"
+        },
+        {
+          "record_type": "CargoNote",
+          "stable_key": "canonical-run:cargo-note",
+          "source": "CargoSafetyRepository.history",
+          "record_id": "cec9c682-a75a-415a-952d-c1a025606102"
+        },
+        {
+          "record_type": "CargoSafetyReview",
+          "stable_key": "canonical-run:cargo-safety-review",
+          "source": "CargoSafetyRepository.history",
+          "record_id": "2ddacd04-2d3a-4dd4-916a-7d79a3f26096"
+        },
+        {
+          "record_type": "SemanticSafetyAssessment",
+          "stable_key": "canonical-run:semantic-safety-assessment",
+          "source": "CargoSafetyRepository.history",
+          "record_id": "fabc7368-d5ed-48cb-964a-df6623d9269e"
+        },
+        {
+          "record_type": "SemanticSafetyPolicyResult",
+          "stable_key": "canonical-run:semantic-safety-policy",
+          "source": "CargoSafetyRepository.history",
+          "record_id": "58dbe63d-4382-4bb8-9955-0416bb38a0ac"
+        },
+        {
+          "record_type": "CargoSafetyHistory",
+          "stable_key": "canonical-run:safety-history",
+          "source": "CargoSafetyRepository.history",
+          "record_id": "2ddacd04-2d3a-4dd4-916a-7d79a3f26096"
+        },
+        {
+          "record_type": "Decision",
+          "stable_key": "canonical-run:safety-escalation-decision",
+          "source": "CargoSafetyHistory.policy_result",
+          "record_id": "ad5688d0-de79-4233-b952-2495fec96d62"
+        },
+        {
+          "record_type": "AgentRun",
+          "stable_key": "canonical-run:agent-run",
+          "source": "AgentRuntimeRepository.history",
+          "record_id": "597ccb58-cc30-42a4-a20b-481a1eb4e010"
+        },
+        {
+          "record_type": "AgentStep",
+          "stable_key": "canonical-run:agent-step",
+          "source": "AgentRuntimeRepository.history",
+          "record_id": "b9a94a31-fd43-4f77-a489-95e8dbaab9b5"
+        },
+        {
+          "record_type": "AgentToolInvocation",
+          "stable_key": "canonical-run:agent-tool-invocation",
+          "source": "AgentRuntimeRepository.history",
+          "record_id": "0dcfe1a8-491a-42f3-9858-0377ef8e650e"
+        },
+        {
+          "record_type": "AgentHistory",
+          "stable_key": "canonical-run:agent-history",
+          "source": "AgentRuntimeRepository.history",
+          "record_id": "597ccb58-cc30-42a4-a20b-481a1eb4e010"
+        },
+        {
+          "record_type": "CarrierResponse",
+          "stable_key": "canonical-run:carrier-response",
+          "source": "CarrierRecoveryRepository.history",
+          "record_id": "943185bb-2aa4-4855-bd7d-232350913567"
+        },
+        {
+          "record_type": "EffectiveConnectionTiming",
+          "stable_key": "canonical-run:effective-connection-timing",
+          "source": "CarrierRecoveryRepository.history",
+          "record_id": "ac587e2c-3fc4-4ca5-b1b2-2a9b43b15646"
+        },
+        {
+          "record_type": "AuditEvent",
+          "stable_key": "canonical-run:audit:incident.created",
+          "source": "AuditRepository.list_for_incident",
+          "record_id": "db280be5-f295-43a1-8250-b623ab554f41"
+        },
+        {
+          "record_type": "AuditEvent",
+          "stable_key": "canonical-run:audit:scarcity.evaluation_persisted",
+          "source": "AuditRepository.list_for_incident",
+          "record_id": "17c02f9c-0874-4775-8f4c-4ec062c5ad08"
+        },
+        {
+          "record_type": "AuditEvent",
+          "stable_key": "canonical-run:audit:decision.created",
+          "source": "AuditRepository.list_for_incident",
+          "record_id": "747a82b2-6af1-42e8-904e-f8edbe03f080"
+        },
+        {
+          "record_type": "AuditEvent",
+          "stable_key": "canonical-run:audit:yard_forecast.snapshot_ingested",
+          "source": "AuditRepository.list_for_incident",
+          "record_id": "894771d6-f86f-4a4d-9140-e1e51626bb1c"
+        },
+        {
+          "record_type": "AuditEvent",
+          "stable_key": "canonical-run:audit:expedite_reconsideration.assessed",
+          "source": "AuditRepository.list_for_incident",
+          "record_id": "ec0a05b0-f5c3-47b1-afaa-80ae28d3108b"
+        },
+        {
+          "record_type": "AuditEvent",
+          "stable_key": "canonical-run:audit:allocation_revision.applied",
+          "source": "AuditRepository.list_for_incident",
+          "record_id": "1616a732-47a6-43de-b3ce-760d552dd426"
+        },
+        {
+          "record_type": "AuditEvent",
+          "stable_key": "supplemental-tradeoff:audit:option_selected",
+          "source": "AuditRepository.list_for_incident",
+          "record_id": "f0c86660-3e58-418a-972e-a91e56e50fd0"
+        },
+        {
+          "record_type": "AuditEvent",
+          "stable_key": "supplemental-tradeoff:audit:allocation_revision.applied",
+          "source": "AuditRepository.list_for_incident",
+          "record_id": "103d05dc-5e87-458b-8781-8b050f0fbc49"
+        },
+        {
+          "record_type": "AuditEvent",
+          "stable_key": "canonical-run:audit:carrier_recovery.request_approval_recorded",
+          "source": "CarrierRecoveryRepository.history",
+          "record_id": "53d83e91-97ed-405c-bb47-cbd829984529"
+        },
+        {
+          "record_type": "AuditEvent",
+          "stable_key": "canonical-run:audit:carrier.counter_approval_recorded",
+          "source": "CarrierRecoveryRepository.history",
+          "record_id": "f40ae18b-128a-49b6-a52c-350d1514d7d9"
+        },
+        {
+          "record_type": "AuditEvent",
+          "stable_key": "canonical-run:audit:carrier.response_received",
+          "source": "CarrierRecoveryRepository.history",
+          "record_id": "f94b22af-c9a7-46dd-961f-5ecf2b615956"
+        },
+        {
+          "record_type": "AuditEvent",
+          "stable_key": "canonical-run:audit:carrier_recovery.replacement_recorded",
+          "source": "CarrierRecoveryRepository.history",
+          "record_id": "d0af7e06-bcf9-4651-b2da-958db1468d0b"
+        },
+        {
+          "record_type": "AuditEvent",
+          "stable_key": "canonical-run:audit:cargo.semantic_assessment_completed",
+          "source": "CargoSafetyRepository.history",
+          "record_id": "6202e057-5631-4432-a0aa-e900e5c5a6ef"
+        },
+        {
+          "record_type": "AuditEvent",
+          "stable_key": "canonical-run:audit:cargo.semantic_safety_evaluated",
+          "source": "CargoSafetyRepository.history",
+          "record_id": "5eb46f73-4280-4d66-95b0-c6eb2a65dcb4"
+        },
+        {
+          "record_type": "AuditEvent",
+          "stable_key": "canonical-run:audit:decision.escalated_for_cargo_review",
+          "source": "CargoSafetyRepository.history",
+          "record_id": "08d7f680-0356-43c2-81f9-78b1af82b146"
+        }
+      ],
+      "caveat": "Credential-free deterministic canonical replay with a retained same-session supplemental human-tradeoff fixture.",
+      "reproducibility": {
+        "deterministic": true,
+        "included_in_fingerprint": true,
+        "fixture_ids": [
+          "SYN-CANONICAL-24-V1"
+        ],
+        "seed_manifest_id": null,
+        "benchmark_reproducibility_key": null
+      }
+    },
+    {
+      "claim_id": "audit_provenance_map_complete",
+      "statement": "Every non-deferred evidence reference has exactly one provenance row.",
+      "status": "VERIFIED",
+      "observed_value": {
+        "claim_count": 50,
+        "reference_count": 100,
+        "provenance_row_count": 100
+      },
+      "evidence_refs": [
+        {
+          "record_type": "EvidenceRegistryProbe",
+          "stable_key": "phase8-report:provenance-completeness",
+          "source": "build_provenance_map and EvidenceReportBody validation",
+          "record_id": null
+        }
+      ],
+      "caveat": "Validated composite Phase 8 report registry only.",
+      "reproducibility": {
+        "deterministic": true,
+        "included_in_fingerprint": true,
+        "fixture_ids": [
+          "SYN-CANONICAL-24-V1"
+        ],
+        "seed_manifest_id": null,
+        "benchmark_reproducibility_key": null
+      }
+    },
+    {
+      "claim_id": "authority_carrier_silence_is_absence",
+      "statement": "The deterministic silent carrier plan persists no response.",
+      "status": "VERIFIED",
+      "observed_value": {
+        "carrier_response_count": 0
+      },
+      "evidence_refs": [
+        {
+          "record_type": "CarrierRecoveryHistory",
+          "stable_key": "authority-boundaries:SYN-CANONICAL-24-V1",
+          "source": "CarrierRecoveryWorkflow and AgentToolRegistry",
+          "record_id": null
+        }
+      ],
+      "caveat": "Synthetic carrier plans and isolated backend state only.",
+      "reproducibility": {
+        "deterministic": true,
+        "included_in_fingerprint": true,
+        "fixture_ids": [
+          "SYN-CANONICAL-24-V1"
+        ],
+        "seed_manifest_id": null,
+        "benchmark_reproducibility_key": null
+      }
+    },
+    {
+      "claim_id": "authority_counter_approval_required",
+      "statement": "Counter timing cannot take effect before operator approval.",
+      "status": "VERIFIED",
+      "observed_value": {
+        "carrier_response_count": 1,
+        "effective_timing_count_before_approval": 0
+      },
+      "evidence_refs": [
+        {
+          "record_type": "CarrierRecoveryHistory",
+          "stable_key": "authority-boundaries:SYN-CANONICAL-24-V1",
+          "source": "CarrierRecoveryWorkflow and AgentToolRegistry",
+          "record_id": null
+        }
+      ],
+      "caveat": "Synthetic carrier plans and isolated backend state only.",
+      "reproducibility": {
+        "deterministic": true,
+        "included_in_fingerprint": true,
+        "fixture_ids": [
+          "SYN-CANONICAL-24-V1"
+        ],
+        "seed_manifest_id": null,
+        "benchmark_reproducibility_key": null
+      }
+    },
+    {
+      "claim_id": "authority_counter_fingerprint_bound",
+      "statement": "Counter approval is bound to the exact persisted fingerprint.",
+      "status": "VERIFIED",
+      "observed_value": {
+        "wrong_fingerprint_exception": "CarrierRecoveryConflict",
+        "effective_timing_count": 0
+      },
+      "evidence_refs": [
+        {
+          "record_type": "CarrierRecoveryHistory",
+          "stable_key": "authority-boundaries:SYN-CANONICAL-24-V1",
+          "source": "CarrierRecoveryWorkflow and AgentToolRegistry",
+          "record_id": null
+        }
+      ],
+      "caveat": "Synthetic carrier plans and isolated backend state only.",
+      "reproducibility": {
+        "deterministic": true,
+        "included_in_fingerprint": true,
+        "fixture_ids": [
+          "SYN-CANONICAL-24-V1"
+        ],
+        "seed_manifest_id": null,
+        "benchmark_reproducibility_key": null
+      }
+    },
+    {
+      "claim_id": "authority_no_agent_approval",
+      "statement": "The runtime registry exposes no agent approval-authority tools.",
+      "status": "VERIFIED",
+      "observed_value": {
+        "agent_approval_authority_tools": []
+      },
+      "evidence_refs": [
+        {
+          "record_type": "CarrierRecoveryHistory",
+          "stable_key": "authority-boundaries:SYN-CANONICAL-24-V1",
+          "source": "CarrierRecoveryWorkflow and AgentToolRegistry",
+          "record_id": null
+        }
+      ],
+      "caveat": "Synthetic carrier plans and isolated backend state only.",
+      "reproducibility": {
+        "deterministic": true,
+        "included_in_fingerprint": true,
+        "fixture_ids": [
+          "SYN-CANONICAL-24-V1"
+        ],
+        "seed_manifest_id": null,
+        "benchmark_reproducibility_key": null
+      }
+    },
+    {
+      "claim_id": "authority_no_carrier_schedule_mutation",
+      "statement": "Carrier recovery leaves the canonical connection fixture unchanged.",
+      "status": "VERIFIED",
+      "observed_value": {
+        "fixture_connection_unchanged": true
+      },
+      "evidence_refs": [
+        {
+          "record_type": "CarrierRecoveryHistory",
+          "stable_key": "authority-boundaries:SYN-CANONICAL-24-V1",
+          "source": "CarrierRecoveryWorkflow and AgentToolRegistry",
+          "record_id": null
+        }
+      ],
+      "caveat": "Synthetic carrier plans and isolated backend state only.",
+      "reproducibility": {
+        "deterministic": true,
+        "included_in_fingerprint": true,
+        "fixture_ids": [
+          "SYN-CANONICAL-24-V1"
+        ],
+        "seed_manifest_id": null,
+        "benchmark_reproducibility_key": null
+      }
+    },
+    {
+      "claim_id": "authority_no_forbidden_tools",
+      "statement": "The runtime registry exposes no forbidden operational authority tools.",
+      "status": "VERIFIED",
+      "observed_value": {
+        "forbidden_runtime_tools": []
+      },
+      "evidence_refs": [
+        {
+          "record_type": "CarrierRecoveryHistory",
+          "stable_key": "authority-boundaries:SYN-CANONICAL-24-V1",
+          "source": "CarrierRecoveryWorkflow and AgentToolRegistry",
+          "record_id": null
+        }
+      ],
+      "caveat": "Synthetic carrier plans and isolated backend state only.",
+      "reproducibility": {
+        "deterministic": true,
+        "included_in_fingerprint": true,
+        "fixture_ids": [
+          "SYN-CANONICAL-24-V1"
+        ],
+        "seed_manifest_id": null,
+        "benchmark_reproducibility_key": null
+      }
+    },
+    {
+      "claim_id": "authority_request_approval_required",
+      "statement": "Carrier dispatch requires an approved request binding.",
+      "status": "VERIFIED",
+      "observed_value": {
+        "unapproved_send_exception": "CarrierRecoveryConflict",
+        "history_unchanged": true
+      },
+      "evidence_refs": [
+        {
+          "record_type": "CarrierRecoveryHistory",
+          "stable_key": "authority-boundaries:SYN-CANONICAL-24-V1",
+          "source": "CarrierRecoveryWorkflow and AgentToolRegistry",
+          "record_id": null
+        }
+      ],
+      "caveat": "Synthetic carrier plans and isolated backend state only.",
+      "reproducibility": {
+        "deterministic": true,
+        "included_in_fingerprint": true,
+        "fixture_ids": [
+          "SYN-CANONICAL-24-V1"
+        ],
+        "seed_manifest_id": null,
+        "benchmark_reproducibility_key": null
+      }
+    },
+    {
+      "claim_id": "authority_request_fingerprint_bound",
+      "statement": "Carrier request approval is bound to the exact persisted fingerprint.",
+      "status": "VERIFIED",
+      "observed_value": {
+        "wrong_fingerprint_exception": "CarrierRecoveryConflict",
+        "persisted_approval_count": 0
+      },
+      "evidence_refs": [
+        {
+          "record_type": "CarrierRecoveryHistory",
+          "stable_key": "authority-boundaries:SYN-CANONICAL-24-V1",
+          "source": "CarrierRecoveryWorkflow and AgentToolRegistry",
+          "record_id": null
+        }
+      ],
+      "caveat": "Synthetic carrier plans and isolated backend state only.",
+      "reproducibility": {
+        "deterministic": true,
+        "included_in_fingerprint": true,
+        "fixture_ids": [
+          "SYN-CANONICAL-24-V1"
+        ],
+        "seed_manifest_id": null,
+        "benchmark_reproducibility_key": null
+      }
+    },
+    {
+      "claim_id": "authority_timeout_recomputes",
+      "statement": "A due silent-carrier timeout reaches a terminal recovery state.",
+      "status": "VERIFIED",
+      "observed_value": {
+        "terminal_state": "COMPLETED"
+      },
+      "evidence_refs": [
+        {
+          "record_type": "CarrierRecoveryHistory",
+          "stable_key": "authority-boundaries:SYN-CANONICAL-24-V1",
+          "source": "CarrierRecoveryWorkflow and AgentToolRegistry",
+          "record_id": null
+        }
+      ],
+      "caveat": "Synthetic carrier plans and isolated backend state only.",
+      "reproducibility": {
+        "deterministic": true,
+        "included_in_fingerprint": true,
+        "fixture_ids": [
+          "SYN-CANONICAL-24-V1"
+        ],
+        "seed_manifest_id": null,
+        "benchmark_reproducibility_key": null
+      }
+    },
+    {
+      "claim_id": "deterministic_local_runtime",
+      "statement": "Canonical deterministic runs were measured on the local machine.",
+      "status": "VERIFIED",
+      "observed_value": {
+        "repetitions": 20,
+        "run_durations_ms": [
+          579.8507,
+          605.5361,
+          544.3329,
+          624.0044,
+          532.3369,
+          638.929,
+          603.3304,
+          601.6444,
+          613.9197,
+          633.9367,
+          671.7716,
+          622.1912,
+          584.8642,
+          582.1826,
+          648.1194,
+          582.7135,
+          606.1323,
+          618.9343,
+          685.1354,
+          648.9133
+        ],
+        "canonical_run_wall_clock_ms": 579.8507,
+        "p50_local_runtime_ms": 610.0260000000001,
+        "p95_local_runtime_ms": 671.7716,
+        "python_version": "3.12.13 (main, Jun 23 2026, 15:23:43) [MSC v.1944 64 bit (AMD64)]",
+        "platform": "Windows-11-10.0.26200-SP0"
+      },
+      "evidence_refs": [
+        {
+          "record_type": "LocalRuntimeMeasurement",
+          "stable_key": "canonical-run:local-runtime",
+          "source": "evidence_runtime.measure_local_runtime",
+          "record_id": null
+        }
+      ],
+      "caveat": "LOCAL_MACHINE_DEPENDENT measurement only; it is not a production SLA or a deterministic timing claim.",
+      "reproducibility": {
+        "deterministic": false,
+        "included_in_fingerprint": false,
+        "fixture_ids": [],
+        "seed_manifest_id": null,
+        "benchmark_reproducibility_key": null
+      }
+    },
+    {
+      "claim_id": "deterministic_tool_call_count",
+      "statement": "The canonical run has exactly five successful tool calls.",
+      "status": "VERIFIED",
+      "observed_value": 5,
+      "evidence_refs": [
+        {
+          "record_type": "AgentHistory",
+          "stable_key": "canonical-run:agent-history",
+          "source": "AgentRuntimeRepository.history",
+          "record_id": "597ccb58-cc30-42a4-a20b-481a1eb4e010"
+        }
+      ],
+      "caveat": "Credential-free deterministic canonical replay only.",
+      "reproducibility": {
+        "deterministic": true,
+        "included_in_fingerprint": true,
+        "fixture_ids": [
+          "SYN-CANONICAL-24-V1"
+        ],
+        "seed_manifest_id": null,
+        "benchmark_reproducibility_key": null
+      }
+    },
+    {
+      "claim_id": "dynamic_committed_allocations_immutable",
+      "statement": "Committed allocations 002 and 004 retain their commitment lineage in R1.",
+      "status": "VERIFIED",
+      "observed_value": {
+        "r0_locked": [
+          "SYN-CNT-002",
+          "SYN-CNT-004"
+        ],
+        "r1_locked": [
+          "SYN-CNT-002",
+          "SYN-CNT-004"
+        ],
+        "committed": [
+          "SYN-CNT-002",
+          "SYN-CNT-004"
+        ],
+        "commitment_origin": "R0"
+      },
+      "evidence_refs": [
+        {
+          "record_type": "AllocationTradeoffHistory",
+          "stable_key": "dynamic-yard:SYN-CANONICAL-24-V1",
+          "source": "DynamicYardRepository.history",
+          "record_id": "c62b6304-ea0e-4fa1-8e63-080a680e77a7"
+        }
+      ],
+      "caveat": "Synthetic canonical dynamic-yard scenarios only.",
+      "reproducibility": {
+        "deterministic": true,
+        "included_in_fingerprint": true,
+        "fixture_ids": [
+          "SYN-CANONICAL-24-V1"
+        ],
+        "seed_manifest_id": null,
+        "benchmark_reproducibility_key": "4736cc73efa6123c62ba1e690b4c08c7d930a6e4a01ffd21aaadf7e527f65367"
+      }
+    },
+    {
+      "claim_id": "dynamic_evidence_precedes_carrier_mutation",
+      "statement": "Unhandled material dynamic-yard evidence blocks carrier mutation.",
+      "status": "VERIFIED",
+      "observed_value": {
+        "scenario_key": "dynamic-unhandled-evidence-carrier-guard-v1",
+        "unhandled_assessment": true,
+        "exception_type": "ValueError",
+        "case_count_before": 0,
+        "case_count_after": 0,
+        "request_count_before": 0,
+        "request_count_after": 0
+      },
+      "evidence_refs": [
+        {
+          "record_type": "AllocationTradeoffHistory",
+          "stable_key": "dynamic-yard:SYN-CANONICAL-24-V1",
+          "source": "DynamicYardRepository.history",
+          "record_id": "c62b6304-ea0e-4fa1-8e63-080a680e77a7"
+        }
+      ],
+      "caveat": "Synthetic canonical dynamic-yard scenarios only.",
+      "reproducibility": {
+        "deterministic": true,
+        "included_in_fingerprint": true,
+        "fixture_ids": [
+          "SYN-CANONICAL-24-V1"
+        ],
+        "seed_manifest_id": null,
+        "benchmark_reproducibility_key": "4736cc73efa6123c62ba1e690b4c08c7d930a6e4a01ffd21aaadf7e527f65367"
+      }
+    },
+    {
+      "claim_id": "dynamic_expected_preserved_change",
+      "statement": "Canonical reconsideration changes expected preserved connections from 12.02 to 12.04.",
+      "status": "VERIFIED",
+      "observed_value": {
+        "before": 12.02,
+        "after": 12.04
+      },
+      "evidence_refs": [
+        {
+          "record_type": "AllocationTradeoffHistory",
+          "stable_key": "dynamic-yard:SYN-CANONICAL-24-V1",
+          "source": "DynamicYardRepository.history",
+          "record_id": "c62b6304-ea0e-4fa1-8e63-080a680e77a7"
+        }
+      ],
+      "caveat": "Synthetic canonical dynamic-yard scenarios only.",
+      "reproducibility": {
+        "deterministic": true,
+        "included_in_fingerprint": true,
+        "fixture_ids": [
+          "SYN-CANONICAL-24-V1"
+        ],
+        "seed_manifest_id": null,
+        "benchmark_reproducibility_key": "4736cc73efa6123c62ba1e690b4c08c7d930a6e4a01ffd21aaadf7e527f65367"
+      }
+    },
+    {
+      "claim_id": "dynamic_phase2_worlds_reconstructed",
+      "statement": "Dynamic-yard evaluation reconstructs the persisted Phase 2 worlds and comparison key.",
+      "status": "VERIFIED",
+      "observed_value": {
+        "seed": 20260822,
+        "world_count": 50,
+        "comparison_key": "4736cc73efa6123c62ba1e690b4c08c7d930a6e4a01ffd21aaadf7e527f65367"
+      },
+      "evidence_refs": [
+        {
+          "record_type": "ScarcityEvaluationReport",
+          "stable_key": "phase2:SYN-CANONICAL-24-V1:20260822",
+          "source": "ScarcityEvaluationRepository",
+          "record_id": "b11c5600-2633-4e23-a841-8d09114fb38e"
+        }
+      ],
+      "caveat": "Synthetic canonical Phase 2 fixture and seed only.",
+      "reproducibility": {
+        "deterministic": true,
+        "included_in_fingerprint": true,
+        "fixture_ids": [
+          "SYN-CANONICAL-24-V1"
+        ],
+        "seed_manifest_id": null,
+        "benchmark_reproducibility_key": "4736cc73efa6123c62ba1e690b4c08c7d930a6e4a01ffd21aaadf7e527f65367"
+      }
+    },
+    {
+      "claim_id": "dynamic_phase3_incompatible_plan_blocked",
+      "statement": "A forecast mismatch blocks Phase 3 carrier-request preparation before mutation.",
+      "status": "VERIFIED",
+      "observed_value": {
+        "scenario_key": "dynamic-phase3-forecast-mismatch-v1",
+        "phase3_compatible": false,
+        "exception_type": "ValueError",
+        "case_count_before": 0,
+        "case_count_after": 0,
+        "request_count_before": 0,
+        "request_count_after": 0
+      },
+      "evidence_refs": [
+        {
+          "record_type": "AllocationTradeoffHistory",
+          "stable_key": "dynamic-yard:SYN-CANONICAL-24-V1",
+          "source": "DynamicYardRepository.history",
+          "record_id": "c62b6304-ea0e-4fa1-8e63-080a680e77a7"
+        }
+      ],
+      "caveat": "Synthetic canonical dynamic-yard scenarios only.",
+      "reproducibility": {
+        "deterministic": true,
+        "included_in_fingerprint": true,
+        "fixture_ids": [
+          "SYN-CANONICAL-24-V1"
+        ],
+        "seed_manifest_id": null,
+        "benchmark_reproducibility_key": "4736cc73efa6123c62ba1e690b4c08c7d930a6e4a01ffd21aaadf7e527f65367"
+      }
+    },
+    {
+      "claim_id": "dynamic_preserved_total_change",
+      "statement": "Canonical reconsideration changes preserved total from 601 to 602.",
+      "status": "VERIFIED",
+      "observed_value": {
+        "before": 601,
+        "after": 602
+      },
+      "evidence_refs": [
+        {
+          "record_type": "AllocationTradeoffHistory",
+          "stable_key": "dynamic-yard:SYN-CANONICAL-24-V1",
+          "source": "DynamicYardRepository.history",
+          "record_id": "c62b6304-ea0e-4fa1-8e63-080a680e77a7"
+        }
+      ],
+      "caveat": "Synthetic canonical dynamic-yard scenarios only.",
+      "reproducibility": {
+        "deterministic": true,
+        "included_in_fingerprint": true,
+        "fixture_ids": [
+          "SYN-CANONICAL-24-V1"
+        ],
+        "seed_manifest_id": null,
+        "benchmark_reproducibility_key": "4736cc73efa6123c62ba1e690b4c08c7d930a6e4a01ffd21aaadf7e527f65367"
+      }
+    },
+    {
+      "claim_id": "dynamic_reconsideration_r0_r1",
+      "statement": "Canonical discharge evidence deterministically replaces 005 with 001.",
+      "status": "VERIFIED",
+      "observed_value": {
+        "r0": [
+          "SYN-CNT-002",
+          "SYN-CNT-004",
+          "SYN-CNT-005",
+          "SYN-CNT-010",
+          "SYN-CNT-011",
+          "SYN-CNT-012",
+          "SYN-CNT-014",
+          "SYN-CNT-015"
+        ],
+        "r1": [
+          "SYN-CNT-001",
+          "SYN-CNT-002",
+          "SYN-CNT-004",
+          "SYN-CNT-010",
+          "SYN-CNT-011",
+          "SYN-CNT-012",
+          "SYN-CNT-014",
+          "SYN-CNT-015"
+        ],
+        "cancelled": [
+          "SYN-CNT-005"
+        ],
+        "planned": [
+          "SYN-CNT-001"
+        ],
+        "committed": [
+          "SYN-CNT-002",
+          "SYN-CNT-004"
+        ]
+      },
+      "evidence_refs": [
+        {
+          "record_type": "AllocationTradeoffHistory",
+          "stable_key": "dynamic-yard:SYN-CANONICAL-24-V1",
+          "source": "DynamicYardRepository.history",
+          "record_id": "c62b6304-ea0e-4fa1-8e63-080a680e77a7"
+        }
+      ],
+      "caveat": "Synthetic canonical dynamic-yard scenarios only.",
+      "reproducibility": {
+        "deterministic": true,
+        "included_in_fingerprint": true,
+        "fixture_ids": [
+          "SYN-CANONICAL-24-V1"
+        ],
+        "seed_manifest_id": null,
+        "benchmark_reproducibility_key": "4736cc73efa6123c62ba1e690b4c08c7d930a6e4a01ffd21aaadf7e527f65367"
+      }
+    },
+    {
+      "claim_id": "full_18_preserved_5_rolled_1_escalated",
+      "statement": "All 24 containers are classified into 18 preserved, 5 rolled, and 1 escalated.",
+      "status": "NOT_ESTABLISHED",
+      "observed_value": {
+        "r1_allocation_count": 8,
+        "carrier_affected_container_ids": [
+          "SYN-CNT-017"
+        ],
+        "safety_escalation_container_id": "SYN-CNT-010",
+        "complete_terminal_classification_count": 2,
+        "required_container_count": 24
+      },
+      "evidence_refs": [
+        {
+          "record_type": "AllocationTradeoffHistory",
+          "stable_key": "dynamic-yard:SYN-CANONICAL-24-V1",
+          "source": "DynamicYardRepository.history",
+          "record_id": "c62b6304-ea0e-4fa1-8e63-080a680e77a7"
+        },
+        {
+          "record_type": "CarrierRecoveryHistory",
+          "stable_key": "canonical-run:carrier-history",
+          "source": "CarrierRecoveryRepository.history",
+          "record_id": "6f1d6d94-deeb-4b42-b2f3-02cded012835"
+        },
+        {
+          "record_type": "CargoSafetyHistory",
+          "stable_key": "canonical-run:safety-history",
+          "source": "CargoSafetyRepository.history",
+          "record_id": "2ddacd04-2d3a-4dd4-916a-7d79a3f26096"
+        }
+      ],
+      "caveat": "NOT_ESTABLISHED: no complete disjoint durable terminal ledger classifies all 24 containers.",
+      "reproducibility": {
+        "deterministic": true,
+        "included_in_fingerprint": true,
+        "fixture_ids": [
+          "SYN-CANONICAL-24-V1"
+        ],
+        "seed_manifest_id": null,
+        "benchmark_reproducibility_key": null
+      }
+    },
+    {
+      "claim_id": "human_tradeoff_agent_cannot_select",
+      "statement": "The agent registry exposes no tradeoff-selection or approval authority.",
+      "status": "VERIFIED",
+      "observed_value": {
+        "selection_tool_exposed": false,
+        "agent_approval_authority_tools": []
+      },
+      "evidence_refs": [
+        {
+          "record_type": "AllocationTradeoffHistory",
+          "stable_key": "human-tradeoff:SYN-CANONICAL-24-V1",
+          "source": "DynamicYardWorkflow, AgentToolRegistry, canonical replay projector",
+          "record_id": null
+        }
+      ],
+      "caveat": "This proves backend projector and persisted workflow behavior only; it does not execute any frontend controller.",
+      "reproducibility": {
+        "deterministic": true,
+        "included_in_fingerprint": true,
+        "fixture_ids": [
+          "SYN-CANONICAL-24-V1"
+        ],
+        "seed_manifest_id": null,
+        "benchmark_reproducibility_key": null
+      }
+    },
+    {
+      "claim_id": "human_tradeoff_auto_replay_halts",
+      "statement": "The backend projector halts Auto Replay at the human boundary.",
+      "status": "VERIFIED",
+      "observed_value": {
+        "stage": "TRADEOFF_DECISION_REQUIRED",
+        "next_action": "SELECT_TRADEOFF_OPTION",
+        "auto_replay_may_execute": false,
+        "requires_human_authority": true
+      },
+      "evidence_refs": [
+        {
+          "record_type": "AllocationTradeoffHistory",
+          "stable_key": "human-tradeoff:SYN-CANONICAL-24-V1",
+          "source": "DynamicYardWorkflow, AgentToolRegistry, canonical replay projector",
+          "record_id": null
+        }
+      ],
+      "caveat": "This proves backend projector and persisted workflow behavior only; it does not execute any frontend controller.",
+      "reproducibility": {
+        "deterministic": true,
+        "included_in_fingerprint": true,
+        "fixture_ids": [
+          "SYN-CANONICAL-24-V1"
+        ],
+        "seed_manifest_id": null,
+        "benchmark_reproducibility_key": null
+      }
+    },
+    {
+      "claim_id": "human_tradeoff_boundary",
+      "statement": "An open human tradeoff blocks agent continuation until selection.",
+      "status": "VERIFIED",
+      "observed_value": {
+        "review_state": "OPEN",
+        "model_calls_to_wait": 1,
+        "model_calls_while_waiting": 0,
+        "requires_human_authority": true
+      },
+      "evidence_refs": [
+        {
+          "record_type": "AllocationTradeoffHistory",
+          "stable_key": "human-tradeoff:SYN-CANONICAL-24-V1",
+          "source": "DynamicYardWorkflow, AgentToolRegistry, canonical replay projector",
+          "record_id": null
+        }
+      ],
+      "caveat": "This proves backend projector and persisted workflow behavior only; it does not execute any frontend controller.",
+      "reproducibility": {
+        "deterministic": true,
+        "included_in_fingerprint": true,
+        "fixture_ids": [
+          "SYN-CANONICAL-24-V1"
+        ],
+        "seed_manifest_id": null,
+        "benchmark_reproducibility_key": null
+      }
+    },
+    {
+      "claim_id": "human_tradeoff_committed_slots_immutable",
+      "statement": "Exact human selection retains the committed allocation slots.",
+      "status": "VERIFIED",
+      "observed_value": {
+        "committed_slots": [
+          "SYN-CNT-002",
+          "SYN-CNT-004"
+        ]
+      },
+      "evidence_refs": [
+        {
+          "record_type": "AllocationTradeoffHistory",
+          "stable_key": "human-tradeoff:SYN-CANONICAL-24-V1",
+          "source": "DynamicYardWorkflow, AgentToolRegistry, canonical replay projector",
+          "record_id": null
+        }
+      ],
+      "caveat": "This proves backend projector and persisted workflow behavior only; it does not execute any frontend controller.",
+      "reproducibility": {
+        "deterministic": true,
+        "included_in_fingerprint": true,
+        "fixture_ids": [
+          "SYN-CANONICAL-24-V1"
+        ],
+        "seed_manifest_id": null,
+        "benchmark_reproducibility_key": null
+      }
+    },
+    {
+      "claim_id": "human_tradeoff_fingerprint_bound",
+      "statement": "A stale tradeoff fingerprint is rejected without durable mutation.",
+      "status": "VERIFIED",
+      "observed_value": {
+        "exception": "DynamicYardConflict",
+        "persisted_state_unchanged": true
+      },
+      "evidence_refs": [
+        {
+          "record_type": "AllocationTradeoffHistory",
+          "stable_key": "human-tradeoff:SYN-CANONICAL-24-V1",
+          "source": "DynamicYardWorkflow, AgentToolRegistry, canonical replay projector",
+          "record_id": null
+        }
+      ],
+      "caveat": "This proves backend projector and persisted workflow behavior only; it does not execute any frontend controller.",
+      "reproducibility": {
+        "deterministic": true,
+        "included_in_fingerprint": true,
+        "fixture_ids": [
+          "SYN-CANONICAL-24-V1"
+        ],
+        "seed_manifest_id": null,
+        "benchmark_reproducibility_key": null
+      }
+    },
+    {
+      "claim_id": "live_model_cost",
+      "statement": "Live model API cost is measured.",
+      "status": "DEFERRED",
+      "observed_value": "DEFERRED_TO_PHASE_9",
+      "evidence_refs": [],
+      "caveat": "DEFERRED_TO_PHASE_9",
+      "reproducibility": {
+        "deterministic": true,
+        "included_in_fingerprint": true,
+        "fixture_ids": [],
+        "seed_manifest_id": null,
+        "benchmark_reproducibility_key": null
+      }
+    },
+    {
+      "claim_id": "live_model_latency",
+      "statement": "Live model latency is measured.",
+      "status": "DEFERRED",
+      "observed_value": "DEFERRED_TO_PHASE_9",
+      "evidence_refs": [],
+      "caveat": "DEFERRED_TO_PHASE_9",
+      "reproducibility": {
+        "deterministic": true,
+        "included_in_fingerprint": true,
+        "fixture_ids": [],
+        "seed_manifest_id": null,
+        "benchmark_reproducibility_key": null
+      }
+    },
+    {
+      "claim_id": "live_model_token_usage",
+      "statement": "Live model token usage is measured.",
+      "status": "DEFERRED",
+      "observed_value": "DEFERRED_TO_PHASE_9",
+      "evidence_refs": [],
+      "caveat": "DEFERRED_TO_PHASE_9",
+      "reproducibility": {
+        "deterministic": true,
+        "included_in_fingerprint": true,
+        "fixture_ids": [],
+        "seed_manifest_id": null,
+        "benchmark_reproducibility_key": null
+      }
+    },
+    {
+      "claim_id": "safety_automation_blocked",
+      "statement": "The deterministic safety policy blocks automation.",
+      "status": "VERIFIED",
+      "observed_value": true,
+      "evidence_refs": [
+        {
+          "record_type": "CargoSafetyHistory",
+          "stable_key": "canonical-run:safety-history",
+          "source": "CargoSafetyRepository.history",
+          "record_id": "2ddacd04-2d3a-4dd4-916a-7d79a3f26096"
+        }
+      ],
+      "caveat": "Credential-free deterministic canonical replay only.",
+      "reproducibility": {
+        "deterministic": true,
+        "included_in_fingerprint": true,
+        "fixture_ids": [
+          "SYN-CANONICAL-24-V1"
+        ],
+        "seed_manifest_id": null,
+        "benchmark_reproducibility_key": null
+      }
+    },
+    {
+      "claim_id": "safety_canonical_contradiction",
+      "statement": "Canonical SYN-CNT-010 evidence produces a semantic contradiction.",
+      "status": "VERIFIED",
+      "observed_value": "CONTRADICTION_FOUND",
+      "evidence_refs": [
+        {
+          "record_type": "CargoSafetyHistory",
+          "stable_key": "canonical-run:safety-history",
+          "source": "CargoSafetyRepository.history",
+          "record_id": "2ddacd04-2d3a-4dd4-916a-7d79a3f26096"
+        }
+      ],
+      "caveat": "Credential-free deterministic canonical replay only.",
+      "reproducibility": {
+        "deterministic": true,
+        "included_in_fingerprint": true,
+        "fixture_ids": [
+          "SYN-CANONICAL-24-V1"
+        ],
+        "seed_manifest_id": null,
+        "benchmark_reproducibility_key": null
+      }
+    },
+    {
+      "claim_id": "safety_checker_failure_fails_closed",
+      "statement": "A deterministic checker failure persists CHECK_FAILED and blocks automation.",
+      "status": "VERIFIED",
+      "observed_value": {
+        "assessment_result": "CHECK_FAILED",
+        "automation_blocked": true
+      },
+      "evidence_refs": [
+        {
+          "record_type": "CargoSafetyHistory",
+          "stable_key": "phase8-probe:safety-checker-failure",
+          "source": "CargoSafetyRepository.history",
+          "record_id": "0e02915f-e643-48cd-8f0f-2bbebaee6870"
+        }
+      ],
+      "caveat": "Isolated deterministic failure probe; no provider client or network call.",
+      "reproducibility": {
+        "deterministic": true,
+        "included_in_fingerprint": true,
+        "fixture_ids": [
+          "SYN-CANONICAL-24-V1"
+        ],
+        "seed_manifest_id": null,
+        "benchmark_reproducibility_key": null
+      }
+    },
+    {
+      "claim_id": "safety_checker_scope_limited",
+      "statement": "The canonical checker emits semantic evidence, not safety disposition or DG classification.",
+      "status": "VERIFIED",
+      "observed_value": {
+        "output_fields": [
+          "result",
+          "explanation",
+          "evidence_excerpt"
+        ],
+        "disposition_field_present": false,
+        "dangerous_goods_field_present": false,
+        "un_number_field_present": false
+      },
+      "evidence_refs": [
+        {
+          "record_type": "DeterministicSafetyProbe",
+          "stable_key": "phase8-probe:safety-checker-scope",
+          "source": "CanonicalReplaySemanticChecker.check",
+          "record_id": null
+        }
+      ],
+      "caveat": "Deterministic canonical checker output contract only.",
+      "reproducibility": {
+        "deterministic": true,
+        "included_in_fingerprint": true,
+        "fixture_ids": [
+          "SYN-CANONICAL-24-V1"
+        ],
+        "seed_manifest_id": null,
+        "benchmark_reproducibility_key": null
+      }
+    },
+    {
+      "claim_id": "safety_pending_review_blocks_bypass",
+      "statement": "Pending safety evidence is evaluated before completion automation.",
+      "status": "VERIFIED",
+      "observed_value": {
+        "completion_exposed": true,
+        "selected_tool": "request_cargo_safety_review",
+        "terminal_reason": "SAFETY_REVIEW_REQUIRED"
+      },
+      "evidence_refs": [
+        {
+          "record_type": "AgentHistory",
+          "stable_key": "canonical-run:agent-history",
+          "source": "AgentRuntimeRepository.history",
+          "record_id": "597ccb58-cc30-42a4-a20b-481a1eb4e010"
+        },
+        {
+          "record_type": "AgentToolRegistryInventory",
+          "stable_key": "canonical-run:registry-inventories",
+          "source": "AgentToolRegistry.available_tools",
+          "record_id": "597ccb58-cc30-42a4-a20b-481a1eb4e010"
+        },
+        {
+          "record_type": "CargoSafetyHistory",
+          "stable_key": "canonical-run:safety-history",
+          "source": "CargoSafetyRepository.history",
+          "record_id": "2ddacd04-2d3a-4dd4-916a-7d79a3f26096"
+        }
+      ],
+      "caveat": "Credential-free deterministic canonical replay only.",
+      "reproducibility": {
+        "deterministic": true,
+        "included_in_fingerprint": true,
+        "fixture_ids": [
+          "SYN-CANONICAL-24-V1"
+        ],
+        "seed_manifest_id": null,
+        "benchmark_reproducibility_key": null
+      }
+    },
+    {
+      "claim_id": "safety_policy_owns_disposition",
+      "statement": "The policy, separate from checker evidence, owns disposition.",
+      "status": "VERIFIED",
+      "observed_value": {
+        "checker_result": "CONTRADICTION_FOUND",
+        "policy_disposition": "ESCALATE",
+        "automation_blocked": true
+      },
+      "evidence_refs": [
+        {
+          "record_type": "CargoSafetyHistory",
+          "stable_key": "canonical-run:safety-history",
+          "source": "CargoSafetyRepository.history",
+          "record_id": "2ddacd04-2d3a-4dd4-916a-7d79a3f26096"
+        }
+      ],
+      "caveat": "Credential-free deterministic canonical replay only.",
+      "reproducibility": {
+        "deterministic": true,
+        "included_in_fingerprint": true,
+        "fixture_ids": [
+          "SYN-CANONICAL-24-V1"
+        ],
+        "seed_manifest_id": null,
+        "benchmark_reproducibility_key": null
+      }
+    },
+    {
+      "claim_id": "safety_terminal_escalation",
+      "statement": "The canonical safety block terminates in typed escalation.",
+      "status": "VERIFIED",
+      "observed_value": {
+        "state": "ESCALATED",
+        "reason": "SAFETY_REVIEW_REQUIRED"
+      },
+      "evidence_refs": [
+        {
+          "record_type": "AgentHistory",
+          "stable_key": "canonical-run:agent-history",
+          "source": "AgentRuntimeRepository.history",
+          "record_id": "597ccb58-cc30-42a4-a20b-481a1eb4e010"
+        },
+        {
+          "record_type": "CargoSafetyHistory",
+          "stable_key": "canonical-run:safety-history",
+          "source": "CargoSafetyRepository.history",
+          "record_id": "2ddacd04-2d3a-4dd4-916a-7d79a3f26096"
+        }
+      ],
+      "caveat": "Credential-free deterministic canonical replay only.",
+      "reproducibility": {
+        "deterministic": true,
+        "included_in_fingerprint": true,
+        "fixture_ids": [
+          "SYN-CANONICAL-24-V1"
+        ],
+        "seed_manifest_id": null,
+        "benchmark_reproducibility_key": null
+      }
+    },
+    {
+      "claim_id": "scarcity_expected_preserved_delta",
+      "statement": "The frozen scenario-aware allocation improves expected preserved connections by the exact benchmark delta.",
+      "status": "VERIFIED",
+      "observed_value": {
+        "baseline_expected_preserved": 12.0136,
+        "scenario_aware_expected_preserved": 12.5088,
+        "delta": 0.49520000000000053,
+        "relative_improvement_percent": 4.121995072251453
+      },
+      "evidence_refs": [
+        {
+          "record_type": "ScarcityBenchmarkReport",
+          "stable_key": "scarcity-holdout:SYN-CANONICAL-24-HOLDOUT-V1",
+          "source": "docs/evaluations/2026-08-22-scarcity-benchmark.json",
+          "record_id": null
+        }
+      ],
+      "caveat": "Synthetic canonical fixture and frozen holdout manifest only.",
+      "reproducibility": {
+        "deterministic": true,
+        "included_in_fingerprint": true,
+        "fixture_ids": [
+          "SYN-CANONICAL-24-V1"
+        ],
+        "seed_manifest_id": "SYN-CANONICAL-24-HOLDOUT-V1",
+        "benchmark_reproducibility_key": "d0dc76fb9239f4f77320f4b0a0fd5572d0b9a86a80da0448892d5336f205fe21"
+      }
+    },
+    {
+      "claim_id": "scarcity_expedite_slot_cap",
+      "statement": "Both frozen allocations respect the eight-slot expedite cap.",
+      "status": "VERIFIED",
+      "observed_value": {
+        "slot_cap": 8,
+        "baseline_slot_count": 8,
+        "scenario_aware_slot_count": 8
+      },
+      "evidence_refs": [
+        {
+          "record_type": "ScarcityBenchmarkReport",
+          "stable_key": "scarcity-holdout:SYN-CANONICAL-24-HOLDOUT-V1",
+          "source": "docs/evaluations/2026-08-22-scarcity-benchmark.json",
+          "record_id": null
+        }
+      ],
+      "caveat": "Synthetic canonical fixture and frozen holdout manifest only.",
+      "reproducibility": {
+        "deterministic": true,
+        "included_in_fingerprint": true,
+        "fixture_ids": [
+          "SYN-CANONICAL-24-V1"
+        ],
+        "seed_manifest_id": "SYN-CANONICAL-24-HOLDOUT-V1",
+        "benchmark_reproducibility_key": "d0dc76fb9239f4f77320f4b0a0fd5572d0b9a86a80da0448892d5336f205fe21"
+      }
+    },
+    {
+      "claim_id": "scarcity_holdout_world_count",
+      "statement": "The frozen scarcity holdout evaluates exactly 2,500 worlds.",
+      "status": "VERIFIED",
+      "observed_value": {
+        "seed_count": 50,
+        "worlds_per_seed": 50,
+        "world_count": 2500
+      },
+      "evidence_refs": [
+        {
+          "record_type": "ScarcityBenchmarkReport",
+          "stable_key": "scarcity-holdout:SYN-CANONICAL-24-HOLDOUT-V1",
+          "source": "docs/evaluations/2026-08-22-scarcity-benchmark.json",
+          "record_id": null
+        }
+      ],
+      "caveat": "Synthetic canonical fixture and frozen holdout manifest only.",
+      "reproducibility": {
+        "deterministic": true,
+        "included_in_fingerprint": true,
+        "fixture_ids": [
+          "SYN-CANONICAL-24-V1"
+        ],
+        "seed_manifest_id": "SYN-CANONICAL-24-HOLDOUT-V1",
+        "benchmark_reproducibility_key": "d0dc76fb9239f4f77320f4b0a0fd5572d0b9a86a80da0448892d5336f205fe21"
+      }
+    },
+    {
+      "claim_id": "scarcity_reproducibility_key",
+      "statement": "The regenerated frozen holdout has the exact benchmark key.",
+      "status": "VERIFIED",
+      "observed_value": "d0dc76fb9239f4f77320f4b0a0fd5572d0b9a86a80da0448892d5336f205fe21",
+      "evidence_refs": [
+        {
+          "record_type": "ScarcityBenchmarkReport",
+          "stable_key": "scarcity-holdout:SYN-CANONICAL-24-HOLDOUT-V1",
+          "source": "docs/evaluations/2026-08-22-scarcity-benchmark.json",
+          "record_id": null
+        }
+      ],
+      "caveat": "Synthetic canonical fixture and frozen holdout manifest only.",
+      "reproducibility": {
+        "deterministic": true,
+        "included_in_fingerprint": true,
+        "fixture_ids": [
+          "SYN-CANONICAL-24-V1"
+        ],
+        "seed_manifest_id": "SYN-CANONICAL-24-HOLDOUT-V1",
+        "benchmark_reproducibility_key": "d0dc76fb9239f4f77320f4b0a0fd5572d0b9a86a80da0448892d5336f205fe21"
+      }
+    },
+    {
+      "claim_id": "scarcity_scenario_aware_beats_p50",
+      "statement": "The frozen scenario-aware allocation preserves more connections than P50_GREEDY.",
+      "status": "VERIFIED",
+      "observed_value": {
+        "baseline_preserved_total": 30034,
+        "scenario_aware_preserved_total": 31272,
+        "scenario_aware_beats_p50": true
+      },
+      "evidence_refs": [
+        {
+          "record_type": "ScarcityBenchmarkReport",
+          "stable_key": "scarcity-holdout:SYN-CANONICAL-24-HOLDOUT-V1",
+          "source": "docs/evaluations/2026-08-22-scarcity-benchmark.json",
+          "record_id": null
+        }
+      ],
+      "caveat": "Synthetic canonical fixture and frozen holdout manifest only.",
+      "reproducibility": {
+        "deterministic": true,
+        "included_in_fingerprint": true,
+        "fixture_ids": [
+          "SYN-CANONICAL-24-V1"
+        ],
+        "seed_manifest_id": "SYN-CANONICAL-24-HOLDOUT-V1",
+        "benchmark_reproducibility_key": "d0dc76fb9239f4f77320f4b0a0fd5572d0b9a86a80da0448892d5336f205fe21"
+      }
+    },
+    {
+      "claim_id": "scarcity_zero_capacity_violations",
+      "statement": "Both frozen allocations have zero capacity violations.",
+      "status": "VERIFIED",
+      "observed_value": {
+        "baseline": 0,
+        "scenario_aware": 0
+      },
+      "evidence_refs": [
+        {
+          "record_type": "ScarcityBenchmarkReport",
+          "stable_key": "scarcity-holdout:SYN-CANONICAL-24-HOLDOUT-V1",
+          "source": "docs/evaluations/2026-08-22-scarcity-benchmark.json",
+          "record_id": null
+        }
+      ],
+      "caveat": "Synthetic canonical fixture and frozen holdout manifest only.",
+      "reproducibility": {
+        "deterministic": true,
+        "included_in_fingerprint": true,
+        "fixture_ids": [
+          "SYN-CANONICAL-24-V1"
+        ],
+        "seed_manifest_id": "SYN-CANONICAL-24-HOLDOUT-V1",
+        "benchmark_reproducibility_key": "d0dc76fb9239f4f77320f4b0a0fd5572d0b9a86a80da0448892d5336f205fe21"
+      }
+    },
+    {
+      "claim_id": "scarcity_zero_unsafe_allocations",
+      "statement": "Both frozen allocations have zero unsafe allocations.",
+      "status": "VERIFIED",
+      "observed_value": {
+        "baseline": 0,
+        "scenario_aware": 0
+      },
+      "evidence_refs": [
+        {
+          "record_type": "ScarcityBenchmarkReport",
+          "stable_key": "scarcity-holdout:SYN-CANONICAL-24-HOLDOUT-V1",
+          "source": "docs/evaluations/2026-08-22-scarcity-benchmark.json",
+          "record_id": null
+        }
+      ],
+      "caveat": "Synthetic canonical fixture and frozen holdout manifest only.",
+      "reproducibility": {
+        "deterministic": true,
+        "included_in_fingerprint": true,
+        "fixture_ids": [
+          "SYN-CANONICAL-24-V1"
+        ],
+        "seed_manifest_id": "SYN-CANONICAL-24-HOLDOUT-V1",
+        "benchmark_reproducibility_key": "d0dc76fb9239f4f77320f4b0a0fd5572d0b9a86a80da0448892d5336f205fe21"
+      }
+    }
+  ],
+  "provenance": [
+    {
+      "claim_id": "agent_approval_identities",
+      "record_type": "CarrierRecoveryHistory",
+      "stable_key": "canonical-run:carrier-history",
+      "source": "CarrierRecoveryRepository.history",
+      "record_id": "6f1d6d94-deeb-4b42-b2f3-02cded012835",
+      "coverage_role": "TYPED_HISTORY"
+    },
+    {
+      "claim_id": "agent_no_unavailable_tool_execution",
+      "record_type": "AgentHistory",
+      "stable_key": "canonical-run:agent-history",
+      "source": "AgentRuntimeRepository.history",
+      "record_id": "597ccb58-cc30-42a4-a20b-481a1eb4e010",
+      "coverage_role": "TYPED_HISTORY"
+    },
+    {
+      "claim_id": "agent_no_unavailable_tool_execution",
+      "record_type": "AgentToolRegistryInventory",
+      "stable_key": "canonical-run:registry-inventories",
+      "source": "AgentToolRegistry.available_tools",
+      "record_id": "597ccb58-cc30-42a4-a20b-481a1eb4e010",
+      "coverage_role": "PRIMARY_RECORD"
+    },
+    {
+      "claim_id": "agent_step_count",
+      "record_type": "AgentHistory",
+      "stable_key": "canonical-run:agent-history",
+      "source": "AgentRuntimeRepository.history",
+      "record_id": "597ccb58-cc30-42a4-a20b-481a1eb4e010",
+      "coverage_role": "TYPED_HISTORY"
+    },
+    {
+      "claim_id": "agent_successful_tool_order",
+      "record_type": "AgentHistory",
+      "stable_key": "canonical-run:agent-history",
+      "source": "AgentRuntimeRepository.history",
+      "record_id": "597ccb58-cc30-42a4-a20b-481a1eb4e010",
+      "coverage_role": "TYPED_HISTORY"
+    },
+    {
+      "claim_id": "agent_successful_tool_order",
+      "record_type": "AgentToolRegistryInventory",
+      "stable_key": "canonical-run:registry-inventories",
+      "source": "AgentToolRegistry.available_tools",
+      "record_id": "597ccb58-cc30-42a4-a20b-481a1eb4e010",
+      "coverage_role": "PRIMARY_RECORD"
+    },
+    {
+      "claim_id": "agent_terminal_state",
+      "record_type": "AgentHistory",
+      "stable_key": "canonical-run:agent-history",
+      "source": "AgentRuntimeRepository.history",
+      "record_id": "597ccb58-cc30-42a4-a20b-481a1eb4e010",
+      "coverage_role": "TYPED_HISTORY"
+    },
+    {
+      "claim_id": "agent_wait_kinds",
+      "record_type": "AgentHistory",
+      "stable_key": "canonical-run:agent-history",
+      "source": "AgentRuntimeRepository.history",
+      "record_id": "597ccb58-cc30-42a4-a20b-481a1eb4e010",
+      "coverage_role": "TYPED_HISTORY"
+    },
+    {
+      "claim_id": "agent_zero_model_credentials",
+      "record_type": "ProviderIsolationProbe",
+      "stable_key": "phase8-probe:provider-isolation",
+      "source": "backend.app.evaluation.evidence._provider_isolation_probe",
+      "record_id": null,
+      "coverage_role": "PRIMARY_RECORD"
+    },
+    {
+      "claim_id": "audit_material_action_coverage",
+      "record_type": "AgentHistory",
+      "stable_key": "canonical-run:agent-history",
+      "source": "AgentRuntimeRepository.history",
+      "record_id": "597ccb58-cc30-42a4-a20b-481a1eb4e010",
+      "coverage_role": "TYPED_HISTORY"
+    },
+    {
+      "claim_id": "audit_material_action_coverage",
+      "record_type": "AgentRun",
+      "stable_key": "canonical-run:agent-run",
+      "source": "AgentRuntimeRepository.history",
+      "record_id": "597ccb58-cc30-42a4-a20b-481a1eb4e010",
+      "coverage_role": "PRIMARY_RECORD"
+    },
+    {
+      "claim_id": "audit_material_action_coverage",
+      "record_type": "AgentStep",
+      "stable_key": "canonical-run:agent-step",
+      "source": "AgentRuntimeRepository.history",
+      "record_id": "b9a94a31-fd43-4f77-a489-95e8dbaab9b5",
+      "coverage_role": "PRIMARY_RECORD"
+    },
+    {
+      "claim_id": "audit_material_action_coverage",
+      "record_type": "AgentToolInvocation",
+      "stable_key": "canonical-run:agent-tool-invocation",
+      "source": "AgentRuntimeRepository.history",
+      "record_id": "0dcfe1a8-491a-42f3-9858-0377ef8e650e",
+      "coverage_role": "PRIMARY_RECORD"
+    },
+    {
+      "claim_id": "audit_material_action_coverage",
+      "record_type": "AllocationRevision",
+      "stable_key": "canonical-run:allocation-revision",
+      "source": "DynamicYardRepository.history",
+      "record_id": "346558b2-03e4-48a8-acc1-e9f2ea6db6c8",
+      "coverage_role": "PRIMARY_RECORD"
+    },
+    {
+      "claim_id": "audit_material_action_coverage",
+      "record_type": "AllocationRevision",
+      "stable_key": "supplemental-tradeoff:child-revision",
+      "source": "DynamicYardWorkflow.select_tradeoff",
+      "record_id": "f82a02de-933c-416a-a076-ed790edf1c85",
+      "coverage_role": "PRIMARY_RECORD"
+    },
+    {
+      "claim_id": "audit_material_action_coverage",
+      "record_type": "AllocationTradeoffHistory",
+      "stable_key": "canonical-run:dynamic-history",
+      "source": "DynamicYardWorkflow.history",
+      "record_id": "d099ce7f-aaa6-49d8-a852-eb1cf3fae7aa",
+      "coverage_role": "TYPED_HISTORY"
+    },
+    {
+      "claim_id": "audit_material_action_coverage",
+      "record_type": "AllocationTradeoffOption",
+      "stable_key": "supplemental-tradeoff:option",
+      "source": "DynamicYardWorkflow.select_tradeoff",
+      "record_id": "31b9e82f-393c-4843-bbe2-6870272dfebf",
+      "coverage_role": "PRIMARY_RECORD"
+    },
+    {
+      "claim_id": "audit_material_action_coverage",
+      "record_type": "AllocationTradeoffReview",
+      "stable_key": "supplemental-tradeoff:review",
+      "source": "DynamicYardWorkflow.select_tradeoff",
+      "record_id": "38b4d280-80d1-4b25-a4fa-31fabbd6253c",
+      "coverage_role": "PRIMARY_RECORD"
+    },
+    {
+      "claim_id": "audit_material_action_coverage",
+      "record_type": "AllocationTradeoffSelection",
+      "stable_key": "supplemental-tradeoff:selection",
+      "source": "DynamicYardWorkflow.select_tradeoff",
+      "record_id": "4b370cfc-440d-4270-912b-2734c9cfb3be",
+      "coverage_role": "PRIMARY_RECORD"
+    },
+    {
+      "claim_id": "audit_material_action_coverage",
+      "record_type": "Approval",
+      "stable_key": "canonical-run:operator-approval",
+      "source": "CarrierRecoveryRepository.history",
+      "record_id": "fe4a2794-ef30-4124-8b50-56e5f997403e",
+      "coverage_role": "PRIMARY_RECORD"
+    },
+    {
+      "claim_id": "audit_material_action_coverage",
+      "record_type": "ApprovalBinding",
+      "stable_key": "canonical-run:approval-binding",
+      "source": "CarrierRecoveryRepository.history",
+      "record_id": "fe41d465-4a5d-4d1b-a581-9c78ebb76fc1",
+      "coverage_role": "PRIMARY_RECORD"
+    },
+    {
+      "claim_id": "audit_material_action_coverage",
+      "record_type": "AuditEvent",
+      "stable_key": "canonical-run:audit:allocation_revision.applied",
+      "source": "AuditRepository.list_for_incident",
+      "record_id": "1616a732-47a6-43de-b3ce-760d552dd426",
+      "coverage_role": "AUDIT_EVENT"
+    },
+    {
+      "claim_id": "audit_material_action_coverage",
+      "record_type": "AuditEvent",
+      "stable_key": "canonical-run:audit:cargo.semantic_assessment_completed",
+      "source": "CargoSafetyRepository.history",
+      "record_id": "6202e057-5631-4432-a0aa-e900e5c5a6ef",
+      "coverage_role": "AUDIT_EVENT"
+    },
+    {
+      "claim_id": "audit_material_action_coverage",
+      "record_type": "AuditEvent",
+      "stable_key": "canonical-run:audit:cargo.semantic_safety_evaluated",
+      "source": "CargoSafetyRepository.history",
+      "record_id": "5eb46f73-4280-4d66-95b0-c6eb2a65dcb4",
+      "coverage_role": "AUDIT_EVENT"
+    },
+    {
+      "claim_id": "audit_material_action_coverage",
+      "record_type": "AuditEvent",
+      "stable_key": "canonical-run:audit:carrier.counter_approval_recorded",
+      "source": "CarrierRecoveryRepository.history",
+      "record_id": "f40ae18b-128a-49b6-a52c-350d1514d7d9",
+      "coverage_role": "AUDIT_EVENT"
+    },
+    {
+      "claim_id": "audit_material_action_coverage",
+      "record_type": "AuditEvent",
+      "stable_key": "canonical-run:audit:carrier.response_received",
+      "source": "CarrierRecoveryRepository.history",
+      "record_id": "f94b22af-c9a7-46dd-961f-5ecf2b615956",
+      "coverage_role": "AUDIT_EVENT"
+    },
+    {
+      "claim_id": "audit_material_action_coverage",
+      "record_type": "AuditEvent",
+      "stable_key": "canonical-run:audit:carrier_recovery.replacement_recorded",
+      "source": "CarrierRecoveryRepository.history",
+      "record_id": "d0af7e06-bcf9-4651-b2da-958db1468d0b",
+      "coverage_role": "AUDIT_EVENT"
+    },
+    {
+      "claim_id": "audit_material_action_coverage",
+      "record_type": "AuditEvent",
+      "stable_key": "canonical-run:audit:carrier_recovery.request_approval_recorded",
+      "source": "CarrierRecoveryRepository.history",
+      "record_id": "53d83e91-97ed-405c-bb47-cbd829984529",
+      "coverage_role": "AUDIT_EVENT"
+    },
+    {
+      "claim_id": "audit_material_action_coverage",
+      "record_type": "AuditEvent",
+      "stable_key": "canonical-run:audit:decision.created",
+      "source": "AuditRepository.list_for_incident",
+      "record_id": "747a82b2-6af1-42e8-904e-f8edbe03f080",
+      "coverage_role": "AUDIT_EVENT"
+    },
+    {
+      "claim_id": "audit_material_action_coverage",
+      "record_type": "AuditEvent",
+      "stable_key": "canonical-run:audit:decision.escalated_for_cargo_review",
+      "source": "CargoSafetyRepository.history",
+      "record_id": "08d7f680-0356-43c2-81f9-78b1af82b146",
+      "coverage_role": "AUDIT_EVENT"
+    },
+    {
+      "claim_id": "audit_material_action_coverage",
+      "record_type": "AuditEvent",
+      "stable_key": "canonical-run:audit:expedite_reconsideration.assessed",
+      "source": "AuditRepository.list_for_incident",
+      "record_id": "ec0a05b0-f5c3-47b1-afaa-80ae28d3108b",
+      "coverage_role": "AUDIT_EVENT"
+    },
+    {
+      "claim_id": "audit_material_action_coverage",
+      "record_type": "AuditEvent",
+      "stable_key": "canonical-run:audit:incident.created",
+      "source": "AuditRepository.list_for_incident",
+      "record_id": "db280be5-f295-43a1-8250-b623ab554f41",
+      "coverage_role": "AUDIT_EVENT"
+    },
+    {
+      "claim_id": "audit_material_action_coverage",
+      "record_type": "AuditEvent",
+      "stable_key": "canonical-run:audit:scarcity.evaluation_persisted",
+      "source": "AuditRepository.list_for_incident",
+      "record_id": "17c02f9c-0874-4775-8f4c-4ec062c5ad08",
+      "coverage_role": "AUDIT_EVENT"
+    },
+    {
+      "claim_id": "audit_material_action_coverage",
+      "record_type": "AuditEvent",
+      "stable_key": "canonical-run:audit:yard_forecast.snapshot_ingested",
+      "source": "AuditRepository.list_for_incident",
+      "record_id": "894771d6-f86f-4a4d-9140-e1e51626bb1c",
+      "coverage_role": "AUDIT_EVENT"
+    },
+    {
+      "claim_id": "audit_material_action_coverage",
+      "record_type": "AuditEvent",
+      "stable_key": "supplemental-tradeoff:audit:allocation_revision.applied",
+      "source": "AuditRepository.list_for_incident",
+      "record_id": "103d05dc-5e87-458b-8781-8b050f0fbc49",
+      "coverage_role": "AUDIT_EVENT"
+    },
+    {
+      "claim_id": "audit_material_action_coverage",
+      "record_type": "AuditEvent",
+      "stable_key": "supplemental-tradeoff:audit:option_selected",
+      "source": "AuditRepository.list_for_incident",
+      "record_id": "f0c86660-3e58-418a-972e-a91e56e50fd0",
+      "coverage_role": "AUDIT_EVENT"
+    },
+    {
+      "claim_id": "audit_material_action_coverage",
+      "record_type": "CargoNote",
+      "stable_key": "canonical-run:cargo-note",
+      "source": "CargoSafetyRepository.history",
+      "record_id": "cec9c682-a75a-415a-952d-c1a025606102",
+      "coverage_role": "PRIMARY_RECORD"
+    },
+    {
+      "claim_id": "audit_material_action_coverage",
+      "record_type": "CargoSafetyHistory",
+      "stable_key": "canonical-run:safety-history",
+      "source": "CargoSafetyRepository.history",
+      "record_id": "2ddacd04-2d3a-4dd4-916a-7d79a3f26096",
+      "coverage_role": "TYPED_HISTORY"
+    },
+    {
+      "claim_id": "audit_material_action_coverage",
+      "record_type": "CargoSafetyReview",
+      "stable_key": "canonical-run:cargo-safety-review",
+      "source": "CargoSafetyRepository.history",
+      "record_id": "2ddacd04-2d3a-4dd4-916a-7d79a3f26096",
+      "coverage_role": "PRIMARY_RECORD"
+    },
+    {
+      "claim_id": "audit_material_action_coverage",
+      "record_type": "CarrierRecoveryDecisionLink",
+      "stable_key": "canonical-run:carrier-decision-link",
+      "source": "CarrierRecoveryRepository.history",
+      "record_id": "1c88c4fd-2590-40ac-a6f4-bdde43b3e411",
+      "coverage_role": "PRIMARY_RECORD"
+    },
+    {
+      "claim_id": "audit_material_action_coverage",
+      "record_type": "CarrierRecoveryHistory",
+      "stable_key": "canonical-run:carrier-history",
+      "source": "CarrierRecoveryRepository.history",
+      "record_id": "6f1d6d94-deeb-4b42-b2f3-02cded012835",
+      "coverage_role": "TYPED_HISTORY"
+    },
+    {
+      "claim_id": "audit_material_action_coverage",
+      "record_type": "CarrierResponse",
+      "stable_key": "canonical-run:carrier-response",
+      "source": "CarrierRecoveryRepository.history",
+      "record_id": "943185bb-2aa4-4855-bd7d-232350913567",
+      "coverage_role": "PRIMARY_RECORD"
+    },
+    {
+      "claim_id": "audit_material_action_coverage",
+      "record_type": "ContainerReconsiderationResult",
+      "stable_key": "canonical-run:carrier-reconsideration-result",
+      "source": "CarrierRecoveryRepository.history",
+      "record_id": "b2910f0e-e9ed-4fbf-bf8b-297e38437f10",
+      "coverage_role": "PRIMARY_RECORD"
+    },
+    {
+      "claim_id": "audit_material_action_coverage",
+      "record_type": "Decision",
+      "stable_key": "canonical-run:carrier-replacement-decision",
+      "source": "CarrierRecoveryRepository.history",
+      "record_id": "1c88c4fd-2590-40ac-a6f4-bdde43b3e411",
+      "coverage_role": "PRIMARY_RECORD"
+    },
+    {
+      "claim_id": "audit_material_action_coverage",
+      "record_type": "Decision",
+      "stable_key": "canonical-run:phase2-decision",
+      "source": "build_scarce_capacity_workflow.run",
+      "record_id": "8db7c908-c484-41f0-825f-3253f8b8c2e6",
+      "coverage_role": "PRIMARY_RECORD"
+    },
+    {
+      "claim_id": "audit_material_action_coverage",
+      "record_type": "Decision",
+      "stable_key": "canonical-run:safety-escalation-decision",
+      "source": "CargoSafetyHistory.policy_result",
+      "record_id": "ad5688d0-de79-4233-b952-2495fec96d62",
+      "coverage_role": "PRIMARY_RECORD"
+    },
+    {
+      "claim_id": "audit_material_action_coverage",
+      "record_type": "EffectiveConnectionTiming",
+      "stable_key": "canonical-run:effective-connection-timing",
+      "source": "CarrierRecoveryRepository.history",
+      "record_id": "ac587e2c-3fc4-4ca5-b1b2-2a9b43b15646",
+      "coverage_role": "PRIMARY_RECORD"
+    },
+    {
+      "claim_id": "audit_material_action_coverage",
+      "record_type": "ExpediteCommitment",
+      "stable_key": "canonical-run:expedite-commitment",
+      "source": "DynamicYardRepository.history",
+      "record_id": "4c5964a7-63c1-40b9-b2d0-cf337be94973",
+      "coverage_role": "PRIMARY_RECORD"
+    },
+    {
+      "claim_id": "audit_material_action_coverage",
+      "record_type": "ExpediteReconsiderationAssessment",
+      "stable_key": "canonical-run:reconsideration-assessment",
+      "source": "DynamicYardRepository.history",
+      "record_id": "92e4bb16-2894-42c0-826c-cd509cbf4308",
+      "coverage_role": "PRIMARY_RECORD"
+    },
+    {
+      "claim_id": "audit_material_action_coverage",
+      "record_type": "Incident",
+      "stable_key": "canonical-run:incident",
+      "source": "CanonicalEvidenceRun",
+      "record_id": "d099ce7f-aaa6-49d8-a852-eb1cf3fae7aa",
+      "coverage_role": "PRIMARY_RECORD"
+    },
+    {
+      "claim_id": "audit_material_action_coverage",
+      "record_type": "RTARequest",
+      "stable_key": "canonical-run:rta-request",
+      "source": "CarrierRecoveryRepository.history",
+      "record_id": "3d7c7935-7e89-4acc-831a-0ea6a2deed6d",
+      "coverage_role": "PRIMARY_RECORD"
+    },
+    {
+      "claim_id": "audit_material_action_coverage",
+      "record_type": "RTARequestContext",
+      "stable_key": "canonical-run:rta-request-context",
+      "source": "CarrierRecoveryRepository.history",
+      "record_id": "6f1d6d94-deeb-4b42-b2f3-02cded012835",
+      "coverage_role": "PRIMARY_RECORD"
+    },
+    {
+      "claim_id": "audit_material_action_coverage",
+      "record_type": "ScarcityEvaluationReport",
+      "stable_key": "canonical-run:phase2-evaluation",
+      "source": "build_scarce_capacity_workflow.run",
+      "record_id": "a0ecf564-809f-4925-a8c4-17905476d3a1",
+      "coverage_role": "PRIMARY_RECORD"
+    },
+    {
+      "claim_id": "audit_material_action_coverage",
+      "record_type": "SemanticSafetyAssessment",
+      "stable_key": "canonical-run:semantic-safety-assessment",
+      "source": "CargoSafetyRepository.history",
+      "record_id": "fabc7368-d5ed-48cb-964a-df6623d9269e",
+      "coverage_role": "PRIMARY_RECORD"
+    },
+    {
+      "claim_id": "audit_material_action_coverage",
+      "record_type": "SemanticSafetyPolicyResult",
+      "stable_key": "canonical-run:semantic-safety-policy",
+      "source": "CargoSafetyRepository.history",
+      "record_id": "58dbe63d-4382-4bb8-9955-0416bb38a0ac",
+      "coverage_role": "PRIMARY_RECORD"
+    },
+    {
+      "claim_id": "audit_material_action_coverage",
+      "record_type": "YardForecastSnapshot",
+      "stable_key": "canonical-run:yard-snapshot",
+      "source": "DynamicYardRepository.history",
+      "record_id": "e87ba212-811c-49c0-a308-de8159448012",
+      "coverage_role": "PRIMARY_RECORD"
+    },
+    {
+      "claim_id": "audit_provenance_map_complete",
+      "record_type": "EvidenceRegistryProbe",
+      "stable_key": "phase8-report:provenance-completeness",
+      "source": "build_provenance_map and EvidenceReportBody validation",
+      "record_id": null,
+      "coverage_role": "PRIMARY_RECORD"
+    },
+    {
+      "claim_id": "authority_carrier_silence_is_absence",
+      "record_type": "CarrierRecoveryHistory",
+      "stable_key": "authority-boundaries:SYN-CANONICAL-24-V1",
+      "source": "CarrierRecoveryWorkflow and AgentToolRegistry",
+      "record_id": null,
+      "coverage_role": "TYPED_HISTORY"
+    },
+    {
+      "claim_id": "authority_counter_approval_required",
+      "record_type": "CarrierRecoveryHistory",
+      "stable_key": "authority-boundaries:SYN-CANONICAL-24-V1",
+      "source": "CarrierRecoveryWorkflow and AgentToolRegistry",
+      "record_id": null,
+      "coverage_role": "TYPED_HISTORY"
+    },
+    {
+      "claim_id": "authority_counter_fingerprint_bound",
+      "record_type": "CarrierRecoveryHistory",
+      "stable_key": "authority-boundaries:SYN-CANONICAL-24-V1",
+      "source": "CarrierRecoveryWorkflow and AgentToolRegistry",
+      "record_id": null,
+      "coverage_role": "TYPED_HISTORY"
+    },
+    {
+      "claim_id": "authority_no_agent_approval",
+      "record_type": "CarrierRecoveryHistory",
+      "stable_key": "authority-boundaries:SYN-CANONICAL-24-V1",
+      "source": "CarrierRecoveryWorkflow and AgentToolRegistry",
+      "record_id": null,
+      "coverage_role": "TYPED_HISTORY"
+    },
+    {
+      "claim_id": "authority_no_carrier_schedule_mutation",
+      "record_type": "CarrierRecoveryHistory",
+      "stable_key": "authority-boundaries:SYN-CANONICAL-24-V1",
+      "source": "CarrierRecoveryWorkflow and AgentToolRegistry",
+      "record_id": null,
+      "coverage_role": "TYPED_HISTORY"
+    },
+    {
+      "claim_id": "authority_no_forbidden_tools",
+      "record_type": "CarrierRecoveryHistory",
+      "stable_key": "authority-boundaries:SYN-CANONICAL-24-V1",
+      "source": "CarrierRecoveryWorkflow and AgentToolRegistry",
+      "record_id": null,
+      "coverage_role": "TYPED_HISTORY"
+    },
+    {
+      "claim_id": "authority_request_approval_required",
+      "record_type": "CarrierRecoveryHistory",
+      "stable_key": "authority-boundaries:SYN-CANONICAL-24-V1",
+      "source": "CarrierRecoveryWorkflow and AgentToolRegistry",
+      "record_id": null,
+      "coverage_role": "TYPED_HISTORY"
+    },
+    {
+      "claim_id": "authority_request_fingerprint_bound",
+      "record_type": "CarrierRecoveryHistory",
+      "stable_key": "authority-boundaries:SYN-CANONICAL-24-V1",
+      "source": "CarrierRecoveryWorkflow and AgentToolRegistry",
+      "record_id": null,
+      "coverage_role": "TYPED_HISTORY"
+    },
+    {
+      "claim_id": "authority_timeout_recomputes",
+      "record_type": "CarrierRecoveryHistory",
+      "stable_key": "authority-boundaries:SYN-CANONICAL-24-V1",
+      "source": "CarrierRecoveryWorkflow and AgentToolRegistry",
+      "record_id": null,
+      "coverage_role": "TYPED_HISTORY"
+    },
+    {
+      "claim_id": "deterministic_local_runtime",
+      "record_type": "LocalRuntimeMeasurement",
+      "stable_key": "canonical-run:local-runtime",
+      "source": "evidence_runtime.measure_local_runtime",
+      "record_id": null,
+      "coverage_role": "PRIMARY_RECORD"
+    },
+    {
+      "claim_id": "deterministic_tool_call_count",
+      "record_type": "AgentHistory",
+      "stable_key": "canonical-run:agent-history",
+      "source": "AgentRuntimeRepository.history",
+      "record_id": "597ccb58-cc30-42a4-a20b-481a1eb4e010",
+      "coverage_role": "TYPED_HISTORY"
+    },
+    {
+      "claim_id": "dynamic_committed_allocations_immutable",
+      "record_type": "AllocationTradeoffHistory",
+      "stable_key": "dynamic-yard:SYN-CANONICAL-24-V1",
+      "source": "DynamicYardRepository.history",
+      "record_id": "c62b6304-ea0e-4fa1-8e63-080a680e77a7",
+      "coverage_role": "TYPED_HISTORY"
+    },
+    {
+      "claim_id": "dynamic_evidence_precedes_carrier_mutation",
+      "record_type": "AllocationTradeoffHistory",
+      "stable_key": "dynamic-yard:SYN-CANONICAL-24-V1",
+      "source": "DynamicYardRepository.history",
+      "record_id": "c62b6304-ea0e-4fa1-8e63-080a680e77a7",
+      "coverage_role": "TYPED_HISTORY"
+    },
+    {
+      "claim_id": "dynamic_expected_preserved_change",
+      "record_type": "AllocationTradeoffHistory",
+      "stable_key": "dynamic-yard:SYN-CANONICAL-24-V1",
+      "source": "DynamicYardRepository.history",
+      "record_id": "c62b6304-ea0e-4fa1-8e63-080a680e77a7",
+      "coverage_role": "TYPED_HISTORY"
+    },
+    {
+      "claim_id": "dynamic_phase2_worlds_reconstructed",
+      "record_type": "ScarcityEvaluationReport",
+      "stable_key": "phase2:SYN-CANONICAL-24-V1:20260822",
+      "source": "ScarcityEvaluationRepository",
+      "record_id": "b11c5600-2633-4e23-a841-8d09114fb38e",
+      "coverage_role": "PRIMARY_RECORD"
+    },
+    {
+      "claim_id": "dynamic_phase3_incompatible_plan_blocked",
+      "record_type": "AllocationTradeoffHistory",
+      "stable_key": "dynamic-yard:SYN-CANONICAL-24-V1",
+      "source": "DynamicYardRepository.history",
+      "record_id": "c62b6304-ea0e-4fa1-8e63-080a680e77a7",
+      "coverage_role": "TYPED_HISTORY"
+    },
+    {
+      "claim_id": "dynamic_preserved_total_change",
+      "record_type": "AllocationTradeoffHistory",
+      "stable_key": "dynamic-yard:SYN-CANONICAL-24-V1",
+      "source": "DynamicYardRepository.history",
+      "record_id": "c62b6304-ea0e-4fa1-8e63-080a680e77a7",
+      "coverage_role": "TYPED_HISTORY"
+    },
+    {
+      "claim_id": "dynamic_reconsideration_r0_r1",
+      "record_type": "AllocationTradeoffHistory",
+      "stable_key": "dynamic-yard:SYN-CANONICAL-24-V1",
+      "source": "DynamicYardRepository.history",
+      "record_id": "c62b6304-ea0e-4fa1-8e63-080a680e77a7",
+      "coverage_role": "TYPED_HISTORY"
+    },
+    {
+      "claim_id": "full_18_preserved_5_rolled_1_escalated",
+      "record_type": "AllocationTradeoffHistory",
+      "stable_key": "dynamic-yard:SYN-CANONICAL-24-V1",
+      "source": "DynamicYardRepository.history",
+      "record_id": "c62b6304-ea0e-4fa1-8e63-080a680e77a7",
+      "coverage_role": "TYPED_HISTORY"
+    },
+    {
+      "claim_id": "full_18_preserved_5_rolled_1_escalated",
+      "record_type": "CargoSafetyHistory",
+      "stable_key": "canonical-run:safety-history",
+      "source": "CargoSafetyRepository.history",
+      "record_id": "2ddacd04-2d3a-4dd4-916a-7d79a3f26096",
+      "coverage_role": "TYPED_HISTORY"
+    },
+    {
+      "claim_id": "full_18_preserved_5_rolled_1_escalated",
+      "record_type": "CarrierRecoveryHistory",
+      "stable_key": "canonical-run:carrier-history",
+      "source": "CarrierRecoveryRepository.history",
+      "record_id": "6f1d6d94-deeb-4b42-b2f3-02cded012835",
+      "coverage_role": "TYPED_HISTORY"
+    },
+    {
+      "claim_id": "human_tradeoff_agent_cannot_select",
+      "record_type": "AllocationTradeoffHistory",
+      "stable_key": "human-tradeoff:SYN-CANONICAL-24-V1",
+      "source": "DynamicYardWorkflow, AgentToolRegistry, canonical replay projector",
+      "record_id": null,
+      "coverage_role": "TYPED_HISTORY"
+    },
+    {
+      "claim_id": "human_tradeoff_auto_replay_halts",
+      "record_type": "AllocationTradeoffHistory",
+      "stable_key": "human-tradeoff:SYN-CANONICAL-24-V1",
+      "source": "DynamicYardWorkflow, AgentToolRegistry, canonical replay projector",
+      "record_id": null,
+      "coverage_role": "TYPED_HISTORY"
+    },
+    {
+      "claim_id": "human_tradeoff_boundary",
+      "record_type": "AllocationTradeoffHistory",
+      "stable_key": "human-tradeoff:SYN-CANONICAL-24-V1",
+      "source": "DynamicYardWorkflow, AgentToolRegistry, canonical replay projector",
+      "record_id": null,
+      "coverage_role": "TYPED_HISTORY"
+    },
+    {
+      "claim_id": "human_tradeoff_committed_slots_immutable",
+      "record_type": "AllocationTradeoffHistory",
+      "stable_key": "human-tradeoff:SYN-CANONICAL-24-V1",
+      "source": "DynamicYardWorkflow, AgentToolRegistry, canonical replay projector",
+      "record_id": null,
+      "coverage_role": "TYPED_HISTORY"
+    },
+    {
+      "claim_id": "human_tradeoff_fingerprint_bound",
+      "record_type": "AllocationTradeoffHistory",
+      "stable_key": "human-tradeoff:SYN-CANONICAL-24-V1",
+      "source": "DynamicYardWorkflow, AgentToolRegistry, canonical replay projector",
+      "record_id": null,
+      "coverage_role": "TYPED_HISTORY"
+    },
+    {
+      "claim_id": "safety_automation_blocked",
+      "record_type": "CargoSafetyHistory",
+      "stable_key": "canonical-run:safety-history",
+      "source": "CargoSafetyRepository.history",
+      "record_id": "2ddacd04-2d3a-4dd4-916a-7d79a3f26096",
+      "coverage_role": "TYPED_HISTORY"
+    },
+    {
+      "claim_id": "safety_canonical_contradiction",
+      "record_type": "CargoSafetyHistory",
+      "stable_key": "canonical-run:safety-history",
+      "source": "CargoSafetyRepository.history",
+      "record_id": "2ddacd04-2d3a-4dd4-916a-7d79a3f26096",
+      "coverage_role": "TYPED_HISTORY"
+    },
+    {
+      "claim_id": "safety_checker_failure_fails_closed",
+      "record_type": "CargoSafetyHistory",
+      "stable_key": "phase8-probe:safety-checker-failure",
+      "source": "CargoSafetyRepository.history",
+      "record_id": "0e02915f-e643-48cd-8f0f-2bbebaee6870",
+      "coverage_role": "TYPED_HISTORY"
+    },
+    {
+      "claim_id": "safety_checker_scope_limited",
+      "record_type": "DeterministicSafetyProbe",
+      "stable_key": "phase8-probe:safety-checker-scope",
+      "source": "CanonicalReplaySemanticChecker.check",
+      "record_id": null,
+      "coverage_role": "PRIMARY_RECORD"
+    },
+    {
+      "claim_id": "safety_pending_review_blocks_bypass",
+      "record_type": "AgentHistory",
+      "stable_key": "canonical-run:agent-history",
+      "source": "AgentRuntimeRepository.history",
+      "record_id": "597ccb58-cc30-42a4-a20b-481a1eb4e010",
+      "coverage_role": "TYPED_HISTORY"
+    },
+    {
+      "claim_id": "safety_pending_review_blocks_bypass",
+      "record_type": "AgentToolRegistryInventory",
+      "stable_key": "canonical-run:registry-inventories",
+      "source": "AgentToolRegistry.available_tools",
+      "record_id": "597ccb58-cc30-42a4-a20b-481a1eb4e010",
+      "coverage_role": "PRIMARY_RECORD"
+    },
+    {
+      "claim_id": "safety_pending_review_blocks_bypass",
+      "record_type": "CargoSafetyHistory",
+      "stable_key": "canonical-run:safety-history",
+      "source": "CargoSafetyRepository.history",
+      "record_id": "2ddacd04-2d3a-4dd4-916a-7d79a3f26096",
+      "coverage_role": "TYPED_HISTORY"
+    },
+    {
+      "claim_id": "safety_policy_owns_disposition",
+      "record_type": "CargoSafetyHistory",
+      "stable_key": "canonical-run:safety-history",
+      "source": "CargoSafetyRepository.history",
+      "record_id": "2ddacd04-2d3a-4dd4-916a-7d79a3f26096",
+      "coverage_role": "TYPED_HISTORY"
+    },
+    {
+      "claim_id": "safety_terminal_escalation",
+      "record_type": "AgentHistory",
+      "stable_key": "canonical-run:agent-history",
+      "source": "AgentRuntimeRepository.history",
+      "record_id": "597ccb58-cc30-42a4-a20b-481a1eb4e010",
+      "coverage_role": "TYPED_HISTORY"
+    },
+    {
+      "claim_id": "safety_terminal_escalation",
+      "record_type": "CargoSafetyHistory",
+      "stable_key": "canonical-run:safety-history",
+      "source": "CargoSafetyRepository.history",
+      "record_id": "2ddacd04-2d3a-4dd4-916a-7d79a3f26096",
+      "coverage_role": "TYPED_HISTORY"
+    },
+    {
+      "claim_id": "scarcity_expected_preserved_delta",
+      "record_type": "ScarcityBenchmarkReport",
+      "stable_key": "scarcity-holdout:SYN-CANONICAL-24-HOLDOUT-V1",
+      "source": "docs/evaluations/2026-08-22-scarcity-benchmark.json",
+      "record_id": null,
+      "coverage_role": "FROZEN_ARTIFACT"
+    },
+    {
+      "claim_id": "scarcity_expedite_slot_cap",
+      "record_type": "ScarcityBenchmarkReport",
+      "stable_key": "scarcity-holdout:SYN-CANONICAL-24-HOLDOUT-V1",
+      "source": "docs/evaluations/2026-08-22-scarcity-benchmark.json",
+      "record_id": null,
+      "coverage_role": "FROZEN_ARTIFACT"
+    },
+    {
+      "claim_id": "scarcity_holdout_world_count",
+      "record_type": "ScarcityBenchmarkReport",
+      "stable_key": "scarcity-holdout:SYN-CANONICAL-24-HOLDOUT-V1",
+      "source": "docs/evaluations/2026-08-22-scarcity-benchmark.json",
+      "record_id": null,
+      "coverage_role": "FROZEN_ARTIFACT"
+    },
+    {
+      "claim_id": "scarcity_reproducibility_key",
+      "record_type": "ScarcityBenchmarkReport",
+      "stable_key": "scarcity-holdout:SYN-CANONICAL-24-HOLDOUT-V1",
+      "source": "docs/evaluations/2026-08-22-scarcity-benchmark.json",
+      "record_id": null,
+      "coverage_role": "FROZEN_ARTIFACT"
+    },
+    {
+      "claim_id": "scarcity_scenario_aware_beats_p50",
+      "record_type": "ScarcityBenchmarkReport",
+      "stable_key": "scarcity-holdout:SYN-CANONICAL-24-HOLDOUT-V1",
+      "source": "docs/evaluations/2026-08-22-scarcity-benchmark.json",
+      "record_id": null,
+      "coverage_role": "FROZEN_ARTIFACT"
+    },
+    {
+      "claim_id": "scarcity_zero_capacity_violations",
+      "record_type": "ScarcityBenchmarkReport",
+      "stable_key": "scarcity-holdout:SYN-CANONICAL-24-HOLDOUT-V1",
+      "source": "docs/evaluations/2026-08-22-scarcity-benchmark.json",
+      "record_id": null,
+      "coverage_role": "FROZEN_ARTIFACT"
+    },
+    {
+      "claim_id": "scarcity_zero_unsafe_allocations",
+      "record_type": "ScarcityBenchmarkReport",
+      "stable_key": "scarcity-holdout:SYN-CANONICAL-24-HOLDOUT-V1",
+      "source": "docs/evaluations/2026-08-22-scarcity-benchmark.json",
+      "record_id": null,
+      "coverage_role": "FROZEN_ARTIFACT"
+    }
+  ],
+  "runtime": {
+    "repetitions": 20,
+    "run_durations_ms": [
+      579.8507,
+      605.5361,
+      544.3329,
+      624.0044,
+      532.3369,
+      638.929,
+      603.3304,
+      601.6444,
+      613.9197,
+      633.9367,
+      671.7716,
+      622.1912,
+      584.8642,
+      582.1826,
+      648.1194,
+      582.7135,
+      606.1323,
+      618.9343,
+      685.1354,
+      648.9133
+    ],
+    "canonical_run_wall_clock_ms": 579.8507,
+    "p50_local_runtime_ms": 610.0260000000001,
+    "p95_local_runtime_ms": 671.7716,
+    "step_count": 6,
+    "successful_tool_call_count": 5,
+    "label": "LOCAL_MACHINE_DEPENDENT",
+    "production_sla_claimed": false,
+    "python_version": "3.12.13 (main, Jun 23 2026, 15:23:43) [MSC v.1944 64 bit (AMD64)]",
+    "platform": "Windows-11-10.0.26200-SP0"
+  },
+  "deterministic_fingerprint": "d707b991f87cc865300e431594c6792766744ee69523da98c796d67f015ee543"
+}
