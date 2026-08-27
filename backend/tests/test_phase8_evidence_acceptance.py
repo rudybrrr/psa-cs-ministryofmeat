@@ -12,6 +12,7 @@ import pytest
 
 from backend.app.domain.evidence import (
     ClaimStatus,
+    CoverageRole,
     EvidenceInvariantFailure,
     Phase8EvidenceReport,
     normalized_evidence_payload,
@@ -105,6 +106,21 @@ def _reported_provenance_keys(
     )
 
 
+def _provenance_semantics(report: Phase8EvidenceReport) -> Counter[tuple[object, ...]]:
+    """Return provenance fields that must remain stable across regenerations."""
+
+    return Counter(
+        (
+            entry.claim_id,
+            entry.record_type,
+            entry.stable_key,
+            entry.source,
+            entry.coverage_role,
+        )
+        for entry in report.provenance
+    )
+
+
 def test_two_unchanged_runs_have_equal_deterministic_evidence() -> None:
     first = Phase8EvidenceService(REPO_ROOT).run(runtime_repetitions=2)
     second = Phase8EvidenceService(REPO_ROOT).run(runtime_repetitions=2)
@@ -138,16 +154,7 @@ def test_claim_statuses_values_tool_order_and_provenance_are_exact() -> None:
         "DEFERRED_TO_PHASE_9"
     }
     assert isinstance(terminal_value, dict)
-    complete_terminal_classification = (
-        terminal_value["complete_terminal_classification_count"]
-        == terminal_value["required_container_count"]
-        == 24
-    )
-    assert terminal.status is (
-        ClaimStatus.VERIFIED
-        if complete_terminal_classification
-        else ClaimStatus.NOT_ESTABLISHED
-    )
+    assert terminal.status is ClaimStatus.NOT_ESTABLISHED
     assert claims["scarcity_reproducibility_key"].observed_value == (
         "d0dc76fb9239f4f77320f4b0a0fd5572d0b9a86a80da0448892d5336f205fe21"
     )
@@ -275,3 +282,27 @@ def test_committed_artifact_matches_a_fresh_semantic_regeneration() -> None:
     assert normalized_evidence_payload(generated.body()) == normalized_evidence_payload(
         committed.body()
     )
+    assert _provenance_semantics(generated) == _provenance_semantics(committed)
+
+
+@pytest.mark.parametrize(
+    ("field", "replacement"),
+    [
+        ("claim_id", "mutated_claim"),
+        ("record_type", "MutatedRecord"),
+        ("stable_key", "mutated:stable-key"),
+        ("source", "mutated source"),
+        ("coverage_role", CoverageRole.FROZEN_ARTIFACT),
+    ],
+)
+def test_provenance_semantics_detects_each_stable_mapping_mutation(
+    field: str, replacement: object
+) -> None:
+    report = Phase8EvidenceService(REPO_ROOT).run(runtime_repetitions=1)
+    original_entry = report.provenance[0]
+    mutated_entry = original_entry.model_copy(update={field: replacement})
+    mutated_report = report.model_copy(
+        update={"provenance": (mutated_entry, *report.provenance[1:])}
+    )
+
+    assert _provenance_semantics(report) != _provenance_semantics(mutated_report)
