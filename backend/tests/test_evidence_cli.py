@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from backend.app.domain.evidence import (
     ClaimStatus,
@@ -93,6 +94,9 @@ def test_service_builds_complete_sorted_registry(report: Phase8EvidenceReport) -
         "canonical_model_identity": "canonical-replay-agent-v1",
         "canonical_checker_identity": "canonical-replay-deterministic",
     }
+    assert claims["agent_zero_model_credentials"].evidence_refs[0].source == (
+        "backend.app.evaluation.evidence._provider_isolation_probe"
+    )
 
 
 def test_status_boundaries_are_honest_and_provenance_is_complete(
@@ -179,6 +183,19 @@ def test_markdown_is_an_ordered_projection_of_validated_report(
     assert "![" not in rendered
 
 
+def test_markdown_revalidates_constructed_report_before_projection(
+    report: Phase8EvidenceReport,
+) -> None:
+    from backend.app.evaluation.evidence_markdown import render_evidence_summary
+
+    malformed = report.model_copy(
+        update={"claims": (report.claims[0], report.claims[0])}
+    )
+
+    with pytest.raises(ValidationError, match="claim IDs must be unique"):
+        render_evidence_summary(malformed)
+
+
 def test_artifact_writer_serializes_schema_valid_json_and_markdown(
     report: Phase8EvidenceReport, tmp_path: Path
 ) -> None:
@@ -197,6 +214,52 @@ def test_artifact_writer_serializes_schema_valid_json_and_markdown(
     )
     assert not json_path.with_name(json_path.name + ".tmp").exists()
     assert not markdown_path.with_name(markdown_path.name + ".tmp").exists()
+
+
+@pytest.mark.parametrize(
+    ("json_name", "markdown_name", "protected_name"),
+    (
+        ("evidence", "evidence.tmp", "evidence.tmp"),
+        ("evidence.tmp", "evidence", "evidence.tmp"),
+    ),
+)
+def test_cli_rejects_cross_colliding_destination_and_temp_paths_before_writing(
+    report: Phase8EvidenceReport,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    json_name: str,
+    markdown_name: str,
+    protected_name: str,
+) -> None:
+    from backend.app.evaluation import evidence
+
+    json_path = tmp_path / json_name
+    markdown_path = tmp_path / markdown_name
+    protected_path = tmp_path / protected_name
+    untouched_path = (
+        json_path if protected_path != json_path else markdown_path
+    )
+    protected_path.write_text("previous-artifact", encoding="utf-8")
+    monkeypatch.setattr(
+        evidence.Phase8EvidenceService,
+        "run",
+        lambda self, runtime_repetitions=20: report,
+    )
+
+    exit_code = evidence.main(
+        [
+            "--output-json",
+            str(json_path),
+            "--output-markdown",
+            str(markdown_path),
+            "--runtime-repetitions",
+            "1",
+        ]
+    )
+
+    assert exit_code == 2
+    assert protected_path.read_text(encoding="utf-8") == "previous-artifact"
+    assert not untouched_path.exists()
 
 
 def test_artifact_writer_does_not_overwrite_pair_when_second_temp_write_fails(
@@ -299,6 +362,48 @@ def test_main_maps_success_invariant_and_malformed_errors_without_overwrite(
     assert evidence.main(args) == 2
     assert json_path.read_text(encoding="utf-8") == previous_json
     assert markdown_path.read_text(encoding="utf-8") == previous_markdown
+
+
+@pytest.mark.parametrize(
+    "structural_error",
+    (KeyError("missing aggregate field"), TypeError("wrong aggregate shape")),
+)
+def test_main_maps_structural_aggregate_errors_to_exit_2_without_overwrite(
+    report: Phase8EvidenceReport,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    structural_error: Exception,
+) -> None:
+    from backend.app.evaluation import evidence
+
+    json_path = tmp_path / "cli.json"
+    markdown_path = tmp_path / "cli.md"
+    json_path.write_text("previous-json", encoding="utf-8")
+    markdown_path.write_text("previous-markdown", encoding="utf-8")
+
+    def malformed_aggregate(self, runtime_repetitions=20):
+        raise structural_error
+
+    monkeypatch.setattr(
+        evidence.Phase8EvidenceService,
+        "run",
+        malformed_aggregate,
+    )
+
+    exit_code = evidence.main(
+        [
+            "--output-json",
+            str(json_path),
+            "--output-markdown",
+            str(markdown_path),
+            "--runtime-repetitions",
+            "1",
+        ]
+    )
+
+    assert exit_code == 2
+    assert json_path.read_text(encoding="utf-8") == "previous-json"
+    assert markdown_path.read_text(encoding="utf-8") == "previous-markdown"
 
 
 def test_cli_rejects_runtime_repetition_below_one(tmp_path: Path) -> None:

@@ -444,7 +444,9 @@ def _credential_isolation_claim(observation: dict[str, object]) -> EvidenceClaim
             EvidenceReference(
                 record_type="ProviderIsolationProbe",
                 stable_key="phase8-probe:provider-isolation",
-                source="Phase8EvidenceService._provider_isolation_probe",
+                source=(
+                    "backend.app.evaluation.evidence._provider_isolation_probe"
+                ),
             ),
         ),
         caveat="Credential-free deterministic canonical replay only; live use is deferred.",
@@ -679,14 +681,15 @@ def write_evidence_artifacts(
     validated = Phase8EvidenceReport.model_validate(report.model_dump(mode="python"))
     json_text = validated.model_dump_json(indent=2) + "\n"
     markdown_text = render_evidence_summary(validated)
-    json_path = Path(json_path)
-    markdown_path = Path(markdown_path)
-    if json_path == markdown_path:
-        raise ValueError("JSON and Markdown output paths must be different")
+    json_path = Path(json_path).resolve(strict=False)
+    markdown_path = Path(markdown_path).resolve(strict=False)
     json_tmp = json_path.with_name(json_path.name + ".tmp")
     markdown_tmp = markdown_path.with_name(markdown_path.name + ".tmp")
-    if json_tmp == markdown_tmp:
-        raise ValueError("JSON and Markdown temporary paths must be different")
+    artifact_paths = (json_path, markdown_path, json_tmp, markdown_tmp)
+    if len(set(artifact_paths)) != len(artifact_paths):
+        raise ValueError(
+            "JSON/Markdown destinations and temporary paths must be pairwise distinct"
+        )
 
     json_previous = json_path.read_bytes() if json_path.exists() else None
     json_replaced = False
@@ -738,7 +741,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     except EvidenceInvariantFailure as error:
         print(f"VERIFIED invariant failed: {error}", file=sys.stderr)
         return 1
-    except (ValidationError, ValueError, OSError, json.JSONDecodeError) as error:
+    except (
+        ValidationError,
+        ValueError,
+        KeyError,
+        TypeError,
+        OSError,
+        json.JSONDecodeError,
+    ) as error:
         print(f"Phase 8 evidence error: {error}", file=sys.stderr)
         return 2
     return 0

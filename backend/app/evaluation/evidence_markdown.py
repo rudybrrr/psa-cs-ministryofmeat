@@ -47,6 +47,9 @@ def render_evidence_summary(report: Phase8EvidenceReport) -> str:
 
     if not isinstance(report, Phase8EvidenceReport):
         raise ValueError("render_evidence_summary requires Phase8EvidenceReport")
+    report = Phase8EvidenceReport.model_validate(
+        report.model_dump(mode="python", round_trip=True)
+    )
 
     by_id = {claim.claim_id: claim for claim in report.claims}
     headline_ids = (
