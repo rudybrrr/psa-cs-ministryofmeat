@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from backend.app.domain.evidence import (
@@ -9,6 +11,10 @@ from backend.app.domain.evidence import (
     EvidenceReference,
 )
 from backend.app.evaluation.evidence_audit import (
+    _dynamic_audit_probe,
+    _missing_categories,
+    _tradeoff_audit_probe,
+    _TradeoffAuditProbe,
     build_provenance_map,
     collect_audit_claims,
 )
@@ -43,6 +49,176 @@ def test_missing_agent_invocation_history_fails_verified_coverage(session) -> No
 
     with pytest.raises(EvidenceInvariantFailure, match="agent_orchestration"):
         collect_audit_claims(broken)
+
+
+def test_coverage_references_real_dynamic_and_tradeoff_audit_chains(session) -> None:
+    canonical_evidence_run = run_canonical_evidence_scenario(session)
+
+    claim = collect_audit_claims(canonical_evidence_run)[0]
+    references = {
+        (reference.record_type, reference.stable_key, reference.source)
+        for reference in claim.evidence_refs
+    }
+
+    assert {
+        "AllocationTradeoffReview",
+        "AllocationTradeoffOption",
+        "AllocationTradeoffSelection",
+    } <= {reference.record_type for reference in claim.evidence_refs}
+    assert {
+        ("AuditEvent", "audit:scarcity.evaluation_persisted", "AuditRepository.list_for_incident"),
+        ("AuditEvent", "audit:expedite_reconsideration.assessed", "AuditRepository.list_for_incident"),
+        ("AuditEvent", "audit:allocation_revision.applied", "AuditRepository.list_for_incident"),
+        ("AuditEvent", "audit:allocation_tradeoff.option_selected", "AuditRepository.list_for_incident"),
+    } <= references
+
+
+def test_broken_replacement_link_fails_coverage(session) -> None:
+    canonical_evidence_run = run_canonical_evidence_scenario(session)
+    fallback = next(
+        decision
+        for decision in canonical_evidence_run.carrier_history.decisions
+        if decision.supersedes is None
+    )
+    broken_links = tuple(
+        link.model_copy(update={"decision_id": fallback.id})
+        for link in canonical_evidence_run.carrier_history.decision_links
+    )
+    broken = canonical_evidence_run.model_copy(
+        update={
+            "carrier_history": canonical_evidence_run.carrier_history.model_copy(
+                update={"decision_links": broken_links}
+            )
+        }
+    )
+
+    with pytest.raises(EvidenceInvariantFailure, match="carrier_recovery_replacement"):
+        collect_audit_claims(broken)
+
+
+def test_safety_escalation_requires_matching_decision_audit_event(session) -> None:
+    canonical_evidence_run = run_canonical_evidence_scenario(session)
+    broken_events = tuple(
+        event.model_copy(update={"payload": {"decision_id": "wrong-decision"}})
+        if event.event_type == "decision.escalated_for_cargo_review"
+        else event
+        for event in canonical_evidence_run.safety_history.audit_events
+    )
+    broken = canonical_evidence_run.model_copy(
+        update={
+            "safety_history": canonical_evidence_run.safety_history.model_copy(
+                update={"audit_events": broken_events}
+            )
+        }
+    )
+
+    with pytest.raises(EvidenceInvariantFailure, match="safety_escalation"):
+        collect_audit_claims(broken)
+
+
+def test_missing_response_without_timeout_evidence_fails_without_indexing(session) -> None:
+    canonical_evidence_run = run_canonical_evidence_scenario(session)
+    broken = canonical_evidence_run.model_copy(
+        update={
+            "carrier_history": canonical_evidence_run.carrier_history.model_copy(
+                update={"carrier_responses": ()}
+            )
+        }
+    )
+
+    with pytest.raises(EvidenceInvariantFailure, match="carrier_response_timeout"):
+        collect_audit_claims(broken)
+
+
+def test_carrier_response_audit_event_must_identify_the_persisted_response(session) -> None:
+    canonical_evidence_run = run_canonical_evidence_scenario(session)
+    broken_events = tuple(
+        event.model_copy(
+            update={
+                "payload": {
+                    **event.payload,
+                    "carrier_response_id": "wrong-response",
+                }
+            }
+        )
+        if event.event_type == "carrier.response_received"
+        else event
+        for event in canonical_evidence_run.carrier_history.audit_events
+    )
+    broken = canonical_evidence_run.model_copy(
+        update={
+            "carrier_history": canonical_evidence_run.carrier_history.model_copy(
+                update={"audit_events": broken_events}
+            )
+        }
+    )
+
+    with pytest.raises(EvidenceInvariantFailure, match="carrier_response_timeout"):
+        collect_audit_claims(broken)
+
+
+def test_safety_escalation_audit_event_must_identify_its_review(session) -> None:
+    canonical_evidence_run = run_canonical_evidence_scenario(session)
+    broken_events = tuple(
+        event.model_copy(
+            update={"payload": {**event.payload, "review_id": "wrong-review"}}
+        )
+        if event.event_type == "decision.escalated_for_cargo_review"
+        else event
+        for event in canonical_evidence_run.safety_history.audit_events
+    )
+    broken = canonical_evidence_run.model_copy(
+        update={
+            "safety_history": canonical_evidence_run.safety_history.model_copy(
+                update={"audit_events": broken_events}
+            )
+        }
+    )
+
+    with pytest.raises(EvidenceInvariantFailure, match="safety_escalation"):
+        collect_audit_claims(broken)
+
+
+def test_reconsideration_probe_requires_events_linked_to_its_durable_records(session) -> None:
+    canonical_evidence_run = run_canonical_evidence_scenario(session)
+    dynamic_probe = _dynamic_audit_probe()
+    broken_events = tuple(
+        event.model_copy(
+            update={"payload": {**event.payload, "evaluation_id": "wrong-report"}}
+        )
+        if event.event_type == "scarcity.evaluation_persisted"
+        else event
+        for event in dynamic_probe.audit_events
+    )
+
+    missing = _missing_categories(
+        canonical_evidence_run,
+        replace(dynamic_probe, audit_events=broken_events),
+        _tradeoff_audit_probe(),
+    )
+
+    assert "allocation_reconsideration" in missing
+
+
+def test_tradeoff_probe_requires_review_option_selection_and_revision_lineage(session) -> None:
+    canonical_evidence_run = run_canonical_evidence_scenario(session)
+    tradeoff_probe = _tradeoff_audit_probe()
+    selection = tradeoff_probe.history.selections[-1]
+    broken_selection = selection.model_copy(update={"selected_option_id": selection.id})
+    broken_history = tradeoff_probe.history.model_copy(
+        update={"selections": (*tradeoff_probe.history.selections[:-1], broken_selection)}
+    )
+
+    missing = _missing_categories(
+        canonical_evidence_run,
+        _dynamic_audit_probe(),
+        _TradeoffAuditProbe(
+            history=broken_history,
+            audit_events=tradeoff_probe.audit_events,
+        ),
+    )
+
+    assert "allocation_supersession_tradeoff" in missing
 
 
 def test_provenance_map_sorts_roles_and_omits_deferred_references() -> None:
