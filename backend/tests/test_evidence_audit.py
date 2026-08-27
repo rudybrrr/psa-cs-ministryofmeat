@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import replace
-
 import pytest
 
 from backend.app.domain.evidence import (
@@ -11,10 +9,6 @@ from backend.app.domain.evidence import (
     EvidenceReference,
 )
 from backend.app.evaluation.evidence_audit import (
-    _dynamic_audit_probe,
-    _missing_categories,
-    _tradeoff_audit_probe,
-    _TradeoffAuditProbe,
     build_provenance_map,
     collect_audit_claims,
 )
@@ -66,11 +60,44 @@ def test_coverage_references_real_dynamic_and_tradeoff_audit_chains(session) -> 
         "AllocationTradeoffSelection",
     } <= {reference.record_type for reference in claim.evidence_refs}
     assert {
-        ("AuditEvent", "audit:scarcity.evaluation_persisted", "AuditRepository.list_for_incident"),
-        ("AuditEvent", "audit:expedite_reconsideration.assessed", "AuditRepository.list_for_incident"),
-        ("AuditEvent", "audit:allocation_revision.applied", "AuditRepository.list_for_incident"),
-        ("AuditEvent", "audit:allocation_tradeoff.option_selected", "AuditRepository.list_for_incident"),
+        (
+            "AuditEvent",
+            "canonical-run:audit:scarcity.evaluation_persisted",
+            "AuditRepository.list_for_incident",
+        ),
+        (
+            "AuditEvent",
+            "canonical-run:audit:expedite_reconsideration.assessed",
+            "AuditRepository.list_for_incident",
+        ),
+        (
+            "AuditEvent",
+            "canonical-run:audit:allocation_revision.applied",
+            "AuditRepository.list_for_incident",
+        ),
+        (
+            "AuditEvent",
+            "supplemental-tradeoff:audit:option_selected",
+            "AuditRepository.list_for_incident",
+        ),
     } <= references
+    canonical_event_ids = {
+        str(event.id) for event in canonical_evidence_run.dynamic_audit_events
+    }
+    supplemental_event_ids = {
+        str(event.id)
+        for event in canonical_evidence_run.supplemental_tradeoff_evidence.audit_events
+    }
+    audit_rows = [
+        row
+        for row in claim.evidence_refs
+        if row.record_type == "AuditEvent"
+        and row.source == "AuditRepository.list_for_incident"
+    ]
+    assert all(
+        row.record_id in canonical_event_ids | supplemental_event_ids
+        for row in audit_rows
+    )
 
 
 def test_broken_replacement_link_fails_coverage(session) -> None:
@@ -179,46 +206,74 @@ def test_safety_escalation_audit_event_must_identify_its_review(session) -> None
         collect_audit_claims(broken)
 
 
-def test_reconsideration_probe_requires_events_linked_to_its_durable_records(session) -> None:
+def test_canonical_reconsideration_requires_events_linked_to_its_durable_records(session) -> None:
     canonical_evidence_run = run_canonical_evidence_scenario(session)
-    dynamic_probe = _dynamic_audit_probe()
     broken_events = tuple(
         event.model_copy(
             update={"payload": {**event.payload, "evaluation_id": "wrong-report"}}
         )
         if event.event_type == "scarcity.evaluation_persisted"
         else event
-        for event in dynamic_probe.audit_events
+        for event in canonical_evidence_run.dynamic_audit_events
+    )
+    broken = canonical_evidence_run.model_copy(
+        update={"dynamic_audit_events": broken_events}
     )
 
-    missing = _missing_categories(
-        canonical_evidence_run,
-        replace(dynamic_probe, audit_events=broken_events),
-        _tradeoff_audit_probe(),
+    with pytest.raises(EvidenceInvariantFailure, match="allocation_reconsideration"):
+        collect_audit_claims(broken)
+
+
+def test_provenance_uses_audited_dynamic_lineage_not_history_position(session) -> None:
+    canonical_evidence_run = run_canonical_evidence_scenario(session)
+    reordered = canonical_evidence_run.model_copy(
+        update={
+            "dynamic_history": canonical_evidence_run.dynamic_history.model_copy(
+                update={
+                    "revisions": tuple(
+                        reversed(canonical_evidence_run.dynamic_history.revisions)
+                    )
+                }
+            )
+        }
     )
 
-    assert "allocation_reconsideration" in missing
+    claim = collect_audit_claims(reordered)[0]
+    revision_event = next(
+        event
+        for event in reordered.dynamic_audit_events
+        if event.event_type == "allocation_revision.applied"
+    )
+    revision_reference = next(
+        reference
+        for reference in claim.evidence_refs
+        if reference.stable_key == "canonical-run:allocation-revision"
+    )
+
+    assert revision_reference.record_id == revision_event.payload["child_revision_id"]
 
 
 def test_tradeoff_probe_requires_review_option_selection_and_revision_lineage(session) -> None:
     canonical_evidence_run = run_canonical_evidence_scenario(session)
-    tradeoff_probe = _tradeoff_audit_probe()
-    selection = tradeoff_probe.history.selections[-1]
+    tradeoff_evidence = canonical_evidence_run.supplemental_tradeoff_evidence
+    tradeoff_history = tradeoff_evidence.history
+    selection = tradeoff_history.selections[-1]
     broken_selection = selection.model_copy(update={"selected_option_id": selection.id})
-    broken_history = tradeoff_probe.history.model_copy(
-        update={"selections": (*tradeoff_probe.history.selections[:-1], broken_selection)}
+    broken_history = tradeoff_history.model_copy(
+        update={"selections": (*tradeoff_history.selections[:-1], broken_selection)}
+    )
+    broken = canonical_evidence_run.model_copy(
+        update={
+            "supplemental_tradeoff_evidence": tradeoff_evidence.model_copy(
+                update={"history": broken_history}
+            )
+        }
     )
 
-    missing = _missing_categories(
-        canonical_evidence_run,
-        _dynamic_audit_probe(),
-        _TradeoffAuditProbe(
-            history=broken_history,
-            audit_events=tradeoff_probe.audit_events,
-        ),
-    )
-
-    assert "allocation_supersession_tradeoff" in missing
+    with pytest.raises(
+        EvidenceInvariantFailure, match="allocation_supersession_tradeoff"
+    ):
+        collect_audit_claims(broken)
 
 
 def test_provenance_map_sorts_roles_and_omits_deferred_references() -> None:

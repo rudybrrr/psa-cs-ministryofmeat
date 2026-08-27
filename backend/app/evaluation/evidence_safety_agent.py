@@ -40,7 +40,7 @@ from backend.app.domain.evidence import (
     EvidenceReference,
     assert_verified,
 )
-from backend.app.domain.models import FrozenContract
+from backend.app.domain.models import AuditEvent, Decision, FrozenContract
 from backend.app.orchestration.agent_runtime import (
     AgentRuntimeCoordinator,
     CanonicalAgentRuntimeConfiguration,
@@ -64,6 +64,7 @@ from backend.app.services.canonical_replay import (
 from backend.app.services.dynamic_yard import CanonicalDynamicYardHarness
 from backend.app.storage.agent_runtime import AgentRuntimeConflict, AgentRuntimeRepository
 from backend.app.storage.cargo_safety import CargoSafetyHistory
+from backend.app.storage.repositories import AuditRepository
 
 
 _FIXTURE_ID = "SYN-CANONICAL-24-V1"
@@ -93,8 +94,20 @@ _UNAVAILABLE_AUTHORITY_TOOLS = frozenset(
 )
 
 
+class SupplementalTradeoffEvidence(FrozenContract):
+    """Durable, same-session human tradeoff evidence outside the main incident."""
+
+    incident_id: UUID
+    history: AllocationTradeoffHistory
+    audit_events: tuple[AuditEvent, ...]
+
+
 class CanonicalEvidenceRun(FrozenContract):
     incident_id: UUID
+    phase2_report_id: UUID
+    phase2_decisions: tuple[Decision, ...]
+    dynamic_audit_events: tuple[AuditEvent, ...]
+    supplemental_tradeoff_evidence: SupplementalTradeoffEvidence
     agent_run: AgentRun
     agent_history: AgentHistory
     dynamic_history: AllocationTradeoffHistory
@@ -283,6 +296,7 @@ def run_canonical_evidence_scenario(session: Session) -> CanonicalEvidenceRun:
     terminal = runtime.advance(run.id)
     capture_stage()
 
+    supplemental_tradeoff_evidence = _supplemental_tradeoff_evidence(session)
     agent_history = AgentRuntimeRepository(session).history(run.id)
     dynamic_history = yard.history(incident_id)
     carrier_history = carrier.history(case_id)
@@ -290,6 +304,12 @@ def run_canonical_evidence_scenario(session: Session) -> CanonicalEvidenceRun:
 
     result = CanonicalEvidenceRun(
         incident_id=incident_id,
+        phase2_report_id=phase2.report.id,
+        phase2_decisions=tuple(phase2.decisions),
+        dynamic_audit_events=tuple(
+            AuditRepository(session).list_for_incident(incident_id)
+        ),
+        supplemental_tradeoff_evidence=supplemental_tradeoff_evidence,
         agent_run=terminal,
         agent_history=agent_history,
         dynamic_history=dynamic_history,
@@ -304,6 +324,30 @@ def run_canonical_evidence_scenario(session: Session) -> CanonicalEvidenceRun:
     )
     _assert_canonical_result(result)
     return result
+
+
+def _supplemental_tradeoff_evidence(session: Session) -> SupplementalTradeoffEvidence:
+    """Persist a deterministic human-selection lineage in the evidence-run session."""
+
+    from backend.app.evaluation.evidence_authority import _human_review_fixture
+
+    incident, _baseline = _human_review_fixture(session)
+    workflow = DynamicYardWorkflow.for_session(session)
+    workflow.apply_latest_assessment(incident.id)
+    opened = workflow.history(incident.id)
+    review = opened.reviews[-1]
+    option = opened.options[-1]
+    workflow.select_tradeoff(
+        review.id,
+        selected_option_id=option.id,
+        expected_options_fingerprint=review.options_fingerprint,
+        operator_id="evidence-operator",
+    )
+    return SupplementalTradeoffEvidence(
+        incident_id=incident.id,
+        history=workflow.history(incident.id),
+        audit_events=tuple(AuditRepository(session).list_for_incident(incident.id)),
+    )
 
 
 def _required_wait(run: AgentRun, expected: AgentWaitKind) -> str:

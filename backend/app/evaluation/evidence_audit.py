@@ -2,12 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Sequence
-from contextlib import contextmanager
+from collections.abc import Sequence
 from dataclasses import dataclass
-
-from sqlmodel import SQLModel, Session, create_engine
-from sqlmodel.pool import StaticPool
 
 from backend.app.domain.evidence import (
     ClaimReproducibility,
@@ -19,13 +15,6 @@ from backend.app.domain.evidence import (
     ProvenanceEntry,
 )
 from backend.app.evaluation.evidence_safety_agent import CanonicalEvidenceRun
-from backend.app.orchestration.dynamic_yard import DynamicYardWorkflow
-from backend.app.orchestration.scarce_capacity import (
-    ScarcityRecoveryResult,
-    build_scarce_capacity_workflow,
-)
-from backend.app.services.dynamic_yard import CanonicalDynamicYardHarness
-from backend.app.storage.repositories import AuditRepository
 
 
 REQUIRED_MATERIAL_COVERAGE = (
@@ -44,7 +33,9 @@ _FIXTURE_ID = "SYN-CANONICAL-24-V1"
 
 @dataclass(frozen=True, slots=True)
 class _DynamicAuditProbe:
-    recovery: ScarcityRecoveryResult
+    incident_id: object
+    report_id: object
+    decisions: tuple[object, ...]
     history: object
     audit_events: tuple[object, ...]
 
@@ -58,8 +49,8 @@ class _TradeoffAuditProbe:
 def collect_audit_claims(result: CanonicalEvidenceRun) -> tuple[EvidenceClaim, ...]:
     """Verify the durable coverage rule against records from the canonical run."""
 
-    dynamic_probe = _dynamic_audit_probe()
-    tradeoff_probe = _tradeoff_audit_probe()
+    dynamic_probe = _dynamic_audit_evidence(result)
+    tradeoff_probe = _tradeoff_audit_evidence(result)
     missing = _missing_categories(result, dynamic_probe, tradeoff_probe)
     if missing:
         raise EvidenceInvariantFailure(
@@ -85,7 +76,10 @@ def collect_audit_claims(result: CanonicalEvidenceRun) -> tuple[EvidenceClaim, .
                 dynamic_probe,
                 tradeoff_probe,
             ),
-            caveat="Credential-free deterministic canonical replay only.",
+            caveat=(
+                "Credential-free deterministic canonical replay with a retained "
+                "same-session supplemental human-tradeoff fixture."
+            ),
             reproducibility=ClaimReproducibility(
                 deterministic=True,
                 included_in_fingerprint=True,
@@ -144,7 +138,6 @@ def _missing_categories(
     dynamic = result.dynamic_history
     carrier = result.carrier_history
     safety = result.safety_history
-    carrier_events = {event.event_type for event in carrier.audit_events}
     replacement_chain = _carrier_replacement_chain(carrier)
 
     covered = {
@@ -173,16 +166,7 @@ def _missing_categories(
         "allocation_supersession_tradeoff": _tradeoff_chain_is_linked(
             tradeoff_probe
         ),
-        "operator_approvals": (
-            carrier.request is not None
-            and carrier.request_context is not None
-            and bool(carrier.bindings)
-            and bool(carrier.approvals)
-            and {
-                "carrier_recovery.request_approval_recorded",
-                "carrier.counter_approval_recorded",
-            }.issubset(carrier_events)
-        ),
+        "operator_approvals": _operator_approval_lineage(carrier) is not None,
         "carrier_response_timeout": _has_carrier_response_or_timeout(
             carrier,
         ),
@@ -190,15 +174,7 @@ def _missing_categories(
             replacement_chain is not None
         ),
         "safety_escalation": _safety_escalation_is_linked(safety),
-        "agent_orchestration": (
-            bool(result.agent_history.steps)
-            and bool(result.agent_history.tool_invocations)
-            and {step.id for step in result.agent_history.steps}.issuperset(
-                invocation.step_id
-                for invocation in result.agent_history.tool_invocations
-            )
-            and result.agent_history.run.id == result.agent_run.id
-        ),
+        "agent_orchestration": _agent_orchestration_lineage(result) is not None,
     }
     return tuple(
         category for category in REQUIRED_MATERIAL_COVERAGE if not covered[category]
@@ -212,19 +188,13 @@ def _coverage_references(
 ) -> tuple[EvidenceReference, ...]:
     carrier = result.carrier_history
     safety = result.safety_history
-    probe_history = dynamic_probe.history
-    latest_revision = probe_history.revisions[-1]
-    latest_assessment = probe_history.assessments[-1]
-    tradeoff_history = tradeoff_probe.history
-    tradeoff_review = tradeoff_history.reviews[-1]
-    tradeoff_option = tradeoff_history.options[-1]
-    tradeoff_selection = tradeoff_history.selections[-1]
-    tradeoff_revision = next(
-        revision
-        for revision in reversed(tradeoff_history.revisions)
-        if revision.parent_revision_id is not None
-    )
+    dynamic_lineage = _dynamic_reconsideration_audit_is_linked(dynamic_probe)
+    tradeoff_lineage = _tradeoff_chain_is_linked(tradeoff_probe)
     replacement_chain = _carrier_replacement_chain(carrier)
+    response_lineage = _has_carrier_response_or_timeout(carrier)
+    approval_lineage = _operator_approval_lineage(carrier)
+    safety_lineage = _safety_escalation_is_linked(safety)
+    agent_lineage = _agent_orchestration_lineage(result)
     request = carrier.request
     request_context = carrier.request_context
     assessment = safety.assessment
@@ -235,12 +205,63 @@ def _coverage_references(
         or request_context is None
         or assessment is None
         or policy is None
+        or dynamic_lineage is None
+        or tradeoff_lineage is None
         or replacement_chain is None
+        or response_lineage is None
+        or approval_lineage is None
+        or safety_lineage is None
+        or agent_lineage is None
     ):
         raise EvidenceInvariantFailure(
             "audit_material_action_coverage",
             "coverage references require complete canonical durable histories",
         )
+
+    (
+        incident_lineage,
+        dynamic_snapshot,
+        dynamic_parent_revision,
+        dynamic_commitment,
+        dynamic_assessment,
+        dynamic_child_revision,
+        dynamic_snapshot_event,
+        dynamic_assessment_event,
+        dynamic_revision_event,
+    ) = dynamic_lineage
+    (
+        phase2_decision,
+        incident_event,
+        scarcity_event,
+        phase2_decision_event,
+    ) = incident_lineage
+    (
+        tradeoff_review,
+        tradeoff_option,
+        tradeoff_selection,
+        tradeoff_parent_revision,
+        tradeoff_revision,
+        tradeoff_selection_event,
+        tradeoff_revision_event,
+    ) = tradeoff_lineage
+    request_binding, request_approval, counter_binding, counter_approval, request_event, counter_event = approval_lineage
+    response, response_context, response_event = response_lineage
+    (
+        safety_note,
+        safety_review,
+        safety_assessment,
+        safety_policy,
+        safety_assessment_event,
+        safety_policy_event,
+        safety_decision_event,
+    ) = safety_lineage
+    agent_step, agent_invocation = agent_lineage
+    (
+        replacement_result,
+        replacement_decision,
+        replacement_link,
+        replacement_event,
+    ) = replacement_chain
 
     references = [
         _reference(
@@ -251,67 +272,67 @@ def _coverage_references(
         ),
         _reference(
             "ScarcityEvaluationReport",
-            "deterministic-audit-probe:phase2-evaluation",
+            "canonical-run:phase2-evaluation",
             "build_scarce_capacity_workflow.run",
-            dynamic_probe.recovery.report.id,
+            dynamic_probe.report_id,
         ),
         _reference(
             "Decision",
-            "deterministic-audit-probe:phase2-decision",
+            "canonical-run:phase2-decision",
             "build_scarce_capacity_workflow.run",
-            dynamic_probe.recovery.decisions[-1].id,
+            phase2_decision.id,
         ),
         _reference(
             "YardForecastSnapshot",
-            "deterministic-audit-probe:yard-snapshot",
+            "canonical-run:yard-snapshot",
             "DynamicYardRepository.history",
-            probe_history.snapshots[-1].id,
+            dynamic_snapshot.id,
         ),
         _reference(
             "AllocationRevision",
-            "deterministic-audit-probe:allocation-revision",
+            "canonical-run:allocation-revision",
             "DynamicYardRepository.history",
-            latest_revision.id,
+            dynamic_child_revision.id,
         ),
         _reference(
             "ExpediteCommitment",
-            "deterministic-audit-probe:expedite-commitment",
+            "canonical-run:expedite-commitment",
             "DynamicYardRepository.history",
-            probe_history.commitments[0].id,
+            dynamic_commitment.id,
         ),
         _reference(
             "ExpediteReconsiderationAssessment",
-            "deterministic-audit-probe:reconsideration-assessment",
+            "canonical-run:reconsideration-assessment",
             "DynamicYardRepository.history",
-            latest_assessment.id,
+            dynamic_assessment.id,
         ),
         _reference(
             "AllocationTradeoffHistory",
-            "deterministic-audit-probe:dynamic-history",
+            "canonical-run:dynamic-history",
             "DynamicYardWorkflow.history",
-            dynamic_probe.recovery.incident.id,
+            dynamic_probe.incident_id,
         ),
         _reference(
             "AllocationTradeoffReview",
-            "deterministic-tradeoff:review",
+            "supplemental-tradeoff:review",
             "DynamicYardWorkflow.select_tradeoff",
             tradeoff_review.id,
         ),
         _reference(
             "AllocationTradeoffOption",
-            "deterministic-tradeoff:option",
+            "supplemental-tradeoff:option",
             "DynamicYardWorkflow.select_tradeoff",
             tradeoff_option.id,
         ),
         _reference(
             "AllocationTradeoffSelection",
-            "deterministic-tradeoff:selection",
+            "supplemental-tradeoff:selection",
             "DynamicYardWorkflow.select_tradeoff",
             tradeoff_selection.id,
         ),
         _reference(
             "AllocationRevision",
-            "deterministic-tradeoff:child-revision",
+            "supplemental-tradeoff:child-revision",
             "DynamicYardWorkflow.select_tradeoff",
             tradeoff_revision.id,
         ),
@@ -319,13 +340,13 @@ def _coverage_references(
             "ApprovalBinding",
             "canonical-run:approval-binding",
             "CarrierRecoveryRepository.history",
-            carrier.bindings[0].proposal_decision_id,
+            request_binding.proposal_decision_id,
         ),
         _reference(
             "Approval",
             "canonical-run:operator-approval",
             "CarrierRecoveryRepository.history",
-            carrier.approvals[-1].id,
+            request_approval.id,
         ),
         _reference(
             "RTARequest",
@@ -337,19 +358,25 @@ def _coverage_references(
             "RTARequestContext",
             "canonical-run:rta-request-context",
             "CarrierRecoveryRepository.history",
-            request_context.case_id,
+            response_context.case_id,
         ),
         _reference(
             "ContainerReconsiderationResult",
             "canonical-run:carrier-reconsideration-result",
             "CarrierRecoveryRepository.history",
-            replacement_chain[0].id,
+            replacement_result.id,
+        ),
+        _reference(
+            "Decision",
+            "canonical-run:carrier-replacement-decision",
+            "CarrierRecoveryRepository.history",
+            replacement_decision.id,
         ),
         _reference(
             "CarrierRecoveryDecisionLink",
             "canonical-run:carrier-decision-link",
             "CarrierRecoveryRepository.history",
-            replacement_chain[2].decision_id,
+            replacement_link.decision_id,
         ),
         _reference(
             "CarrierRecoveryHistory",
@@ -361,37 +388,37 @@ def _coverage_references(
             "CargoNote",
             "canonical-run:cargo-note",
             "CargoSafetyRepository.history",
-            safety.note.id,
+            safety_note.id,
         ),
         _reference(
             "CargoSafetyReview",
             "canonical-run:cargo-safety-review",
             "CargoSafetyRepository.history",
-            safety.review.id,
+            safety_review.id,
         ),
         _reference(
             "SemanticSafetyAssessment",
             "canonical-run:semantic-safety-assessment",
             "CargoSafetyRepository.history",
-            assessment.id,
+            safety_assessment.id,
         ),
         _reference(
             "SemanticSafetyPolicyResult",
             "canonical-run:semantic-safety-policy",
             "CargoSafetyRepository.history",
-            policy.id,
+            safety_policy.id,
         ),
         _reference(
             "CargoSafetyHistory",
             "canonical-run:safety-history",
             "CargoSafetyRepository.history",
-            safety.review.id,
+            safety_review.id,
         ),
         _reference(
             "Decision",
             "canonical-run:safety-escalation-decision",
             "CargoSafetyHistory.policy_result",
-            policy.replacement_decision_id,
+            safety_policy.replacement_decision_id,
         ),
         _reference(
             "AgentRun",
@@ -403,13 +430,13 @@ def _coverage_references(
             "AgentStep",
             "canonical-run:agent-step",
             "AgentRuntimeRepository.history",
-            result.agent_history.steps[-1].id,
+            agent_step.id,
         ),
         _reference(
             "AgentToolInvocation",
             "canonical-run:agent-tool-invocation",
             "AgentRuntimeRepository.history",
-            result.agent_history.tool_invocations[-1].id,
+            agent_invocation.id,
         ),
         _reference(
             "AgentHistory",
@@ -418,13 +445,13 @@ def _coverage_references(
             result.agent_run.id,
         ),
     ]
-    if carrier.carrier_responses:
+    if response is not None:
         references.append(
             _reference(
                 "CarrierResponse",
                 "canonical-run:carrier-response",
                 "CarrierRecoveryRepository.history",
-                carrier.carrier_responses[-1].id,
+                response.id,
             )
         )
     else:
@@ -433,11 +460,10 @@ def _coverage_references(
                 "RTARequestContext",
                 "canonical-run:carrier-timeout-context",
                 "CarrierRecoveryRepository.history",
-                request_context.case_id,
+                response_context.case_id,
             )
         )
 
-    replacement_result = replacement_chain[0]
     timing = next(
         (
             item
@@ -477,104 +503,164 @@ def _coverage_references(
         )
 
     references.extend(
-        _reference(
-            "AuditEvent",
-            f"audit:{event.event_type}",
-            "AuditRepository.list_for_incident",
-            event.id,
+        (
+            _reference("AuditEvent", "canonical-run:audit:incident.created", "AuditRepository.list_for_incident", incident_event.id),
+            _reference("AuditEvent", "canonical-run:audit:scarcity.evaluation_persisted", "AuditRepository.list_for_incident", scarcity_event.id),
+            _reference("AuditEvent", "canonical-run:audit:decision.created", "AuditRepository.list_for_incident", phase2_decision_event.id),
+            _reference("AuditEvent", "canonical-run:audit:yard_forecast.snapshot_ingested", "AuditRepository.list_for_incident", dynamic_snapshot_event.id),
+            _reference("AuditEvent", "canonical-run:audit:expedite_reconsideration.assessed", "AuditRepository.list_for_incident", dynamic_assessment_event.id),
+            _reference("AuditEvent", "canonical-run:audit:allocation_revision.applied", "AuditRepository.list_for_incident", dynamic_revision_event.id),
+            _reference("AuditEvent", "supplemental-tradeoff:audit:option_selected", "AuditRepository.list_for_incident", tradeoff_selection_event.id),
+            _reference("AuditEvent", "supplemental-tradeoff:audit:allocation_revision.applied", "AuditRepository.list_for_incident", tradeoff_revision_event.id),
+            _reference("AuditEvent", f"canonical-run:audit:{request_event.event_type}", "CarrierRecoveryRepository.history", request_event.id),
+            _reference("AuditEvent", f"canonical-run:audit:{counter_event.event_type}", "CarrierRecoveryRepository.history", counter_event.id),
+            _reference("AuditEvent", f"canonical-run:audit:{response_event.event_type}", "CarrierRecoveryRepository.history", response_event.id),
+            _reference("AuditEvent", "canonical-run:audit:carrier_recovery.replacement_recorded", "CarrierRecoveryRepository.history", replacement_event.id),
+            _reference("AuditEvent", "canonical-run:audit:cargo.semantic_assessment_completed", "CargoSafetyRepository.history", safety_assessment_event.id),
+            _reference("AuditEvent", "canonical-run:audit:cargo.semantic_safety_evaluated", "CargoSafetyRepository.history", safety_policy_event.id),
+            _reference("AuditEvent", "canonical-run:audit:decision.escalated_for_cargo_review", "CargoSafetyRepository.history", safety_decision_event.id),
         )
-        for event in _unique_events(
-            dynamic_probe.audit_events,
-            {
-                "incident.created",
-                "scarcity.evaluation_persisted",
-                "decision.created",
-                "yard_forecast.snapshot_ingested",
-                "expedite_reconsideration.assessed",
-                "allocation_revision.applied",
-            },
-        )
-    )
-    references.extend(
-        _reference(
-            "AuditEvent",
-            (
-                f"audit:{event.event_type}"
-                if event.event_type == "allocation_tradeoff.option_selected"
-                else f"audit:tradeoff:{event.event_type}"
-            ),
-            "AuditRepository.list_for_incident",
-            event.id,
-        )
-        for event in _unique_events(
-            tradeoff_probe.audit_events,
-            {
-                "allocation_tradeoff.option_selected",
-                "allocation_revision.applied",
-            },
-        )
-    )
-    references.extend(
-        _reference(
-            "AuditEvent",
-            f"audit:{event.event_type}",
-            "CarrierRecoveryRepository.history",
-            event.id,
-        )
-        for event in carrier.audit_events
-        if event.event_type
-        in {
-            "carrier_recovery.request_approval_recorded",
-            "carrier.counter_approval_recorded",
-            "carrier.response_received",
-            "carrier.response_timed_out",
-            "carrier_recovery.replacement_recorded",
-        }
-    )
-    references.extend(
-        _reference(
-            "AuditEvent",
-            f"audit:{event.event_type}",
-            "CargoSafetyRepository.history",
-            event.id,
-        )
-        for event in safety.audit_events
     )
     return tuple(references)
 
 
-def _has_carrier_response_or_timeout(carrier) -> bool:
+def _has_carrier_response_or_timeout(carrier):
     if carrier.carrier_responses:
-        return any(
-            event.event_type == "carrier.response_received"
-            and event.payload.get("recovery_case_id") == str(carrier.case.id)
-            and event.payload.get("request_id") == str(response.request_id)
-            and event.payload.get("carrier_response_id") == str(response.id)
-            for response in carrier.carrier_responses
-            for event in carrier.audit_events
+        return next(
+            (
+                (response, carrier.request_context, event)
+                for response in carrier.carrier_responses
+                for event in carrier.audit_events
+                if event.event_type == "carrier.response_received"
+                and event.payload.get("recovery_case_id") == str(carrier.case.id)
+                and event.payload.get("request_id") == str(response.request_id)
+                and event.payload.get("carrier_response_id") == str(response.id)
+            ),
+            None,
         )
     context = carrier.request_context
-    return (
-        context is not None
-        and context.timeout_observed_at is not None
-        and context.close_reason is not None
-        and context.close_reason.value == "RESPONSE_TIMEOUT"
-        and any(
-            event.event_type == "carrier.response_timed_out"
+    if (
+        context is None
+        or context.timeout_observed_at is None
+        or context.close_reason is None
+        or context.close_reason.value != "RESPONSE_TIMEOUT"
+    ):
+        return None
+    return next(
+        (
+            (None, context, event)
+            for event in carrier.audit_events
+            if event.event_type == "carrier.response_timed_out"
             and event.payload.get("recovery_case_id") == str(carrier.case.id)
             and event.payload.get("request_id") == str(context.request_id)
-            for event in carrier.audit_events
-        )
+        ),
+        None,
     )
 
 
-def _dynamic_reconsideration_audit_is_linked(probe: _DynamicAuditProbe) -> bool:
-    """Require scarcity and yard events to identify one persisted revision chain."""
+def _operator_approval_lineage(carrier):
+    """Return both durable approval bindings with their matching audit events."""
+
+    request_binding = next(
+        (
+            binding
+            for binding in carrier.bindings
+            if binding.subject_kind.value == "OUTBOUND_REQUEST"
+            and carrier.request is not None
+            and binding.subject_id == carrier.request.id
+        ),
+        None,
+    )
+    counter_binding = next(
+        (
+            binding
+            for binding in carrier.bindings
+            if binding.subject_kind.value == "COUNTER_PROPOSAL"
+        ),
+        None,
+    )
+    if request_binding is None or counter_binding is None:
+        return None
+    request_approval = next(
+        (
+            approval
+            for approval in carrier.approvals
+            if approval.decision_id == request_binding.proposal_decision_id
+        ),
+        None,
+    )
+    counter_approval = next(
+        (
+            approval
+            for approval in carrier.approvals
+            if approval.decision_id == counter_binding.proposal_decision_id
+        ),
+        None,
+    )
+    request_event = next(
+        (
+            event
+            for event in carrier.audit_events
+            if event.event_type == "carrier_recovery.request_approval_recorded"
+            and event.payload.get("recovery_case_id") == str(carrier.case.id)
+            and event.payload.get("proposal_decision_id")
+            == str(request_binding.proposal_decision_id)
+            and event.payload.get("subject_id") == str(request_binding.subject_id)
+        ),
+        None,
+    )
+    counter_event = next(
+        (
+            event
+            for event in carrier.audit_events
+            if event.event_type == "carrier.counter_approval_recorded"
+            and event.payload.get("recovery_case_id") == str(carrier.case.id)
+            and event.payload.get("proposal_decision_id")
+            == str(counter_binding.proposal_decision_id)
+            and event.payload.get("carrier_response_id")
+            == str(counter_binding.subject_id)
+        ),
+        None,
+    )
+    if request_approval and counter_approval and request_event and counter_event:
+        return (
+            request_binding,
+            request_approval,
+            counter_binding,
+            counter_approval,
+            request_event,
+            counter_event,
+        )
+    return None
+
+
+def _agent_orchestration_lineage(result: CanonicalEvidenceRun):
+    """Return a persisted invocation joined to its step, never an array position."""
+
+    if result.agent_history.run.id != result.agent_run.id:
+        return None
+    steps = {step.id: step for step in result.agent_history.steps}
+    invocation = next(
+        (
+            item
+            for item in result.agent_history.tool_invocations
+            if item.step_id in steps
+        ),
+        None,
+    )
+    if invocation is None:
+        return None
+    return steps[invocation.step_id], invocation
+
+
+def _dynamic_reconsideration_audit_is_linked(probe: _DynamicAuditProbe):
+    """Return the exact scarcity and yard records joined by audit payload IDs."""
 
     history = probe.history
     events = probe.audit_events
-    if not _incident_recovery_audit_is_linked(probe):
-        return False
+    incident_lineage = _incident_recovery_audit_is_linked(probe)
+    if incident_lineage is None:
+        return None
 
     snapshots = {snapshot.id: snapshot for snapshot in history.snapshots}
     revisions = {revision.id: revision for revision in history.revisions}
@@ -589,65 +675,121 @@ def _dynamic_reconsideration_audit_is_linked(probe: _DynamicAuditProbe) -> bool:
             ),
             None,
         )
+        commitment = next(
+            (
+                item
+                for item in history.commitments
+                if item.origin_revision_id == assessment.prior_allocation_revision_id
+            ),
+            None,
+        )
         if (
             parent is None
             or child is None
+            or commitment is None
             or assessment.source_snapshot_id not in snapshots
         ):
             continue
-        snapshot_event = any(
-            event.event_type == "yard_forecast.snapshot_ingested"
-            and event.payload.get("snapshot_id") == str(assessment.source_snapshot_id)
-            for event in events
+        snapshot_event = next(
+            (
+                event
+                for event in events
+                if event.event_type == "yard_forecast.snapshot_ingested"
+                and event.payload.get("snapshot_id") == str(assessment.source_snapshot_id)
+            ),
+            None,
         )
-        assessment_event = any(
-            event.event_type == "expedite_reconsideration.assessed"
-            and event.payload.get("assessment_id") == str(assessment.id)
-            and event.payload.get("source_snapshot_id")
-            == str(assessment.source_snapshot_id)
-            and event.payload.get("prior_revision_id") == str(parent.id)
-            for event in events
+        assessment_event = next(
+            (
+                event
+                for event in events
+                if event.event_type == "expedite_reconsideration.assessed"
+                and event.payload.get("assessment_id") == str(assessment.id)
+                and event.payload.get("source_snapshot_id")
+                == str(assessment.source_snapshot_id)
+                and event.payload.get("prior_revision_id") == str(parent.id)
+            ),
+            None,
         )
-        revision_event = any(
-            event.event_type == "allocation_revision.applied"
-            and event.payload.get("assessment_id") == str(assessment.id)
-            and event.payload.get("parent_revision_id") == str(parent.id)
-            and event.payload.get("child_revision_id") == str(child.id)
-            for event in events
+        revision_event = next(
+            (
+                event
+                for event in events
+                if event.event_type == "allocation_revision.applied"
+                and event.payload.get("assessment_id") == str(assessment.id)
+                and event.payload.get("parent_revision_id") == str(parent.id)
+                and event.payload.get("child_revision_id") == str(child.id)
+            ),
+            None,
         )
         if snapshot_event and assessment_event and revision_event:
-            return True
-    return False
+            return (
+                incident_lineage,
+                snapshots[assessment.source_snapshot_id],
+                parent,
+                commitment,
+                assessment,
+                child,
+                snapshot_event,
+                assessment_event,
+                revision_event,
+            )
+    return None
 
 
-def _incident_recovery_audit_is_linked(probe: _DynamicAuditProbe) -> bool:
-    """Require the explicit scarcity probe's incident, report, and decision events."""
+def _incident_recovery_audit_is_linked(probe: _DynamicAuditProbe):
+    """Return the exact canonical incident/report/decision audit lineage."""
 
     events = probe.audit_events
-    incident_id = probe.recovery.incident.id
-    return (
-        any(
-            event.event_type == "incident.created" and event.incident_id == incident_id
+    incident_id = probe.incident_id
+    incident_event = next(
+        (
+            event
             for event in events
-        )
-        and any(
-            event.event_type == "scarcity.evaluation_persisted"
-            and event.incident_id == incident_id
-            and event.payload.get("evaluation_id") == str(probe.recovery.report.id)
-            for event in events
-        )
-        and any(
-            event.event_type == "decision.created"
-            and event.incident_id == incident_id
-            and event.payload.get("decision_id")
-            in {str(decision.id) for decision in probe.recovery.decisions}
-            for event in events
-        )
+            if event.event_type == "incident.created" and event.incident_id == incident_id
+        ),
+        None,
     )
+    report_event = next(
+        (
+            event
+            for event in events
+            if event.event_type == "scarcity.evaluation_persisted"
+            and event.incident_id == incident_id
+            and event.payload.get("evaluation_id") == str(probe.report_id)
+        ),
+        None,
+    )
+    decision = next(
+        (
+            item
+            for item in probe.decisions
+            if any(
+                event.event_type == "decision.created"
+                and event.incident_id == incident_id
+                and event.payload.get("decision_id") == str(item.id)
+                for event in events
+            )
+        ),
+        None,
+    )
+    decision_event = None if decision is None else next(
+        (
+            event
+            for event in events
+            if event.event_type == "decision.created"
+            and event.incident_id == incident_id
+            and event.payload.get("decision_id") == str(decision.id)
+        ),
+        None,
+    )
+    if incident_event and report_event and decision and decision_event:
+        return decision, incident_event, report_event, decision_event
+    return None
 
 
-def _tradeoff_chain_is_linked(probe: _TradeoffAuditProbe) -> bool:
-    """Require a selected human option and its audited child allocation revision."""
+def _tradeoff_chain_is_linked(probe: _TradeoffAuditProbe):
+    """Return one human selection and its audited child allocation revision."""
 
     history = probe.history
     events = probe.audit_events
@@ -683,24 +825,40 @@ def _tradeoff_chain_is_linked(probe: _TradeoffAuditProbe) -> bool:
             parent = revisions.get(assessment.prior_allocation_revision_id)
             if child is None or parent is None:
                 continue
-            selection_event = any(
-                event.event_type == "allocation_tradeoff.option_selected"
+            selection_event = next(
+                (
+                    event
+                    for event in events
+                    if event.event_type == "allocation_tradeoff.option_selected"
                 and event.payload.get("review_id") == str(review.id)
                 and event.payload.get("selected_option_id") == str(option.id)
                 and event.payload.get("options_fingerprint")
                 == review.options_fingerprint
-                for event in events
+                ),
+                None,
             )
-            revision_event = any(
-                event.event_type == "allocation_revision.applied"
+            revision_event = next(
+                (
+                    event
+                    for event in events
+                    if event.event_type == "allocation_revision.applied"
                 and event.payload.get("assessment_id") == str(assessment.id)
                 and event.payload.get("parent_revision_id") == str(parent.id)
                 and event.payload.get("child_revision_id") == str(child.id)
-                for event in events
+                ),
+                None,
             )
             if selection_event and revision_event:
-                return True
-    return False
+                return (
+                    review,
+                    option,
+                    selection,
+                    parent,
+                    child,
+                    selection_event,
+                    revision_event,
+                )
+    return None
 
 
 def _carrier_replacement_chain(carrier):
@@ -743,8 +901,8 @@ def _carrier_replacement_chain(carrier):
     return None
 
 
-def _safety_escalation_is_linked(safety) -> bool:
-    """Validate the policy's durable escalation decision ID against its audit event."""
+def _safety_escalation_is_linked(safety):
+    """Return the safety records and events tied to the escalation Decision ID."""
 
     assessment = safety.assessment
     policy = safety.policy_result
@@ -763,97 +921,69 @@ def _safety_escalation_is_linked(safety) -> bool:
         or policy.container_id != safety.review.container_id
         or not policy.automation_blocked
     ):
-        return False
-    required_events = {
-        "cargo.semantic_assessment_completed",
-        "cargo.semantic_safety_evaluated",
-    }
-    if not required_events.issubset(
-        event.event_type for event in safety.audit_events
-    ):
-        return False
-    return any(
-        event.event_type == "decision.escalated_for_cargo_review"
+        return None
+    assessment_event = next(
+        (
+            event
+            for event in safety.audit_events
+            if event.event_type == "cargo.semantic_assessment_completed"
+            and event.payload.get("review_id") == str(safety.review.id)
+        ),
+        None,
+    )
+    policy_event = next(
+        (
+            event
+            for event in safety.audit_events
+            if event.event_type == "cargo.semantic_safety_evaluated"
+            and event.payload.get("review_id") == str(safety.review.id)
+        ),
+        None,
+    )
+    escalation_event = next(
+        (
+            event
+            for event in safety.audit_events
+            if event.event_type == "decision.escalated_for_cargo_review"
         and event.incident_id == safety.review.incident_id
         and event.payload.get("review_id") == str(safety.review.id)
         and event.payload.get("decision_id") == str(policy.replacement_decision_id)
         and event.payload.get("container_id") == safety.review.container_id
-        for event in safety.audit_events
+        ),
+        None,
+    )
+    if assessment_event and policy_event and escalation_event:
+        return (
+            safety.note,
+            safety.review,
+            assessment,
+            policy,
+            assessment_event,
+            policy_event,
+            escalation_event,
+        )
+    return None
+
+
+def _dynamic_audit_evidence(result: CanonicalEvidenceRun) -> _DynamicAuditProbe:
+    """Project audit evidence persisted alongside the canonical recovery incident."""
+
+    return _DynamicAuditProbe(
+        incident_id=result.incident_id,
+        report_id=result.phase2_report_id,
+        decisions=tuple(result.phase2_decisions),
+        history=result.dynamic_history,
+        audit_events=tuple(result.dynamic_audit_events),
     )
 
 
-def _unique_events(events, required_event_types: set[str]) -> tuple[object, ...]:
-    selected: list[object] = []
-    observed_types: set[str] = set()
-    for event in events:
-        if (
-            event.event_type in required_event_types
-            and event.event_type not in observed_types
-        ):
-            selected.append(event)
-            observed_types.add(event.event_type)
-    return tuple(selected)
+def _tradeoff_audit_evidence(result: CanonicalEvidenceRun) -> _TradeoffAuditProbe:
+    """Project the explicitly retained supplemental tradeoff evidence."""
 
-
-@contextmanager
-def _isolated_session() -> Iterator[Session]:
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
+    return _TradeoffAuditProbe(
+        history=result.supplemental_tradeoff_evidence.history,
+        audit_events=tuple(result.supplemental_tradeoff_evidence.audit_events),
     )
-    SQLModel.metadata.create_all(engine)
-    try:
-        with Session(engine) as session:
-            yield session
-    finally:
-        engine.dispose()
-
-
-def _dynamic_audit_probe() -> _DynamicAuditProbe:
-    """Capture real scarcity and dynamic-yard audit rows from one local run."""
-
-    with _isolated_session() as session:
-        recovery = build_scarce_capacity_workflow(session).run()
-        yard = DynamicYardWorkflow.for_session(session)
-        harness = CanonicalDynamicYardHarness()
-        yard.initialize(
-            recovery.incident.id,
-            harness.bootstrap_snapshot(recovery.incident.id),
-        )
-        yard.ingest(harness.discharge_active_snapshot(recovery.incident.id))
-        yard.apply_latest_assessment(recovery.incident.id)
-        return _DynamicAuditProbe(
-            recovery=recovery,
-            history=yard.history(recovery.incident.id),
-            audit_events=tuple(
-                AuditRepository(session).list_for_incident(recovery.incident.id)
-            ),
-        )
-
-
-def _tradeoff_audit_probe() -> _TradeoffAuditProbe:
-    """Persist and select the deterministic human-tradeoff fixture honestly."""
-
-    from backend.app.evaluation.evidence_authority import _human_review_fixture
-
-    with _isolated_session() as session:
-        incident, _baseline = _human_review_fixture(session)
-        workflow = DynamicYardWorkflow.for_session(session)
-        workflow.apply_latest_assessment(incident.id)
-        opened = workflow.history(incident.id)
-        review = opened.reviews[-1]
-        option = opened.options[-1]
-        workflow.select_tradeoff(
-            review.id,
-            selected_option_id=option.id,
-            expected_options_fingerprint=review.options_fingerprint,
-            operator_id="evidence-operator",
-        )
-        return _TradeoffAuditProbe(
-            history=workflow.history(incident.id),
-            audit_events=tuple(AuditRepository(session).list_for_incident(incident.id)),
-        )
 
 
 def _reference(
