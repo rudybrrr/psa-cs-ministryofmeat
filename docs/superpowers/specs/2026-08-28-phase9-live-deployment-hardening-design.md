@@ -30,7 +30,7 @@ Phase 9 does not add Postgres, Supabase, psycopg, Alembic, Redis, workers, Kuber
 | `backend/app/storage/database.py` sets `DATABASE_URL = "sqlite:///./backend/transshipment.db"` and always supplies SQLite `check_same_thread`. | Centralize environment-driven engine creation there; apply that argument only when the URL is SQLite. |
 | `backend/app/main.py` has an application lifespan that calls `create_db_and_tables(active_engine)`. | Railway cold start and `/healthz` may use existing schema creation/readiness behavior, but health must not create demo state. |
 | `web/src/api/client.ts` already prefixes requests with `import.meta.env.VITE_API_BASE_URL ?? ""`; `web/vite.config.ts` owns localhost proxy rules. | No frontend API-client redesign is needed. Vercel supplies the build-time base URL; proxy remains localhost development only. |
-| `OpenAIAgentModel` uses Responses function tools and persists the configured model on AgentRun/steps; `OpenAISemanticSafetyChecker` uses structured Responses output and stores model, latency, input tokens, and output tokens. | Reuse these boundaries. Phase 9 adds observable telemetry capture, not prompt authority or a second model client. |
+| `AgentStep` and `SemanticSafetyAssessment` already have nullable `latency_ms`, `input_tokens`, and `output_tokens` schema fields. `OpenAIAgentModel` returns only `AgentModelTurn`/`InvalidAgentModelTurn`; `OpenAISemanticSafetyChecker` returns only `SemanticSafetyCheckOutput`; neither adapter returns Responses usage metadata, and `AgentRuntimeCoordinator` currently leaves the AgentStep telemetry fields `None`. | Phase 9 does not claim that current adapters populate telemetry. The live evaluator injects a Phase 9-owned instrumented OpenAI client into the adapters and keeps observations outside decision/runtime contracts. |
 | Agent provider failure becomes deterministic `MODEL_UNAVAILABLE`; semantic missing-key/provider/invalid-output failure becomes `CHECK_FAILED` and blocks automation. | Tests may harden configuration and verify outcomes, but must not change the failure policy. |
 | `backend/app/evaluation/evidence.py` removes `OPENAI_API_KEY` and patches both provider constructors; Phase 8 has fingerprinted deterministic JSON/Markdown artifacts. | Live evaluation is a new module/CLI and artifact namespace. No Phase 8 module, command, test, status, or fingerprint changes are permitted. |
 
@@ -72,8 +72,10 @@ For provider neutrality, engine construction derives `connect_args={"check_same_
 
 ## 5. Railway backend contract
 
-- Railway installs and runs the existing project with `uv` under Python 3.12 (`>=3.12,<3.13`); macOS system Python 3.13 is not used for repository commands.
-- The service starts `backend.app.main:app` with a production ASGI command and listens on Railway’s supplied port.
+- The root `Dockerfile` is the canonical Railway backend deployment artifact. It uses a Python 3.12 base image, installs/uses `uv`, copies the frozen `pyproject.toml` and `uv.lock`, installs only production dependencies with `uv sync --frozen --no-dev`, and then copies only backend runtime sources and shared fixtures needed by the application. It does not build the frontend or install frontend dependencies.
+- The image `WORKDIR` is the repository root so `backend.app.main:app` imports retain their existing paths. Its production command is the shell-form expansion represented by `CMD ["sh", "-c", "uv run --no-sync uvicorn backend.app.main:app --host 0.0.0.0 --port \"${PORT:?PORT is required}\""]`; the shell is intentional so Railway’s `PORT` is expanded before uvicorn starts. The service binds `0.0.0.0` and never bakes a port into the image.
+- A root `.dockerignore` accompanies the Dockerfile and excludes `.env`, `.git`, `web`, `node_modules`, generated databases, evaluation artifacts, and other local files not required by the backend image. The Dockerfile has no `ARG`, `ENV`, `COPY`, or build step for `OPENAI_API_KEY`, `DATABASE_URL`, Railway tokens, or other secrets.
+- Railway runs the existing project under Python 3.12 (`>=3.12,<3.13`); macOS system Python 3.13 is not used for repository commands.
 - Railway attaches a persistent volume at exactly `/data`; `DATABASE_URL=sqlite:////data/transshipment.db` is configured only after that mount exists.
 - Application lifespan calls the existing `create_db_and_tables` against the configured engine. This initialization is idempotent and does not seed a canonical incident.
 - Railway health checking targets `GET /healthz`. A successful response is `200` JSON `{"status":"ok","database":"ready"}` only after a basic database accessibility probe succeeds. It performs no mutation, accepts no input, returns no configuration or secret, and does not invoke OpenAI. A database failure returns a non-2xx response with generic `{"status":"unavailable","database":"unavailable"}`.
@@ -120,12 +122,18 @@ The implementation adds only these Phase 9-owned boundaries:
 | `backend/app/storage/database.py` | Parse `DATABASE_URL`, construct the engine with provider-neutral SQLite-only arguments, and expose the existing session/table APIs. |
 | `backend/app/main.py` | Parse CORS configuration, install exact CORS middleware, and expose `GET /healthz` using the active injected/default engine. |
 | `backend/app/domain/live_evidence.py` | Frozen report, stage, call observation, token/latency, cap, pricing-snapshot, and redacted failure contracts. |
-| `backend/app/evaluation/live_provider.py` | Explicit opt-in bounded staged runner, adapter telemetry collection, artifact validation/writing, and module CLI. |
+| `backend/app/evaluation/live_openai_client.py` | Phase 9-only instrumented OpenAI client/proxy: intercept `responses.create(...)` and `responses.parse(...)`, enforce the provider-call budget immediately before each request, measure latency, extract safe SDK usage/model observations, and return the original SDK response unchanged. |
+| `backend/app/evaluation/live_provider.py` | Explicit opt-in bounded staged runner; constructs the instrumented client, injects it into the existing adapters, owns observations/artifact validation/writing, and provides the module CLI. |
 | `backend/tests/test_deployment_config.py` | Database configuration, CORS, health/readiness, and missing-provider safety tests. |
-| `backend/tests/test_live_provider_evaluation.py` | Fake-client deterministic coverage of live-evaluator caps, schema, telemetry, pricing, and redaction. |
+| `backend/tests/test_live_openai_client.py` | Fake-client deterministic coverage of pre-request hard cap, retry counting, response passthrough, safe usage/model capture, latency, and redaction. |
+| `backend/tests/test_live_provider_evaluation.py` | Fake-client deterministic coverage of staged runner/schema, stop-on-cap/failure, pricing, and artifact redaction. |
+| `Dockerfile` | Canonical root Railway backend image defined in the Railway backend contract. |
+| `.dockerignore` | Root backend-image exclusion boundary defined in the Railway backend contract. |
 | `docs/deployment.md` | Railway/Vercel environment setup, volume, health-check, verification, rollback, and live-evaluation invocation instructions. |
 
-Existing `backend/app/evaluation/evidence.py`, `backend/app/domain/evidence.py`, their tests, and `docs/evaluations/phase8-*` are read-only to Phase 9. Adapter changes are limited to exposing already-returned provider usage/model metadata to the Phase 9 collector through typed return metadata; they must not alter AgentModel or semantic safety decision semantics.
+`live_openai_client.py` constructs its underlying SDK client with SDK automatic retries disabled, so every provider request is visible at the proxy boundary. It increments and checks the hard ten-call budget immediately before delegating to `responses.create(...)` or `responses.parse(...)`; a retry initiated by the existing agent runtime invokes the adapter again and therefore consumes another counted call. Once exhausted, the proxy makes no request and raises a controlled provider-style failure that preserves the adapters’ existing fail-safe behavior; the evaluator reads its own cap observation and stops. On a successful call, the proxy returns the exact original SDK response to the adapter. It records only method, configured/returned model identity, success/failure category, `perf_counter` duration, and SDK-provided usage fields. It never stores inputs, outputs, reasoning, tool arguments, credentials, headers, request IDs, or raw error text.
+
+The evaluator injects that client through the existing `OpenAIAgentModel(client=...)` and `OpenAISemanticSafetyChecker(client=...)` constructor seams. It does not change `AgentModelTurn`, `SemanticSafetyCheckOutput`, `AgentModel`, safety decision contracts, AgentRun/AgentStep persistence semantics, prompts, tool selection, or any deterministic runtime behavior. Existing `backend/app/evaluation/evidence.py`, `backend/app/domain/evidence.py`, their tests, and `docs/evaluations/phase8-*` are read-only to Phase 9.
 
 ### Entry point and stages
 
@@ -147,16 +155,16 @@ The evaluator never executes more than one complete workflow, ten total provider
 The machine-readable report contains only observed facts:
 
 - report schema/suite/label, UTC timestamp, source revision, evaluation base SHA, fixture/configuration identities, environment class (`local` or `deployed`), and configured caps;
-- per call: stage, provider/model identity reported by the configured adapter, success/failure category, wall-clock request latency in milliseconds, input/output/total token counts when returned by the SDK response, and selected function-tool name when applicable;
+- per call: stage, configured/SDK-returned model identity observed by the instrumented client, success/failure category, wall-clock request latency in milliseconds, input/output/total token counts when returned by the SDK response, and selected function-tool name when applicable;
 - durable identifiers for the AgentRun, AgentStep, safety review/assessment, and final outcome when created;
 - aggregate attempted/successful/failed call counts, complete workflow count, and p50/p95 over the observed successful request latencies only;
 - optional cost-estimation section following the rules below.
 
 It excludes prompt bodies, cargo-note text, response prose, hidden reasoning, reasoning summaries, tool arguments, API keys, headers, provider request IDs, and arbitrary exception bodies. Failures use a small stable category such as `CONFIGURATION_ERROR`, `PROVIDER_TIMEOUT`, `PROVIDER_ERROR`, `INVALID_OUTPUT`, `MODEL_UNAVAILABLE`, or `UNEXPECTED_FAILURE` plus stage; they do not serialize raw errors.
 
-Token accounting takes input/output values only from the Responses SDK’s returned usage object. The evaluator records absent values as `null`, not `0`, and computes `total_tokens` only when the provider supplied it or when both input and output values are observed and the derivation is labelled `input_plus_output`. No token estimate is inferred from strings, prompt length, or local tokenizer output.
+Token accounting takes input/output values only from the Responses SDK usage object intercepted by the instrumented client. The evaluator records absent values as `null`, not `0`, and computes `total_tokens` only when the provider supplied it or when both input and output values are observed and the derivation is labelled `input_plus_output`. No token estimate is inferred from strings, prompt length, or local tokenizer output. These observations remain in the Phase 9 artifact and are not backfilled into existing AgentStep or SemanticSafetyAssessment records.
 
-Latency is measured by `time.perf_counter()` around each adapter call and stored as integer milliseconds, labelled client-observed request latency. It includes client-side SDK overhead and is not asserted to be provider-only latency, an SLA, or a stable performance benchmark. Percentiles use nearest-rank over the successful observed values and are omitted when no successful calls exist.
+Latency is measured by `time.perf_counter()` around each instrumented SDK network method and stored as integer milliseconds, labelled client-observed request latency. It includes client-side SDK overhead and is not asserted to be provider-only latency, an SLA, or a stable performance benchmark. Percentiles use nearest-rank over the successful observed values and are omitted when no successful calls exist.
 
 ### Cost-estimation rules
 
@@ -166,7 +174,7 @@ When valid pricing and both required observed token dimensions exist, estimated 
 
 ## 11. Testing strategy
 
-New deterministic tests cover database URL parsing and SQLite-only connect arguments; local/default and configured CORS headers; `/healthz` successful readiness, database failure, non-mutation, and no demo initialization; and configured model identity/failure-safe missing-key behavior. New live-evaluator tests inject fake adapter responses and clocks to prove schema validation, literal labeling, cap enforcement, stop-on-failure, null token behavior, token derivation, latency percentile behavior, price-snapshot validation, and secret/redaction rules without a network call.
+New deterministic tests cover database URL parsing and SQLite-only connect arguments; local/default and configured CORS headers; `/healthz` successful readiness, database failure, non-mutation, and no demo initialization; configured model identity/failure-safe missing-key behavior; and root Dockerfile/.dockerignore contract inspection. New live-client tests inject fake SDK clients and clocks to prove that every `responses.create`/`responses.parse` call is admitted or rejected before the network method, retries consume distinct calls, the eleventh attempted provider call cannot reach the SDK, original successful responses pass through unchanged, and only allowed observation fields are retained. Live-evaluator tests prove schema validation, literal labeling, stop-on-cap/failure, null token behavior, token derivation, latency percentile behavior, price-snapshot validation, and secret/redaction rules without a network call.
 
 Existing full backend tests, frontend unit tests, `npm run typecheck`, `npm run build`, `npm run lint`, `uv lock --check`, and `git diff --check` remain release gates. Phase 8 tests and its regeneration command run with `OPENAI_API_KEY` absent and provider constructors blocked; their report and fingerprint must remain byte/semantic-compatible under their existing volatile-field rules. The separately opt-in live CLI is never part of default pytest, frontend test, build, or deployment health checks.
 
@@ -180,7 +188,7 @@ Rollback is configuration-first: restore the prior Vercel deployment and Railway
 
 Phase 9 is complete only when all of the following are demonstrably true:
 
-1. The Phase 9 branch preserves Python `>=3.12,<3.13` and Railway runs the existing FastAPI service with Python 3.12.
+1. The Phase 9 branch preserves Python `>=3.12,<3.13`; the root Dockerfile uses Python 3.12, installs production dependencies from frozen `uv.lock` with `uv`, does not build the frontend/install dev dependencies, and starts `backend.app.main:app` with the documented shell-expanded Railway `PORT` command.
 2. With `DATABASE_URL` unset, the engine uses `sqlite:///./backend/transshipment.db`; with Railway configuration it uses `sqlite:////data/transshipment.db`.
 3. SQLite receives `check_same_thread=False`; a non-SQLite URL reaches engine construction without SQLite-only connect arguments, with no new database dependency installed.
 4. Railway cold start creates/checks tables on `/data` and `GET /healthz` returns only the documented non-secret readiness response without creating a canonical incident or calling OpenAI.
@@ -191,12 +199,12 @@ Phase 9 is complete only when all of the following are demonstrably true:
 9. Railway config selects `gpt-5.6-terra` for the agent and `gpt-5.6-luna` for semantic checking, while both remain environment-configurable and `OPENAI_API_KEY` remains server-only.
 10. Missing key, provider timeout/error, and invalid semantic output retain the existing `MODEL_UNAVAILABLE` and fail-closed `CHECK_FAILED`/escalation outcomes.
 11. The opt-in Phase 9 CLI produces a schema-valid JSON artifact and Markdown projection labelled `NON-DETERMINISTIC LIVE PROVIDER EVIDENCE`, separate from all Phase 8 artifact paths.
-12. Live stages execute in order, record only allowed observable facts, stop on the first failure, and cannot exceed one complete workflow or ten provider calls even when environment limits are larger.
+12. The instrumented client admits or blocks every `responses.create`/`responses.parse` request before network delegation, counts runtime retries as distinct calls, and makes an eleventh attempted provider call impossible; live stages execute in order, record only allowed observable facts, stop on the first failure, and cannot exceed one complete workflow or ten provider calls even when environment limits are larger.
 13. Token counts are SDK-observed or null; latency is client-observed and labelled; absent values are never invented or represented as zero.
 14. Cost is either an explicitly sourced, pinned-snapshot `ESTIMATED_USD` calculation from observed tokens or `NOT_ESTABLISHED`; no unsourced price or billed-cost claim appears.
 15. The Phase 8 command remains credential-free/network-free, retains its deterministic fingerprint semantics, and still labels live token/cost/latency claims as deferred.
 16. The deployed end-to-end console can create and progress the canonical demo through Vercel to Railway, SQLite, and—only for the explicit live step—OpenAI, while deterministic authority, capacity, dynamic-yard, human-tradeoff, DG, and audit invariants remain enforced by existing code.
-17. No Phase 10 UI/product work, database migration, serverless rewrite, or unrelated refactor is included.
+17. Docker image inputs contain no secrets, runtime `DATABASE_URL` remains environment-only, and the backend image contains no frontend build; no Phase 10 UI/product work, database migration, serverless rewrite, or unrelated refactor is included.
 
 ## 14. Phase 10 handoff boundary
 
