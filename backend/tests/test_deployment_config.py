@@ -1,3 +1,4 @@
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -5,6 +6,21 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
 from backend.app.storage.repositories import IncidentRecord
+
+
+def test_dockerfile_is_python312_backend_only():
+    text = Path("Dockerfile").read_text()
+    assert "FROM python:3.12-slim" in text
+    assert "RUN uv sync --frozen --no-dev --no-install-project" in text
+    assert text.index("RUN uv sync --frozen --no-dev --no-install-project") < text.index("COPY backend ./backend")
+    assert "backend.app.main:app" in text and "${PORT:?PORT is required}" in text
+    assert "OPENAI_API_KEY" not in text and "VITE_API_BASE_URL" not in text
+
+
+def test_dockerignore_keeps_runtime_sources_and_excludes_secrets():
+    ignored = Path(".dockerignore").read_text().splitlines()
+    assert ".env" in ignored and ".git" in ignored and "web" in ignored
+    assert "backend" not in ignored and "shared" not in ignored
 
 
 def test_database_url_defaults_to_existing_local_sqlite(monkeypatch):
