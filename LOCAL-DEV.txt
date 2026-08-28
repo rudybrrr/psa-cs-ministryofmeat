@@ -1,0 +1,101 @@
+PSA Code Sprint — local dev cheat sheet
+========================================
+
+API KEYS
+--------
+
+Put secrets in a file at the repo root:
+
+  /Users/rudy/Documents/Projects/psa-code-sprint/.env
+
+Start from the template:
+
+  cp .env.example .env
+
+Edit .env and set at minimum:
+
+  OPENAI_API_KEY=sk-...
+
+Optional:
+
+  OPENAI_AGENT_MODEL=gpt-5.6-luna   # agent runtime (default)
+  OPENAI_MODEL=gpt-5.6-luna           # DG semantic safety (default)
+  RUN_LIVE_LLM_TESTS=1                # only for opt-in live pytest smoke tests
+
+Load .env into your shell before starting the backend:
+
+  cd /Users/rudy/Documents/Projects/psa-code-sprint
+  set -a && source .env && set +a
+
+The backend reads os.environ directly. It does not auto-load .env on its own.
+The frontend does not need OpenAI keys. API calls go through the Vite proxy.
+
+Note: the canonical demo replay works with NO API key.
+
+
+START SERVERS
+-------------
+
+Terminal 1 — backend (port 8000):
+
+  cd /Users/rudy/Documents/Projects/psa-code-sprint
+  set -a && source .env && set +a   # skip if you don't need live OpenAI
+  uv run --python 3.12 --extra dev uvicorn backend.app.main:app --reload --port 8000
+
+Terminal 2 — frontend (port 5173):
+
+  cd /Users/rudy/Documents/Projects/psa-code-sprint/web
+  npm run dev
+
+URLs:
+  Frontend:  http://localhost:5173
+  API docs:  http://127.0.0.1:8000/docs
+
+
+STOP SERVERS (kill manually)
+----------------------------
+
+Easiest: kill by port (macOS/Linux):
+
+  # Stop backend (uvicorn on :8000)
+  lsof -ti:8000 | xargs kill
+
+  # Stop frontend (Vite on :5173)
+  lsof -ti:5173 | xargs kill
+
+If a process won't die, force it:
+
+  lsof -ti:8000 | xargs kill -9
+  lsof -ti:5173 | xargs kill -9
+
+Alternative: kill by process name:
+
+  pkill -f "uvicorn backend.app.main:app"
+  pkill -f "vite.*psa-code-sprint/web"
+
+Check what's still listening:
+
+  lsof -i:8000
+  lsof -i:5173
+
+Currently running from this session (PIDs change each time you start):
+  Backend shell PID:  7883  (uvicorn reloader child: 7890, worker: 7892)
+  Frontend shell PID: 7893
+
+To kill those specific PIDs right now:
+
+  kill 7883 7893
+
+If ports stay busy after that, also run:
+
+  kill 7890 7892
+
+
+REINSTALL DEPS (if needed)
+--------------------------
+
+  cd /Users/rudy/Documents/Projects/psa-code-sprint
+  uv sync --python 3.12 --extra dev
+
+  cd /Users/rudy/Documents/Projects/psa-code-sprint/web
+  npm install
