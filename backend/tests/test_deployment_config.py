@@ -64,9 +64,45 @@ def test_parse_allowed_origins_rejects_unsafe_deployed_values():
             parse_allowed_origins(value)
 
 
+@pytest.mark.parametrize(
+    "value",
+    (
+        "https://EXAMPLE.com,https://example.com",
+        "https://example.com,https://example.com:443",
+    ),
+)
+def test_parse_allowed_origins_rejects_semantic_duplicates(value):
+    from backend.app.main import parse_allowed_origins
+
+    with pytest.raises(ValueError):
+        parse_allowed_origins(value)
+
+
 def test_healthz_checks_database_without_creating_incident(api_engine):
     from backend.app.main import create_app
 
     with TestClient(create_app(database_engine=api_engine)) as client:
         assert client.get("/healthz").json() == {"status": "ok", "database": "ready"}
     assert Session(api_engine).exec(select(IncidentRecord)).all() == []
+
+
+def test_healthz_hides_database_failure_details(monkeypatch, api_engine):
+    import backend.app.main as main
+
+    class FailingSession:
+        def __init__(self, _):
+            pass
+
+        def __enter__(self):
+            raise main.SQLAlchemyError("database password: secret")
+
+        def __exit__(self, *_):
+            return False
+
+    monkeypatch.setattr(main, "Session", FailingSession)
+    with TestClient(main.create_app(database_engine=api_engine)) as client:
+        response = client.get("/healthz")
+
+    assert response.status_code == 503
+    assert response.json() == {"status": "unavailable", "database": "unavailable"}
+    assert "secret" not in response.text
