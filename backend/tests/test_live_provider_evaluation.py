@@ -34,6 +34,9 @@ def valid_observation() -> ProviderCallObservation:
 
 
 def test_live_config_rejects_missing_opt_in_and_limits() -> None:
+    with pytest.raises(TypeError):
+        LiveProviderRunConfig()
+
     with pytest.raises(ValueError, match="RUN_LIVE_LLM_TESTS=1"):
         LiveProviderRunConfig.from_environ(
             {"PHASE9_LIVE_MAX_CALLS": "10", "PHASE9_LIVE_MAX_RUNS": "1"}
@@ -79,6 +82,38 @@ def test_report_contract_rejects_raw_content_and_inconsistent_tokens() -> None:
     with pytest.raises(ValidationError):
         ProviderCallObservation.model_validate(
             {**valid_observation().model_dump(), "total_tokens": 7}
+        )
+
+
+def test_cost_reasons_are_bounded() -> None:
+    with pytest.raises(ValidationError):
+        CostEstimate(status=CostStatus.NOT_ESTABLISHED, reason="provider said no")
+
+
+def test_report_call_count_is_bounded() -> None:
+    report = LiveProviderReport(
+        label="NON-DETERMINISTIC LIVE PROVIDER EVIDENCE",
+        schema_version="phase9-live-evidence-v1",
+        suite_id="phase9-live-provider-evidence",
+        generated_at=datetime(2026, 8, 28, tzinfo=UTC),
+        source_revision="test",
+        evaluation_base_sha="2ff0e58d98e586f7904c726a4bb485a8419e2954",
+        environment="local",
+        config=LiveProviderRunConfig(True, 10, 1, None),
+        observations=(valid_observation(),),
+        stopped_stage=None,
+        cost=CostEstimate(status=CostStatus.NOT_ESTABLISHED, reason="NO_PRICING_SNAPSHOT"),
+    )
+    with pytest.raises(ValidationError):
+        LiveProviderReport(
+            **{
+                **report.model_dump(),
+                "config": LiveProviderRunConfig(True, 1, 1, None),
+                "observations": (
+                    valid_observation(),
+                    valid_observation().model_copy(update={"call_number": 2}),
+                ),
+            }
         )
 
 

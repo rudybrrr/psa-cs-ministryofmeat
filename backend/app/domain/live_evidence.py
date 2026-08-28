@@ -44,10 +44,10 @@ class LiveProviderRunConfig(FrozenContract):
 
     def __init__(
         self,
-        run_live_llm_tests: bool = True,
-        max_calls: int = 10,
-        max_workflows: int = 1,
-        pricing_snapshot_path: Path | None = None,
+        run_live_llm_tests: bool,
+        max_calls: int,
+        max_workflows: int,
+        pricing_snapshot_path: Path | None,
         **data: object,
     ) -> None:
         super().__init__(
@@ -124,16 +124,29 @@ class PricingSnapshot(FrozenContract):
 class CostEstimate(FrozenContract):
     status: CostStatus
     amount_usd: Decimal | None = Field(default=None, ge=0)
-    reason: str | None = Field(default=None, min_length=1)
+    reason: Literal[
+        "NO_PRICING_SNAPSHOT",
+        "INVALID_PRICING_SNAPSHOT",
+        "MODEL_MISMATCH",
+        "INCOMPLETE_TOKEN_USAGE",
+    ] | None = None
     pricing_snapshot_commit_sha: str | None = Field(default=None, pattern=r"^[0-9a-f]{40}$")
 
     @model_validator(mode="after")
     def valid_cost_shape(self) -> Self:
         if self.status is CostStatus.ESTIMATED_USD:
-            if self.amount_usd is None or self.pricing_snapshot_commit_sha is None:
-                raise ValueError("estimated USD cost requires amount and pricing snapshot")
-        elif self.amount_usd is not None or self.pricing_snapshot_commit_sha is not None:
-            raise ValueError("unestablished cost cannot include an amount or pricing snapshot")
+            if (
+                self.amount_usd is None
+                or self.pricing_snapshot_commit_sha is None
+                or self.reason is not None
+            ):
+                raise ValueError("estimated USD cost requires amount and pricing snapshot only")
+        elif (
+            self.amount_usd is not None
+            or self.pricing_snapshot_commit_sha is not None
+            or self.reason is None
+        ):
+            raise ValueError("unestablished cost requires an allowlisted reason only")
         return self
 
 
@@ -164,4 +177,6 @@ class LiveProviderReport(FrozenContract):
         numbers = [item.call_number for item in self.observations]
         if numbers != list(range(1, len(numbers) + 1)):
             raise ValueError("observations must be consecutively numbered from one")
+        if len(self.observations) > self.config.max_calls:
+            raise ValueError("observations cannot exceed the configured call cap")
         return self
