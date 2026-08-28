@@ -78,6 +78,22 @@ def test_parse_allowed_origins_rejects_semantic_duplicates(value):
         parse_allowed_origins(value)
 
 
+def test_parse_allowed_origins_keeps_port_zero_distinct_from_default_port():
+    from backend.app.main import parse_allowed_origins
+
+    assert parse_allowed_origins("https://example.com,https://example.com:0") == (
+        "https://example.com",
+        "https://example.com:0",
+    )
+
+
+def test_parse_allowed_origins_rejects_empty_explicit_port():
+    from backend.app.main import parse_allowed_origins
+
+    with pytest.raises(ValueError):
+        parse_allowed_origins("https://example.com:")
+
+
 def test_healthz_checks_database_without_creating_incident(api_engine):
     from backend.app.main import create_app
 

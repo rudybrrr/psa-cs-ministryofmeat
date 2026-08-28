@@ -159,9 +159,9 @@ def parse_allowed_origins(value: str | None) -> Sequence[str]:
         except ValueError as error:
             raise ValueError("ALLOWED_ORIGINS must contain valid HTTPS origins") from error
         is_local = parsed.hostname in {"localhost", "127.0.0.1"}
-        if (parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password or parsed.path or parsed.params or parsed.query or parsed.fragment or (parsed.scheme == "http" and not is_local)):
+        if (parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password or parsed.netloc.endswith(":") or parsed.path or parsed.params or parsed.query or parsed.fragment or (parsed.scheme == "http" and not is_local)):
             raise ValueError("ALLOWED_ORIGINS must contain valid HTTPS origins")
-        identity = (parsed.scheme, parsed.hostname.lower(), port or {"http": 80, "https": 443}[parsed.scheme])
+        identity = (parsed.scheme, parsed.hostname.lower(), port if port is not None else {"http": 80, "https": 443}[parsed.scheme])
         if identity in identities:
             raise ValueError("ALLOWED_ORIGINS must not contain duplicate origins")
         identities.add(identity)
