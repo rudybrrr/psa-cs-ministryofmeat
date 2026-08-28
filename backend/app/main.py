@@ -1,13 +1,18 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Annotated
+from os import getenv
+from typing import Annotated, Sequence
+from urllib.parse import urlparse
 from uuid import UUID
 
 from fastapi import Body, Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.encoders import jsonable_encoder
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, ValidationError
+from sqlalchemy import text
 from sqlalchemy.engine import Engine
+from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session
 
 from backend.app.domain.carrier_recovery import (
@@ -137,6 +142,29 @@ class AllocationTradeoffSelectionBody(BaseModel):
 SessionDependency = Annotated[Session, Depends(get_session)]
 
 
+LOCAL_ALLOWED_ORIGINS = ("http://127.0.0.1:5173", "http://localhost:5173")
+
+
+def parse_allowed_origins(value: str | None) -> Sequence[str]:
+    if value is None:
+        return LOCAL_ALLOWED_ORIGINS
+    origins = tuple(value.split(","))
+    if not origins or any(not origin or origin != origin.strip() or "*" in origin for origin in origins):
+        raise ValueError("ALLOWED_ORIGINS must contain exact origins")
+    if len(set(origins)) != len(origins):
+        raise ValueError("ALLOWED_ORIGINS must not contain duplicate origins")
+    for origin in origins:
+        parsed = urlparse(origin)
+        try:
+            _ = parsed.port
+        except ValueError as error:
+            raise ValueError("ALLOWED_ORIGINS must contain valid HTTPS origins") from error
+        is_local = parsed.hostname in {"localhost", "127.0.0.1"}
+        if (parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password or parsed.path or parsed.params or parsed.query or parsed.fragment or (parsed.scheme == "http" and not is_local)):
+            raise ValueError("ALLOWED_ORIGINS must contain valid HTTPS origins")
+    return origins
+
+
 def create_app(*, database_engine: Engine | None = None, cargo_safety_checker: SemanticSafetyChecker | None = None, agent_model: AgentModel | None = None) -> FastAPI:
     active_engine = database_engine if database_engine is not None else engine
 
@@ -149,6 +177,25 @@ def create_app(*, database_engine: Engine | None = None, cargo_safety_checker: S
         title="PSA Transshipment Recovery",
         lifespan=lifespan,
     )
+    application.add_middleware(
+        CORSMiddleware,
+        allow_origins=parse_allowed_origins(getenv("ALLOWED_ORIGINS")),
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["Accept", "Content-Type"],
+        allow_credentials=False,
+    )
+
+    @application.get("/healthz")
+    def healthz() -> JSONResponse:
+        try:
+            with Session(active_engine) as session:
+                session.exec(text("SELECT 1"))
+        except SQLAlchemyError:
+            return JSONResponse(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                content={"status": "unavailable", "database": "unavailable"},
+            )
+        return JSONResponse(content={"status": "ok", "database": "ready"})
 
     @application.exception_handler(ValidationError)
     async def domain_validation_error(_, error: ValidationError) -> JSONResponse:

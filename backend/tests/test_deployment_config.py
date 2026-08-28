@@ -1,5 +1,11 @@
 from types import SimpleNamespace
 
+import pytest
+from fastapi.testclient import TestClient
+from sqlmodel import Session, select
+
+from backend.app.storage.repositories import IncidentRecord
+
 
 def test_database_url_defaults_to_existing_local_sqlite(monkeypatch):
     monkeypatch.delenv("DATABASE_URL", raising=False)
@@ -24,3 +30,43 @@ def test_sqlite_only_connect_args(monkeypatch):
         ("sqlite:////data/transshipment.db", {"connect_args": {"check_same_thread": False}}),
         ("postgresql://host/db", {}),
     ]
+
+
+def test_cors_configured_origin_is_allowed_and_other_origin_is_not(monkeypatch, api_engine):
+    from backend.app.main import create_app
+
+    monkeypatch.setenv("ALLOWED_ORIGINS", "https://console.example.vercel.app")
+    app = create_app(database_engine=api_engine)
+    allowed = TestClient(app).options(
+        "/healthz",
+        headers={
+            "Origin": "https://console.example.vercel.app",
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+    blocked = TestClient(app).options(
+        "/healthz",
+        headers={
+            "Origin": "https://other.example.vercel.app",
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+
+    assert allowed.headers["access-control-allow-origin"] == "https://console.example.vercel.app"
+    assert "access-control-allow-origin" not in blocked.headers
+
+
+def test_parse_allowed_origins_rejects_unsafe_deployed_values():
+    from backend.app.main import parse_allowed_origins
+
+    for value in ("", " ", "*", "https://console.example.com,https://console.example.com", "http://console.example.com", "console.example.com"):
+        with pytest.raises(ValueError):
+            parse_allowed_origins(value)
+
+
+def test_healthz_checks_database_without_creating_incident(api_engine):
+    from backend.app.main import create_app
+
+    with TestClient(create_app(database_engine=api_engine)) as client:
+        assert client.get("/healthz").json() == {"status": "ok", "database": "ready"}
+    assert Session(api_engine).exec(select(IncidentRecord)).all() == []
