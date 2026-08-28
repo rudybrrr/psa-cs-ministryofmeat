@@ -113,12 +113,29 @@ class LiveProviderEvaluator:
         self._session_factory = session_factory
         self._stages: dict[int, LiveStage] = {}
         self._selected_tools: dict[int, str] = {}
+        self._budget: Any | None = None
 
     def run(self) -> LiveProviderReport:
-        from backend.app.evaluation.live_openai_client import ProviderCallBudget
-
         snapshot = self._load_snapshot()
-        budget = ProviderCallBudget(self._config.max_calls)
+        from backend.app.evaluation.live_openai_client import (
+            LiveProviderCallCapExceeded,
+            ProviderCallBudget,
+        )
+
+        class EvaluatorProviderCallBudget(ProviderCallBudget):
+            def __init__(self, max_calls: int) -> None:
+                super().__init__(max_calls)
+                self.cap_rejections = 0
+
+            def admit(self, method: Any) -> int:
+                try:
+                    return super().admit(method)
+                except LiveProviderCallCapExceeded:
+                    self.cap_rejections += 1
+                    raise
+
+        budget = EvaluatorProviderCallBudget(self._config.max_calls)
+        self._budget = budget
         client = self._client_factory(budget)
         stopped_stage: LiveStage | None = None
         durable: dict[str, Any] = {}
@@ -233,6 +250,7 @@ class LiveProviderEvaluator:
         operation: Callable[[], tuple[Any, str | None]],
     ) -> Any:
         before = len(client.observations)
+        rejected_before = getattr(self._budget, "cap_rejections", 0)
         try:
             result, selected_tool = operation()
         except Exception as error:
@@ -240,11 +258,16 @@ class LiveProviderEvaluator:
             raise _StageFailure(
                 stage,
                 call_cap=(
-                    len(client.observations) == before
-                    and before >= self._config.max_calls
+                    getattr(self._budget, "cap_rejections", 0) > rejected_before
+                    or (
+                        len(client.observations) == before
+                        and before >= self._config.max_calls
+                    )
                 ),
             ) from error
         self._tag_new_observations(client, before, stage, selected_tool)
+        if getattr(self._budget, "cap_rejections", 0) > rejected_before:
+            raise _StageFailure(stage, call_cap=True)
         new = tuple(client.observations[before:])
         if not new and len(client.observations) >= self._config.max_calls:
             raise _StageFailure(stage, call_cap=True)
@@ -542,10 +565,7 @@ def render_live_evidence(report: LiveProviderReport) -> str:
 def write_artifacts(
     report: LiveProviderReport, output_json: Path, output_markdown: Path
 ) -> None:
-    json_path = _live_output_path(output_json)
-    markdown_path = _live_output_path(output_markdown)
-    if json_path == markdown_path:
-        raise ValueError("JSON and Markdown artifact paths must be distinct")
+    json_path, markdown_path = _live_output_paths(output_json, output_markdown)
     json_path.parent.mkdir(parents=True, exist_ok=True)
     markdown_path.parent.mkdir(parents=True, exist_ok=True)
     json_path.write_text(report.model_dump_json(indent=2) + "\n", encoding="utf-8")
@@ -561,6 +581,14 @@ def _live_output_path(path: Path) -> Path:
     return resolved
 
 
+def _live_output_paths(output_json: Path, output_markdown: Path) -> tuple[Path, Path]:
+    json_path = _live_output_path(output_json)
+    markdown_path = _live_output_path(output_markdown)
+    if json_path == markdown_path:
+        raise ValueError("JSON and Markdown artifact paths must be distinct")
+    return json_path, markdown_path
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Generate bounded live-provider evidence.")
     parser.add_argument("--output-json", type=Path, required=True)
@@ -574,21 +602,26 @@ def main(argv: Sequence[str] | None = None) -> int:
     api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
         raise ValueError("live tests require OPENAI_API_KEY")
+    _live_output_paths(args.output_json, args.output_markdown)
 
-    # Import and SDK construction stay behind all environment and CLI validation.
-    from backend.app.evaluation.live_openai_client import InstrumentedOpenAIClient
-    from backend.app.storage.database import create_db_and_tables, engine
+    def client_factory(budget: Any) -> Any:
+        # Import and SDK construction stay behind environment, path, and pricing
+        # validation; LiveProviderEvaluator.run() invokes this only afterward.
+        from backend.app.evaluation.live_openai_client import InstrumentedOpenAIClient
 
-    create_db_and_tables(engine)
+        return InstrumentedOpenAIClient.from_api_key(api_key, budget)
 
     @contextmanager
     def session_scope() -> Any:
+        from backend.app.storage.database import create_db_and_tables, engine
+
+        create_db_and_tables(engine)
         with Session(engine) as session:
             yield session
 
     evaluator = LiveProviderEvaluator(
         config,
-        lambda budget: InstrumentedOpenAIClient.from_api_key(api_key, budget),
+        client_factory,
         session_scope,
     )
     report = evaluator.run()

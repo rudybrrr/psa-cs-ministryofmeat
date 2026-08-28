@@ -3,7 +3,10 @@ from contextlib import contextmanager
 from datetime import UTC, datetime
 from decimal import Decimal
 import json
+import os
 from pathlib import Path
+import subprocess
+import sys
 from types import SimpleNamespace
 from typing import Iterator
 
@@ -127,6 +130,14 @@ def tool_response(name: str, arguments: dict[str, str] | None = None) -> object:
                 arguments=json.dumps(arguments or {}),
             ),
         ),
+    )
+
+
+def invalid_tool_response() -> object:
+    return SimpleNamespace(
+        model="gpt-test",
+        usage=SimpleNamespace(input_tokens=3, output_tokens=5, total_tokens=8),
+        output=(),
     )
 
 
@@ -323,6 +334,31 @@ def test_canonical_semantic_smoke_requires_the_expected_contradiction() -> None:
 
     assert report.stopped_stage is LiveStage.SEMANTIC_SAFETY_SMOKE
     assert report.provider_call_count == 2
+
+
+def test_runtime_retry_preserves_call_cap_rejection() -> None:
+    outcomes = [
+        valid_semantic_response(),
+        valid_semantic_response(),
+        tool_response("pause_agent_run"),
+        invalid_tool_response(),
+        tool_response("pause_agent_run"),
+        invalid_tool_response(),
+        tool_response("request_expedite_feasibility"),
+        invalid_tool_response(),
+        tool_response("prepare_rta_request", {"connection_id": "SYN-CONN-JV2"}),
+        invalid_tool_response(),
+    ]
+    sdk = ScriptedSDK(outcomes)
+
+    def factory(budget: ProviderCallBudget) -> InstrumentedOpenAIClient:
+        return InstrumentedOpenAIClient(sdk, budget, clock=EvaluatorClock())
+
+    report = LiveProviderEvaluator(config(), factory, isolated_session).run()
+
+    assert report.stopped_stage is LiveStage.STOPPED_AT_CALL_CAP
+    assert report.provider_call_count == 10
+    assert len(sdk.responses.calls) == 10
 
 
 def test_cost_is_not_established_without_pinned_snapshot() -> None:
@@ -587,3 +623,99 @@ def test_cli_validates_configuration_then_builds_the_bounded_runner(
             Path("docs/evaluations/live/report.md"),
         )
     ]
+
+
+@pytest.mark.parametrize(
+    ("output_json", "output_markdown"),
+    [
+        ("outside.json", "docs/evaluations/live/report.md"),
+        (
+            "docs/evaluations/phase8-live-provider.json",
+            "docs/evaluations/live/report.md",
+        ),
+        (
+            "docs/evaluations/live/report.json",
+            "docs/evaluations/live/report.json",
+        ),
+    ],
+)
+def test_cli_rejects_output_paths_before_evaluator_or_client_work(
+    output_json: str,
+    output_markdown: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from backend.app.evaluation import live_provider
+
+    monkeypatch.setenv("RUN_LIVE_LLM_TESTS", "1")
+    monkeypatch.setenv("OPENAI_API_KEY", "synthetic-test-key")
+    monkeypatch.setenv("PHASE9_LIVE_MAX_CALLS", "10")
+    monkeypatch.setenv("PHASE9_LIVE_MAX_RUNS", "1")
+    monkeypatch.delenv("PHASE9_LIVE_PRICING_SNAPSHOT", raising=False)
+    touched = False
+
+    def forbidden_evaluator(*args: object, **kwargs: object) -> None:
+        nonlocal touched
+        touched = True
+        raise AssertionError("evaluator must not be constructed")
+
+    monkeypatch.setattr(live_provider, "LiveProviderEvaluator", forbidden_evaluator)
+
+    with pytest.raises(ValueError):
+        main(
+            [
+                "--output-json",
+                output_json,
+                "--output-markdown",
+                output_markdown,
+            ]
+        )
+    assert touched is False
+
+
+def test_invalid_pricing_is_rejected_before_live_client_import_in_fresh_process(
+    tmp_path: Path,
+) -> None:
+    snapshot_path = tmp_path / "invalid-pricing.json"
+    snapshot_path.write_text('{"provider":"openai"}', encoding="utf-8")
+    script = """
+import builtins
+import os
+import sys
+
+real_import = builtins.__import__
+def guarded_import(name, *args, **kwargs):
+    if name.startswith("backend.app.evaluation.live_openai_client"):
+        raise AssertionError("live client imported before pricing validation")
+    return real_import(name, *args, **kwargs)
+builtins.__import__ = guarded_import
+
+from backend.app.evaluation.live_provider import main
+
+os.environ.update({
+    "RUN_LIVE_LLM_TESTS": "1",
+    "OPENAI_API_KEY": "synthetic-test-key",
+    "PHASE9_LIVE_MAX_CALLS": "10",
+    "PHASE9_LIVE_MAX_RUNS": "1",
+    "PHASE9_LIVE_PRICING_SNAPSHOT": sys.argv[1],
+})
+try:
+    main([
+        "--output-json", "docs/evaluations/live/report.json",
+        "--output-markdown", "docs/evaluations/live/report.md",
+    ])
+except ValueError as error:
+    assert "invalid PHASE9_LIVE_PRICING_SNAPSHOT" in str(error)
+else:
+    raise AssertionError("invalid pricing snapshot was accepted")
+"""
+
+    result = subprocess.run(
+        [sys.executable, "-c", script, str(snapshot_path)],
+        cwd=Path.cwd(),
+        env={**os.environ, "OPENAI_API_KEY": "", "RUN_LIVE_LLM_TESTS": ""},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
