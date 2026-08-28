@@ -86,14 +86,27 @@
 - [ ] **Step 1: Write failing configuration tests.**
 
 ```python
+from types import SimpleNamespace
+
 def test_database_url_defaults_to_existing_local_sqlite(monkeypatch):
     monkeypatch.delenv("DATABASE_URL", raising=False)
     assert database_url() == "sqlite:///./backend/transshipment.db"
 
 def test_sqlite_only_connect_args(monkeypatch):
-    assert build_engine("sqlite:////data/transshipment.db").url.database == "/data/transshipment.db"
-    captured = capture_create_engine("postgresql://host/db")
-    assert "connect_args" not in captured
+    import backend.app.storage.database as database
+    calls: list[tuple[str, dict[str, object]]] = []
+
+    def fake_create_engine(url: str, **kwargs: object) -> object:
+        calls.append((url, kwargs))
+        return SimpleNamespace(url=SimpleNamespace(database="db"))
+
+    monkeypatch.setattr(database, "create_engine", fake_create_engine)
+    database.build_engine("sqlite:////data/transshipment.db")
+    database.build_engine("postgresql://host/db")
+    assert calls == [
+        ("sqlite:////data/transshipment.db", {"connect_args": {"check_same_thread": False}}),
+        ("postgresql://host/db", {}),
+    ]
 ```
 
 - [ ] **Step 2: Run the focused tests before implementation.**
@@ -126,9 +139,9 @@ git commit -m "feat: configure database URL by environment"
 - Modify: `backend/tests/test_deployment_config.py`
 
 **Interfaces:**
-- Produces `parse_allowed_origins(value: str | None) -> tuple[str, ...]`, returning local defaults only when unset and rejecting blank, duplicate, wildcard, and non-local HTTP/invalid deployed origins with `ValueError`.
+- Produces `parse_allowed_origins(value: str | None) -> Sequence[str]`, returning local defaults only when unset and rejecting blank, duplicate, wildcard, and non-local HTTP/invalid deployed origins with `ValueError`.
 - Produces `GET /healthz`: `200 {"status":"ok","database":"ready"}` after `SELECT 1`; non-2xx `{"status":"unavailable","database":"unavailable"}` on database failure.
-- Consumes Task 1 `build_engine`/configured default engine and existing `create_app(database_engine=...)` injection seam.
+- Consumes Task 1 `build_engine`/configured default engine and existing `create_app(database_engine=api_engine)` injection seam.
 
 - [ ] **Step 1: Write failing CORS and readiness tests.**
 
@@ -184,7 +197,9 @@ git commit -m "feat: add deployment health and cors boundary"
 ```python
 def test_dockerfile_is_python312_backend_only():
     text = Path("Dockerfile").read_text()
-    assert "python:3.12" in text and "uv sync --frozen --no-dev" in text
+    assert "FROM python:3.12-slim" in text
+    assert "RUN uv sync --frozen --no-dev --no-install-project" in text
+    assert text.index("RUN uv sync --frozen --no-dev --no-install-project") < text.index("COPY backend ./backend")
     assert "backend.app.main:app" in text and "${PORT:?PORT is required}" in text
     assert "OPENAI_API_KEY" not in text and "VITE_API_BASE_URL" not in text
 
@@ -211,9 +226,9 @@ COPY --from=uv /uv /uvx /bin/
 WORKDIR /app
 ENV PYTHONUNBUFFERED=1 UV_LINK_MODE=copy
 COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev --no-install-project
 COPY backend ./backend
 COPY shared ./shared
-RUN uv sync --frozen --no-dev
 CMD ["sh", "-c", "uv run --no-sync uvicorn backend.app.main:app --host 0.0.0.0 --port \"${PORT:?PORT is required}\""]
 ```
 
@@ -256,21 +271,41 @@ git commit -m "build: add railway backend image"
 - Modify: `backend/tests/test_live_provider_evaluation.py`
 
 **Interfaces:**
-- Produces frozen Pydantic contracts: `LiveStage`, `LiveFailureKind`, `CostStatus`, `ProviderCallObservation`, `PricingSnapshot`, `LiveProviderReport`, and `LiveProviderRunConfig`.
-- `LiveProviderRunConfig.from_environ(environ: Mapping[str, str]) -> LiveProviderRunConfig` requires opt-in, positive limits, caps `max_calls` at 10 and `max_workflows` at 1, and returns no API key field.
+- Produces frozen Pydantic contracts: `LiveStage`, `LiveFailureKind`, `CostStatus`, `CostEstimate`, `ProviderCallObservation`, `PricingSnapshot`, `LiveProviderReport`, and `LiveProviderRunConfig`.
+- `LiveProviderRunConfig(run_live_llm_tests: Literal[True], max_calls: int, max_workflows: int, pricing_snapshot_path: Path | None)` and `LiveProviderRunConfig.from_environ(environ: Mapping[str, str]) -> LiveProviderRunConfig` require opt-in, positive limits, cap `max_calls` at 10 and `max_workflows` at 1, and contain no API key field.
+- `ProviderCallObservation(call_number: int, stage: LiveStage, method: Literal["responses.create", "responses.parse"], configured_model: str, returned_model: str | None, success: bool, failure_kind: LiveFailureKind | None, latency_ms: int | None, input_tokens: int | None, output_tokens: int | None, total_tokens: int | None, selected_tool: str | None)` is the only per-request data shape.
 - `LiveProviderReport` requires literal label `NON-DETERMINISTIC LIVE PROVIDER EVIDENCE`, suite ID `phase9-live-provider-evidence`, safe provenance, and no free-form request/response/error fields.
 
 - [ ] **Step 1: Write failing contract tests.**
 
 ```python
+from datetime import UTC, datetime
+from pathlib import Path
+
+def valid_observation() -> ProviderCallObservation:
+    return ProviderCallObservation(
+        call_number=1, stage=LiveStage.CONNECTIVITY_SMOKE,
+        method="responses.parse", configured_model="gpt-test", returned_model="gpt-test",
+        success=True, failure_kind=None, latency_ms=12,
+        input_tokens=3, output_tokens=5, total_tokens=8, selected_tool=None,
+    )
+
 def test_live_config_rejects_missing_opt_in_and_limits():
     with pytest.raises(ValueError, match="RUN_LIVE_LLM_TESTS=1"):
         LiveProviderRunConfig.from_environ({"PHASE9_LIVE_MAX_CALLS": "10", "PHASE9_LIVE_MAX_RUNS": "1"})
 
 def test_report_requires_literal_label_and_safe_observation_shape():
-    assert LiveProviderReport(..., label="NON-DETERMINISTIC LIVE PROVIDER EVIDENCE").label
+    report = LiveProviderReport(
+        label="NON-DETERMINISTIC LIVE PROVIDER EVIDENCE", schema_version="phase9-live-evidence-v1",
+        suite_id="phase9-live-provider-evidence", generated_at=datetime(2026, 8, 28, tzinfo=UTC),
+        source_revision="test", evaluation_base_sha="2ff0e58d98e586f7904c726a4bb485a8419e2954",
+        environment="local", config=LiveProviderRunConfig(True, 10, 1, None),
+        observations=(valid_observation(),), stopped_stage=None,
+        cost=CostEstimate(status=CostStatus.NOT_ESTABLISHED, amount_usd=None, reason="NO_PRICING_SNAPSHOT"),
+    )
+    assert report.label == "NON-DETERMINISTIC LIVE PROVIDER EVIDENCE"
     with pytest.raises(ValidationError):
-        ProviderCallObservation(..., raw_error="secret")
+        ProviderCallObservation.model_validate({**valid_observation().model_dump(), "raw_error": "secret"})
 ```
 
 - [ ] **Step 2: Run the focused tests before implementation.**
@@ -305,23 +340,48 @@ git commit -m "feat: add live evidence contracts"
 **Interfaces:**
 - Produces `ProviderCallBudget(max_calls: int = 10)` with `admit(method: Literal["responses.create", "responses.parse"]) -> int` and read-only `attempted_calls`/`remaining_calls`.
 - Produces `InstrumentedOpenAIClient(client: OpenAI, budget: ProviderCallBudget, clock: Callable[[], float] = perf_counter)` exposing `.responses.create(*args, **kwargs)` and `.responses.parse(*args, **kwargs)`.
-- Produces `observations: tuple[ProviderCallObservation, ...]`; successful calls return the exact SDK response object. A cap-exhausted call raises an `OpenAIError` subclass before invoking the fake/SDK method so current adapters retain provider-failure semantics.
-- Consumed by Task 6 via existing `OpenAIAgentModel(client=...)` and `OpenAISemanticSafetyChecker(client=...)` constructors.
+- Produces `LiveProviderCallCapExceeded(OpenAIError)` and `observations: Sequence[ProviderCallObservation]`; successful calls return the exact SDK response object. A cap-exhausted call raises `LiveProviderCallCapExceeded` before invoking the fake/SDK method so current adapters retain provider-failure semantics.
+- Consumed by Task 6 via existing `OpenAIAgentModel(client=instrumented_client)` and `OpenAISemanticSafetyChecker(client=instrumented_client)` constructors.
 
 - [ ] **Step 1: Write failing no-network proxy tests.**
 
 ```python
-def test_create_and_parse_share_ten_call_budget(fake_sdk):
-    client = InstrumentedOpenAIClient(fake_sdk, ProviderCallBudget(10), clock=FakeClock())
-    for _ in range(5): client.responses.create(model="m")
-    for _ in range(5): client.responses.parse(model="m")
-    with pytest.raises(LiveProviderCallCapExceeded): client.responses.create(model="m")
-    assert fake_sdk.calls == 10
+from collections import deque
+from types import SimpleNamespace
 
-def test_response_identity_usage_and_redaction(fake_sdk):
-    response = fake_sdk.next_response(model="m", input_tokens=3, output_tokens=5, total_tokens=8)
-    assert InstrumentedOpenAIClient(fake_sdk, ProviderCallBudget()).responses.create(input="secret", model="m") is response
-    assert "secret" not in repr(client.observations)
+class FakeResponses:
+    def __init__(self, responses: list[object]) -> None:
+        self.responses = deque(responses)
+        self.calls: list[tuple[str, dict[str, object]]] = []
+    def create(self, **kwargs: object) -> object:
+        self.calls.append(("responses.create", kwargs)); return self.responses.popleft()
+    def parse(self, **kwargs: object) -> object:
+        self.calls.append(("responses.parse", kwargs)); return self.responses.popleft()
+
+class FakeSDK:
+    def __init__(self, responses: list[object]) -> None:
+        self.responses = FakeResponses(responses)
+
+class FakeClock:
+    def __init__(self) -> None: self.values = deque([1.0, 1.012] * 10)
+    def __call__(self) -> float: return self.values.popleft()
+
+def sdk_response() -> object:
+    return SimpleNamespace(model="gpt-test", usage=SimpleNamespace(input_tokens=3, output_tokens=5, total_tokens=8))
+
+def test_create_and_parse_share_ten_call_budget():
+    sdk = FakeSDK([sdk_response() for _ in range(10)])
+    client = InstrumentedOpenAIClient(sdk, ProviderCallBudget(10), clock=FakeClock())
+    for _ in range(5): client.responses.create(model="gpt-test")
+    for _ in range(5): client.responses.parse(model="gpt-test")
+    with pytest.raises(LiveProviderCallCapExceeded): client.responses.create(model="gpt-test")
+    assert len(sdk.responses.calls) == 10
+
+def test_response_identity_usage_and_redaction():
+    response = sdk_response(); sdk = FakeSDK([response]); client = InstrumentedOpenAIClient(sdk, ProviderCallBudget(), clock=FakeClock())
+    assert client.responses.create(input="secret", model="gpt-test") is response
+    assert client.observations[0].input_tokens == 3
+    assert "secret" not in client.observations[0].model_dump_json()
 ```
 
 - [ ] **Step 2: Run the focused tests before implementation.**
@@ -354,25 +414,74 @@ git commit -m "feat: bound live provider requests"
 - Modify: `backend/tests/test_live_provider_evaluation.py`
 
 **Interfaces:**
-- Produces `LiveProviderEvaluator(config: LiveProviderRunConfig, client_factory: Callable[..., InstrumentedOpenAIClient], session_factory: Callable[[], ContextManager[Session]])`.
+- Produces `LiveProviderEvaluator(config: LiveProviderRunConfig, client_factory: Callable[[ProviderCallBudget], InstrumentedOpenAIClient], session_factory: Callable[[], ContextManager[Session]])`.
 - Produces `run() -> LiveProviderReport`, `write_artifacts(report: LiveProviderReport, output_json: Path, output_markdown: Path) -> None`, and `render_live_evidence(report: LiveProviderReport) -> str`.
+- Produces `estimate_cost(snapshot: PricingSnapshot | None, observations: Sequence[ProviderCallObservation]) -> CostEstimate`; it returns `NOT_ESTABLISHED` without an exact valid snapshot and complete observed input/output token pairs.
 - CLI requires `RUN_LIVE_LLM_TESTS=1`, `OPENAI_API_KEY`, `PHASE9_LIVE_MAX_CALLS`, `PHASE9_LIVE_MAX_RUNS`, `--output-json`, and `--output-markdown`; it does not import/create `OpenAI` before configuration validation.
 - Consumes Task 4 contracts and Task 5 single shared proxy; outputs only `docs/evaluations/live/` paths, never Phase 8 paths.
+- The normal successful evaluator sequence consumes nine actual provider requests: connectivity semantic `parse` (1), canonical semantic smoke `parse` (1), one-tool agent `create` (1), complete hero five agent `create` calls plus one safety `parse` (6). The optional final one-tool sample is attempted only when all nine prior calls succeeded and consumes request 10. Any agent runtime retry consumes one more admission and may legitimately stop at cap.
 
 - [ ] **Step 1: Write failing evaluator and pricing tests.**
 
 ```python
-def test_evaluator_stops_at_first_failed_stage_without_network_afterward(fake_factory):
-    report = LiveProviderEvaluator(config, fake_factory, isolated_session).run()
+from contextlib import contextmanager
+from collections import deque
+from decimal import Decimal
+from types import SimpleNamespace
+from openai import OpenAIError
+from backend.app.domain.cargo_safety import SemanticCheckResult, SemanticSafetyCheckOutput
+from sqlmodel import SQLModel, Session, create_engine
+from sqlmodel.pool import StaticPool
+
+@contextmanager
+def isolated_session() -> Iterator[Session]:
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    SQLModel.metadata.create_all(engine)
+    try:
+        with Session(engine) as session: yield session
+    finally:
+        engine.dispose()
+
+def config() -> LiveProviderRunConfig:
+    return LiveProviderRunConfig(True, 10, 1, None)
+
+class ScriptedResponses:
+    def __init__(self, outcomes: list[object]) -> None: self.outcomes = deque(outcomes)
+    def create(self, **kwargs: object) -> object: return self._next()
+    def parse(self, **kwargs: object) -> object: return self._next()
+    def _next(self) -> object:
+        outcome = self.outcomes.popleft()
+        if isinstance(outcome, Exception): raise outcome
+        return outcome
+
+class ScriptedSDK:
+    def __init__(self, outcomes: list[object]) -> None: self.responses = ScriptedResponses(outcomes)
+
+class EvaluatorClock:
+    def __init__(self) -> None: self.values = deque([1.0, 1.010] * 10)
+    def __call__(self) -> float: return self.values.popleft()
+
+def valid_semantic_response() -> object:
+    return SimpleNamespace(model="gpt-test", usage=SimpleNamespace(input_tokens=3, output_tokens=5, total_tokens=8), output_parsed=SemanticSafetyCheckOutput(result=SemanticCheckResult.CONTRADICTION_FOUND, explanation="fixture conflict", evidence_excerpt="corrosive"))
+
+def scripted_client_for_stages(outcomes: list[object]) -> InstrumentedOpenAIClient:
+    return InstrumentedOpenAIClient(ScriptedSDK(outcomes), ProviderCallBudget(10), clock=EvaluatorClock())
+
+def test_evaluator_stops_at_first_failed_stage_without_network_afterward():
+    client = scripted_client_for_stages([valid_semantic_response(), OpenAIError("synthetic")])
+    report = LiveProviderEvaluator(config(), lambda budget: client, isolated_session).run()
     assert report.stopped_stage is LiveStage.SEMANTIC_SAFETY_SMOKE
-    assert report.provider_call_count == 1
+    assert report.provider_call_count == 2
 
 def test_cost_is_not_established_without_pinned_snapshot():
-    assert LiveProviderEvaluator(config_without_snapshot, fake_factory, isolated_session).run().cost.status is CostStatus.NOT_ESTABLISHED
+    client = scripted_client_for_stages([valid_semantic_response()])
+    assert LiveProviderEvaluator(config(), lambda budget: client, isolated_session).run().cost.status is CostStatus.NOT_ESTABLISHED
 
-def test_exact_model_snapshot_estimates_from_observed_tokens(tmp_path):
-    snapshot = PricingSnapshot.model_validate_json(tmp_path.joinpath("pricing.json").read_text())
-    assert estimate_cost(snapshot, observations).status is CostStatus.ESTIMATED_USD
+def test_exact_model_snapshot_estimates_from_observed_tokens():
+    snapshot = PricingSnapshot(provider="openai", model="gpt-test", currency="USD", input_unit="token", input_price_per_unit=Decimal("0.000001"), output_unit="token", output_price_per_unit=Decimal("0.000002"), official_source_url="https://openai.com/api/pricing/", source_date="2026-08-28", snapshot_commit_sha="a" * 40, estimate_label="ESTIMATED_USD")
+    observation = ProviderCallObservation(call_number=1, stage=LiveStage.CONNECTIVITY_SMOKE, method="responses.parse", configured_model="gpt-test", returned_model="gpt-test", success=True, failure_kind=None, latency_ms=12, input_tokens=3, output_tokens=5, total_tokens=8, selected_tool=None)
+    result = estimate_cost(snapshot, (observation,))
+    assert result.status is CostStatus.ESTIMATED_USD and result.amount_usd == Decimal("0.000013")
 ```
 
 - [ ] **Step 2: Run the focused tests before implementation.**
@@ -381,9 +490,71 @@ Run: `uv run --python 3.12 --extra dev pytest backend/tests/test_live_provider_e
 
 Expected: FAIL because the evaluator, renderer, CLI, and pricing calculation do not exist.
 
-- [ ] **Step 3: Implement the staged evaluator exactly once.**
+- [ ] **Step 3: Implement the staged evaluator and exact complete hero workflow.**
 
-Validate environment/config before client construction. Execute configuration/connectivity smoke, semantic-safety smoke, single-tool agent smoke, one complete durable live-agent workflow, then at most one single-call latency/token sample only if shared budget permits. Stop immediately on failed stage or cap. Construct both existing adapters with the same instrumented client. Use isolated SQLite sessions for local evaluator tests; drive durable workflow through existing public workflow/coordinator APIs, never reimplementing business rules. Write JSON and Markdown only after `LiveProviderReport` validation and prefix both with the literal evidence label.
+Validate configuration before `client_factory` is called. Use one `ProviderCallBudget` and one injected `InstrumentedOpenAIClient` for both `OpenAIAgentModel(client=client)` and `OpenAISemanticSafetyChecker(client=client)`. The evaluator does not call a private state transition or reproduce optimizer/carrier/safety logic. It orchestrates these existing public calls in this exact order, recording each expected durable state and the proxy observation count after each model/checker call:
+
+```python
+from uuid import UUID
+from backend.app.domain.agent_runtime import AgentEscalationReason, AgentRunState, AgentWaitKind
+from backend.app.domain.carrier_recovery import CounterApprovalCommand, RequestApprovalCommand, SimulateCarrierResponseCommand
+from backend.app.domain.enums import ApprovalStatus
+from backend.app.orchestration.agent_runtime import AgentRuntimeCoordinator, CanonicalAgentRuntimeConfiguration
+from backend.app.orchestration.carrier_recovery import build_carrier_recovery_workflow
+from backend.app.orchestration.dynamic_yard import DynamicYardWorkflow
+from backend.app.orchestration.cargo_safety import CargoSafetyWorkflow
+from backend.app.orchestration.scarce_capacity import build_scarce_capacity_workflow
+from backend.app.services.agent_model import OpenAIAgentModel
+from backend.app.services.canonical_replay import CANONICAL_COUNTER_EFFECTIVE_AT, CANONICAL_SAFETY_CONTAINER_ID, CANONICAL_SAFETY_NOTE_SOURCE, CANONICAL_SAFETY_NOTE_TEXT, GUIDED_OPERATOR_ID
+from backend.app.services.dynamic_yard import CanonicalDynamicYardHarness
+from backend.app.services.semantic_safety import OpenAISemanticSafetyChecker
+from backend.app.domain.carrier_recovery import AuthorizationSubjectKind
+from backend.app.storage.agent_runtime import AgentRuntimeConflict
+
+phase2 = build_scarce_capacity_workflow(session).run()
+incident_id = phase2.incident.id
+yard = DynamicYardWorkflow.for_session(session)
+harness = CanonicalDynamicYardHarness()
+yard.initialize(incident_id, harness.bootstrap_snapshot(incident_id))
+configuration = CanonicalAgentRuntimeConfiguration.load()
+runtime = AgentRuntimeCoordinator(
+    session=session, model=OpenAIAgentModel(client=client),
+    clock=configuration.clock("before_deadline"), configuration=configuration,
+    cargo_safety_checker=OpenAISemanticSafetyChecker(client=client),
+)
+run = runtime.create_run(incident_id)
+paused = runtime.advance(run.id)
+assert paused.wait_kind is AgentWaitKind.NEW_OPERATIONAL_EVIDENCE
+yard.ingest(harness.discharge_active_snapshot(incident_id))
+reconsidered = runtime.advance(run.id)
+assert reconsidered.state is AgentRunState.RUNNING
+prepared = runtime.advance(run.id)
+assert prepared.wait_kind is AgentWaitKind.REQUEST_APPROVAL
+case_id = UUID(prepared.wait_subject_id)
+carrier = build_carrier_recovery_workflow(session)
+request_binding = next(item for item in carrier.history(case_id).bindings if item.subject_kind is AuthorizationSubjectKind.OUTBOUND_REQUEST)
+carrier.record_request_approval(RequestApprovalCommand(case_id=case_id, proposal_decision_id=request_binding.proposal_decision_id, request_id=request_binding.subject_id, expected_payload_fingerprint=request_binding.payload_fingerprint, operator_id=GUIDED_OPERATOR_ID, status=ApprovalStatus.APPROVED))
+sent = runtime.advance(run.id)
+assert sent.wait_kind is AgentWaitKind.CARRIER_RESPONSE_OR_TIMEOUT
+carrier.simulate_response(SimulateCarrierResponseCommand(case_id=case_id, effective_at=CANONICAL_COUNTER_EFFECTIVE_AT))
+try:
+    runtime.advance(run.id)
+except AgentRuntimeConflict:
+    pass
+else:
+    raise AssertionError("canonical COUNTER must require counter approval")
+assert runtime.get_run(run.id).wait_kind is AgentWaitKind.COUNTER_APPROVAL
+counter_binding = next(item for item in carrier.history(case_id).bindings if item.subject_kind is AuthorizationSubjectKind.COUNTER_PROPOSAL)
+carrier.record_counter_approval(CounterApprovalCommand(case_id=case_id, proposal_decision_id=counter_binding.proposal_decision_id, carrier_response_id=counter_binding.subject_id, expected_payload_fingerprint=counter_binding.payload_fingerprint, operator_id=GUIDED_OPERATOR_ID, status=ApprovalStatus.APPROVED))
+review = CargoSafetyWorkflow.for_session(session, checker=OpenAISemanticSafetyChecker(client=client)).create_review(incident_id, CANONICAL_SAFETY_CONTAINER_ID, CANONICAL_SAFETY_NOTE_TEXT, CANONICAL_SAFETY_NOTE_SOURCE)
+terminal = runtime.advance(run.id)
+assert terminal.state is AgentRunState.ESCALATED and terminal.escalation_reason is AgentEscalationReason.SAFETY_REVIEW_REQUIRED
+assert CargoSafetyWorkflow.for_session(session, checker=OpenAISemanticSafetyChecker(client=client)).history(review.id).policy_result.automation_blocked is True
+```
+
+The expected normal model sequence is exactly five `responses.create` calls for `pause_agent_run`, `request_expedite_feasibility`, `prepare_rta_request` with `SYN-CONN-JV2`, `send_authorised_rta_request`, and `request_cargo_safety_review` for `SYN-CNT-010`; the final safety action makes one `responses.parse` call. `AgentRun.step_count == 6` is an established durable outcome, not a sixth model choice. Approvals and simulated carrier response are evaluator-orchestrated synthetic operator/carrier actions through existing durable workflow commands; the model receives no approval tool and never approves anything.
+
+The normal admission ledger is fixed: connectivity semantic `parse` = call 1; canonical semantic smoke `parse` = call 2; single-exposed-tool agent `create` = call 3; hero pause `create` = call 4; R0-to-R1 reconsideration `create` = call 5; JV2 preparation `create` = call 6; authorised send `create` = call 7; safety-review selection `create` = call 8; safety evaluation `parse` = call 9. Assert the reconsideration history records R0 then R1, with totals 601 -> 602 and expected preserved 12.02 -> 12.04, before request preparation. After the hero, make one optional single-tool `create` as call 10 only if calls 1–9 succeeded without retry. Stop immediately after any failed stage, cap exception, or durable invariant failure; do not move to a later stage.
 
 - [ ] **Step 4: Implement exact pricing behavior.**
 
@@ -478,12 +649,22 @@ Run:
 ```bash
 git diff --check
 git status --short
-rg -n "OPENAI_API_KEY|DATABASE_URL" web/dist
+cd web
+rm -rf dist
+OPENAI_API_KEY=PHASE9_SERVER_SECRET_SENTINEL DATABASE_URL=PHASE9_DATABASE_SECRET_SENTINEL VITE_API_BASE_URL=https://api.example.invalid npm run build
+if rg -F -n 'PHASE9_SERVER_SECRET_SENTINEL' dist || rg -F -n 'PHASE9_DATABASE_SECRET_SENTINEL' dist; then exit 1; fi
+cd ..
 docker build -t psa-phase9-local .
-docker run --rm -e PORT=8000 -e DATABASE_URL=sqlite:////tmp/transshipment.db -p 8000:8000 psa-phase9-local
+container_id=$(docker run -d -e PORT=8000 -e DATABASE_URL=sqlite:////tmp/transshipment.db -p 18000:8000 psa-phase9-local)
+trap 'docker rm -f "$container_id" >/dev/null 2>&1 || true' EXIT
+for attempt in {1..30}; do curl --fail --silent --show-error http://127.0.0.1:18000/healthz > /tmp/psa-phase9-health.json && break; sleep 1; done
+test -s /tmp/psa-phase9-health.json
+test "$(cat /tmp/psa-phase9-health.json)" = '{"status":"ok","database":"ready"}'
+docker rm -f "$container_id"
+trap - EXIT
 ```
 
-Expected: the secret-sentinel scan uses a disposable value and finds no sentinel in `web/dist`; if Docker is available, `/healthz` returns the documented ready JSON from another shell. If Docker is unavailable, record that local limitation and do not substitute a claim of Railway verification.
+Expected: the Vite build embeds only `VITE_API_BASE_URL`; the `if rg` condition exits non-zero if either server-secret sentinel reaches `web/dist`. If Docker is available, the detached disposable container returns exactly the documented health JSON, then the trap/manual removal cleans it up. If Docker is unavailable, run the frontend sentinel command, record the Docker command/output as unavailable, and do not substitute a claim of Railway verification.
 
 - [ ] **Step 4: Commit only a necessary in-scope correction.**
 
@@ -525,16 +706,18 @@ Expected: health returns ready JSON; exact Vercel origin receives the configured
 
 - [ ] **Step 3: Run the bounded live sequence only after infrastructure verification.**
 
-After authorization, set `ARTIFACT_STAMP` to the UTC timestamp selected for this evidence run. Run with the Railway server-side key available only to the evaluator environment and non-secret output paths:
+The Phase 9 evidence CLI runs locally on the authorized operator Mac using an explicitly supplied ephemeral `OPENAI_API_KEY`; Railway secrets are never assumed to be visible to local `uv run`. Set `ARTIFACT_STAMP` to the UTC timestamp selected for this evidence run, export the key only in the current shell, and remove it after the command. The deployed Vercel-to-Railway live check is separate: it uses Railway’s configured server-only key through the existing browser/API route and consumes no local CLI credential.
 
 ```bash
+export OPENAI_API_KEY
 RUN_LIVE_LLM_TESTS=1 PHASE9_LIVE_MAX_CALLS=10 PHASE9_LIVE_MAX_RUNS=1 \
 uv run --python 3.12 --extra dev python -m backend.app.evaluation.live_provider \
   --output-json "docs/evaluations/live/${ARTIFACT_STAMP}-phase9-live-provider.json" \
   --output-markdown "docs/evaluations/live/${ARTIFACT_STAMP}-phase9-live-provider.md"
+unset OPENAI_API_KEY
 ```
 
-Expected: connectivity, semantic safety, single-tool selection, at most one complete workflow, and at most one final sample proceed in order only while budget remains. Stop at first failed stage/cap; an eleventh actual request cannot occur. Record model/usage/latency/durable outcomes only, label artifacts literally, and calculate cost only from a validated official snapshot; otherwise retain `NOT_ESTABLISHED`. Abort before the next request if the configured/pinned reservation or observed estimate reaches US$5.
+Expected: local connectivity, semantic safety, single-tool selection, at most one complete workflow, and at most one final sample proceed in order only while budget remains. Stop at first failed stage/cap; an eleventh actual request cannot occur. Record model/usage/latency/durable outcomes only, label artifacts literally, and calculate cost only from a validated official snapshot; otherwise retain `NOT_ESTABLISHED`. The separate deployed check makes at most one explicitly authorized live provider action through Vercel -> Railway: create canonical scarcity, POST dynamic-yard bootstrap, create a real `/incidents/{incident_id}/agent-runs`, then POST its `/advance` and observe `WAITING / NEW_OPERATIONAL_EVIDENCE`. It is skipped when the local artifact reaches the US$5 ceiling.
 
 - [ ] **Step 4: Commit only honest external evidence.**
 
@@ -561,7 +744,8 @@ Expected: commit only artifacts actually observed after authorization. If a stag
 ## Plan self-review
 
 - Spec coverage: every Phase 9 design section and all 17 acceptance criteria map to Tasks 1–9 above; Railway/Vercel persistence and live-model facts are explicitly reserved for Task 9.
-- Completeness scan: no unresolved markers, unnamed work, or vague test/error steps are present; every code task names files, produced interfaces, pre-change failure command, post-change command, and focused commit.
+- Completeness scan: no unresolved markers, unnamed work, vague test/error steps, angle-bracket substitutions, or ellipses are present; every code task names files, produced interfaces, pre-change failure command, post-change command, and focused commit.
 - Type/signature consistency: Task 1 supplies `build_engine` to Task 2; Task 4 contracts supply Task 5 observations/config and Task 6 report/artifacts; Task 5’s proxy is injected through existing adapter `client=` seams without altering their contracts; Task 6 owns its CLI and artifact writer; Task 9 consumes only those interfaces.
-- Safety review: no task changes deterministic authority, Phase 8 semantics, database technology, or Phase 10 UI; default tests use fakes and absent credentials; the shared pre-request budget prevents an eleventh provider request; contracts omit prohibited content and secrets.
-- External-proof review: the plan does not treat Docker/local tests as Railway persistence, Vercel routing, or live-provider proof, and requires explicit human authorization before external resources or spend.
+- Hero review: Task 6 follows the existing guided hero’s public workflow/API ordering, has five agent `create` decisions plus one semantic `parse`, preserves the durable six-step outcome, and leaves request/counter approval to explicit synthetic operator commands outside the model.
+- Build/release review: Task 3 validates `uv sync --frozen --no-dev --no-install-project` in a cacheable dependency layer before backend/shared copies; Task 8 uses sentinel rejection and a bounded self-cleaning detached Docker smoke.
+- Safety and external-proof review: no task changes deterministic authority, Phase 8 semantics, database technology, or Phase 10 UI; default tests use fakes and absent credentials; the shared pre-request budget prevents an eleventh provider request; contracts omit prohibited content and secrets. The local evidence CLI uses an explicitly supplied operator key, while Railway/Vercel proof requires explicit authorization and is never claimed from local checks.
