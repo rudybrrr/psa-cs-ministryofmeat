@@ -1,15 +1,24 @@
+import os
 from collections.abc import Iterator
 
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Engine, make_url
 from sqlmodel import Session, SQLModel, create_engine
 
 
-DATABASE_URL = "sqlite:///./backend/transshipment.db"
+DATABASE_URL_DEFAULT: str = "sqlite:///./backend/transshipment.db"
 
-engine = create_engine(
-    DATABASE_URL,
-    connect_args={"check_same_thread": False},
-)
+
+def database_url() -> str:
+    return os.getenv("DATABASE_URL", DATABASE_URL_DEFAULT)
+
+
+def build_engine(url: str) -> Engine:
+    if make_url(url).get_backend_name() == "sqlite":
+        return create_engine(url, connect_args={"check_same_thread": False})
+    return create_engine(url)
+
+
+engine = build_engine(database_url())
 
 
 def create_db_and_tables(database_engine: Engine = engine) -> None:
