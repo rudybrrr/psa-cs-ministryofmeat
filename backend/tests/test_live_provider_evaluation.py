@@ -350,6 +350,28 @@ def test_failed_last_admitted_call_reports_the_concrete_stage() -> None:
     assert report.provider_call_count == 2
 
 
+def test_successful_latency_percentiles_use_nearest_rank() -> None:
+    clock = iter((1.0, 1.010, 2.0, 2.020, 3.0, 3.030))
+    client = InstrumentedOpenAIClient(
+        ScriptedSDK(
+            [
+                valid_semantic_response(),
+                valid_semantic_response(),
+                OpenAIError("synthetic"),
+            ]
+        ),
+        ProviderCallBudget(10),
+        clock=lambda: next(clock),
+    )
+
+    report = LiveProviderEvaluator(
+        config(), lambda budget: client, isolated_session
+    ).run()
+
+    assert report.p50_successful_latency_ms == 10
+    assert report.p95_successful_latency_ms == 20
+
+
 def test_canonical_semantic_smoke_requires_the_expected_contradiction() -> None:
     client = scripted_client_for_stages(
         [
@@ -647,7 +669,7 @@ def test_pricing_snapshot_path_must_be_repository_contained_and_tracked(
         untracked.unlink(missing_ok=True)
 
 
-def test_pricing_snapshot_sha_must_contain_the_committed_snapshot_content(
+def test_pricing_snapshot_sha_must_identify_a_commit_containing_the_path(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     repo_root = tmp_path / "checkout"
@@ -669,21 +691,66 @@ def test_pricing_snapshot_sha_must_contain_the_committed_snapshot_content(
     snapshot_path.write_text(snapshot.model_dump_json(), encoding="utf-8")
 
     def fake_git(args, **kwargs):
-        target = args[-1]
         if args[1] == "ls-files":
             return subprocess.CompletedProcess(args, 0, stdout=b"")
         if args[1:3] == ("show", f"HEAD:{snapshot_path.relative_to(repo_root)}"):
             return subprocess.CompletedProcess(args, 0, stdout=snapshot_path.read_bytes())
-        if args[1] == "show" and target.startswith(snapshot.snapshot_commit_sha):
-            return subprocess.CompletedProcess(args, 0, stdout=b"older content")
+        if args[1] == "cat-file":
+            return subprocess.CompletedProcess(args, 1, stdout=b"")
         if args[1:3] == ("merge-base", "--is-ancestor"):
             return subprocess.CompletedProcess(args, 0, stdout=b"")
         raise AssertionError(f"unexpected git command: {args}")
 
     monkeypatch.setattr(subprocess, "run", fake_git)
 
-    with pytest.raises(ValueError, match="contain the committed snapshot content"):
+    with pytest.raises(ValueError, match="contain the snapshot path"):
         _validate_pricing_snapshot_provenance(snapshot_path, snapshot, repo_root)
+
+
+def test_pricing_snapshot_provenance_accepts_committed_path_without_self_reference(
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "checkout"
+    repo_root.mkdir()
+
+    def git(*args: str) -> str:
+        return subprocess.run(
+            ("git", *args),
+            cwd=repo_root,
+            capture_output=True,
+            check=True,
+            text=True,
+        ).stdout.strip()
+
+    git("init")
+    git("config", "user.email", "phase9-tests@example.invalid")
+    git("config", "user.name", "Phase 9 Tests")
+    git("config", "commit.gpgsign", "false")
+    snapshot_path = repo_root / "docs" / "pricing.json"
+    snapshot_path.parent.mkdir(parents=True)
+    initial = PricingSnapshot(
+        provider="openai",
+        model="gpt-5.6-luna",
+        currency="USD",
+        input_unit="token",
+        input_price_per_unit=Decimal("0.000001"),
+        output_unit="token",
+        output_price_per_unit=Decimal("0.000002"),
+        official_source_url="https://openai.com/api/pricing/",
+        source_date="2026-08-28",
+        snapshot_commit_sha="a" * 40,
+        estimate_label="ESTIMATED_USD",
+    )
+    snapshot_path.write_text(initial.model_dump_json(), encoding="utf-8")
+    git("add", "docs/pricing.json")
+    git("commit", "-m", "add pricing snapshot path")
+    path_commit = git("rev-parse", "HEAD")
+    snapshot = initial.model_copy(update={"snapshot_commit_sha": path_commit})
+    snapshot_path.write_text(snapshot.model_dump_json(), encoding="utf-8")
+    git("add", "docs/pricing.json")
+    git("commit", "-m", "pin pricing snapshot path commit")
+
+    _validate_pricing_snapshot_provenance(snapshot_path, snapshot, repo_root)
 
 
 def test_pricing_snapshot_does_not_require_agent_and_semantic_models_to_match(
@@ -819,7 +886,7 @@ def test_cost_requires_complete_exact_model_usage() -> None:
     assert estimate_cost(snapshot, (mismatch,)).reason == "MODEL_MISMATCH"
 
 
-def test_cost_estimates_only_calls_matching_the_snapshot_model() -> None:
+def test_cost_is_not_established_when_any_observed_model_mismatches_snapshot() -> None:
     snapshot = PricingSnapshot(
         provider="openai",
         model="gpt-5.6-luna",
@@ -849,8 +916,8 @@ def test_cost_estimates_only_calls_matching_the_snapshot_model() -> None:
 
     result = estimate_cost(snapshot, (terra, luna))
 
-    assert result.status is CostStatus.ESTIMATED_USD
-    assert result.amount_usd == Decimal("0.000013")
+    assert result.status is CostStatus.NOT_ESTABLISHED
+    assert result.reason == "MODEL_MISMATCH"
 
 
 def test_cli_validates_configuration_then_builds_the_bounded_runner(

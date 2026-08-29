@@ -134,6 +134,14 @@ def test_parse_allowed_origins_rejects_malformed_hostnames(value):
         parse_allowed_origins(value)
 
 
+@pytest.mark.parametrize("control", ("\t", "\n", "\r"))
+def test_parse_allowed_origins_rejects_raw_control_characters(control):
+    from backend.app.main import parse_allowed_origins
+
+    with pytest.raises(ValueError, match="valid HTTPS origins"):
+        parse_allowed_origins(f"https://exa{control}mple.com")
+
+
 def test_healthz_checks_database_without_creating_incident(api_engine):
     from backend.app.main import create_app
 

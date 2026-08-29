@@ -5,7 +5,6 @@ from decimal import Decimal
 from enum import StrEnum
 import math
 from pathlib import Path
-import statistics
 from typing import Literal, Mapping, Self
 from urllib.parse import urlparse
 
@@ -203,7 +202,11 @@ class LiveProviderReport(FrozenContract):
             for item in self.observations
             if item.success and item.latency_ms is not None
         )
-        expected_p50 = float(statistics.median(latencies)) if latencies else None
+        expected_p50 = (
+            float(latencies[math.ceil(0.50 * len(latencies)) - 1])
+            if latencies
+            else None
+        )
         expected_p95 = (
             float(latencies[math.ceil(0.95 * len(latencies)) - 1])
             if latencies

@@ -4,7 +4,6 @@ import argparse
 import json
 import math
 import os
-import statistics
 import subprocess
 from collections.abc import Callable, Sequence
 from contextlib import contextmanager
@@ -100,8 +99,8 @@ def _validate_pricing_snapshot_provenance(
     )
     if committed.returncode != 0 or committed.stdout != path.read_bytes():
         raise ValueError("pricing snapshot content must be committed")
-    snapshot_content = subprocess.run(
-        ("git", "show", f"{snapshot.snapshot_commit_sha}:{relative}"),
+    snapshot_path = subprocess.run(
+        ("git", "cat-file", "-e", f"{snapshot.snapshot_commit_sha}:{relative}"),
         cwd=repo_root,
         capture_output=True,
         check=False,
@@ -113,13 +112,10 @@ def _validate_pricing_snapshot_provenance(
         check=False,
     )
     if (
-        snapshot_content.returncode != 0
-        or snapshot_content.stdout != path.read_bytes()
-        or associated.returncode != 0
+        snapshot_path.returncode != 0 or associated.returncode != 0
     ):
         raise ValueError(
-            "pricing snapshot commit must contain the committed snapshot content "
-            "in checkout history"
+            "pricing snapshot commit must contain the snapshot path in checkout history"
         )
 
 
@@ -136,7 +132,9 @@ def _report_metrics(
         "failed_provider_call_count": len(observations) - len(successful),
         "complete_workflow_count": complete_workflow_count,
         "p50_successful_latency_ms": (
-            float(statistics.median(latencies)) if latencies else None
+            float(latencies[math.ceil(0.50 * len(latencies)) - 1])
+            if latencies
+            else None
         ),
         "p95_successful_latency_ms": (
             float(latencies[math.ceil(0.95 * len(latencies)) - 1])
@@ -161,14 +159,10 @@ def estimate_cost(
             status=CostStatus.NOT_ESTABLISHED,
             reason="INVALID_PRICING_SNAPSHOT",
         )
-    matching = tuple(
-        observation
+    if not observations or any(
+        observation.configured_model != snapshot.model
+        or observation.returned_model not in {None, snapshot.model}
         for observation in observations
-        if observation.configured_model == snapshot.model
-    )
-    if not matching or any(
-        observation.returned_model not in {None, snapshot.model}
-        for observation in matching
     ):
         return CostEstimate(
             status=CostStatus.NOT_ESTABLISHED,
@@ -176,7 +170,7 @@ def estimate_cost(
         )
     if any(
         observation.input_tokens is None or observation.output_tokens is None
-        for observation in matching
+        for observation in observations
     ):
         return CostEstimate(
             status=CostStatus.NOT_ESTABLISHED,
@@ -186,7 +180,7 @@ def estimate_cost(
         (
             Decimal(observation.input_tokens) * snapshot.input_price_per_unit
             + Decimal(observation.output_tokens) * snapshot.output_price_per_unit
-            for observation in matching
+            for observation in observations
         ),
         Decimal(0),
     )

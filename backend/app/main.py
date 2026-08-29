@@ -149,6 +149,8 @@ LOCAL_ALLOWED_ORIGINS = ("http://127.0.0.1:5173", "http://localhost:5173")
 def parse_allowed_origins(value: str | None) -> Sequence[str]:
     if value is None:
         return LOCAL_ALLOWED_ORIGINS
+    if any(ord(character) < 32 or ord(character) == 127 for character in value):
+        raise ValueError("ALLOWED_ORIGINS must contain valid HTTPS origins")
     origins = tuple(value.split(","))
     if not origins or any(not origin or origin != origin.strip() or "*" in origin for origin in origins):
         raise ValueError("ALLOWED_ORIGINS must contain exact origins")
