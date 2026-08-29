@@ -192,6 +192,57 @@ def report_metrics(*, empty: bool = False) -> dict[str, object]:
     }
 
 
+def _tool(name: str, parameters: dict[str, object] | None = None):
+    from backend.app.domain.agent_runtime import AgentToolDefinition
+
+    return AgentToolDefinition(name=name, description=f"{name} description", parameters=parameters or {"type": "object", "properties": {}, "required": [], "additionalProperties": False})
+
+
+def test_canonical_live_agent_narrows_only_a_legitimate_prepare_option() -> None:
+    from backend.app.domain.agent_runtime import AgentModelTurn, AgentToolCall, AgentTurnContext
+    from backend.app.services.canonical_replay import CANONICAL_JV2_CONNECTION_ID
+
+    prepare = _tool("prepare_rta_request", {"type": "object", "properties": {"connection_id": {"type": "string", "enum": [CANONICAL_JV2_CONNECTION_ID, "SYN-CONN-EC3"]}}, "required": ["connection_id"], "additionalProperties": False})
+    unrelated = _tool("pause_agent_run")
+    expected = AgentModelTurn(tool_call=AgentToolCall(name="pause_agent_run", arguments={}))
+
+    class Delegate:
+        model_name = "test-model"
+
+        def decide(self, context, available_tools):
+            self.tools = available_tools
+            return expected
+
+    delegate = Delegate()
+    result = live_provider._CanonicalLiveAgentModel(delegate).decide(
+        AgentTurnContext(run_id=UUID(int=1), incident_id=UUID(int=2), step_count=0, remaining_steps=1),
+        (prepare, unrelated),
+    )
+
+    assert result is expected
+    assert prepare.parameters["properties"]["connection_id"]["enum"] == [CANONICAL_JV2_CONNECTION_ID, "SYN-CONN-EC3"]
+    assert delegate.tools[0] is not prepare
+    assert delegate.tools[0].parameters["properties"]["connection_id"]["enum"] == [CANONICAL_JV2_CONNECTION_ID]
+    assert delegate.tools[1] is unrelated
+
+
+def test_canonical_live_agent_rejects_missing_jv2_before_delegate_io() -> None:
+    from backend.app.domain.agent_runtime import AgentTurnContext
+
+    class Delegate:
+        model_name = "test-model"
+
+        def decide(self, context, available_tools):
+            raise AssertionError("delegate must not be called")
+
+    prepare = _tool("prepare_rta_request", {"type": "object", "properties": {"connection_id": {"type": "string", "enum": ["SYN-CONN-EC3"]}}, "required": ["connection_id"], "additionalProperties": False})
+    with pytest.raises(ValueError, match="requires JV2"):
+        live_provider._CanonicalLiveAgentModel(Delegate()).decide(
+            AgentTurnContext(run_id=UUID(int=1), incident_id=UUID(int=2), step_count=0, remaining_steps=1),
+            (prepare,),
+        )
+
+
 def test_live_config_rejects_missing_opt_in_and_limits() -> None:
     with pytest.raises(TypeError):
         LiveProviderRunConfig()

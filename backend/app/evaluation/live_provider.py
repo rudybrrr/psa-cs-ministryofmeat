@@ -57,6 +57,42 @@ class _StageFailure(RuntimeError):
         super().__init__(stage.value)
 
 
+class _CanonicalLiveAgentModel:
+    def __init__(self, delegate: Any) -> None:
+        self._delegate = delegate
+        self.model_name = delegate.model_name
+
+    def decide(
+        self, context: AgentTurnContext, available_tools: Sequence[AgentToolDefinition]
+    ) -> Any:
+        from backend.app.services.canonical_replay import CANONICAL_JV2_CONNECTION_ID
+
+        narrowed = []
+        for tool in available_tools:
+            if tool.name != "prepare_rta_request":
+                narrowed.append(tool)
+                continue
+            properties = tool.parameters.get("properties")
+            connection = properties.get("connection_id") if isinstance(properties, dict) else None
+            options = connection.get("enum") if isinstance(connection, dict) else None
+            if not isinstance(options, list) or CANONICAL_JV2_CONNECTION_ID not in options:
+                raise ValueError("canonical live workflow requires JV2 as a legitimate prepare option")
+            narrowed.append(
+                tool.model_copy(
+                    update={
+                        "parameters": {
+                            **tool.parameters,
+                            "properties": {
+                                **properties,
+                                "connection_id": {**connection, "enum": [CANONICAL_JV2_CONNECTION_ID]},
+                            },
+                        }
+                    }
+                )
+            )
+        return self._delegate.decide(context, tuple(narrowed))
+
+
 def _repo_root() -> Path:
     return Path(__file__).resolve().parents[3]
 
@@ -526,7 +562,9 @@ class LiveProviderEvaluator:
         configuration = CanonicalAgentRuntimeConfiguration.load()
         runtime = AgentRuntimeCoordinator(
             session=session,
-            model=OpenAIAgentModel(api_key="injected-client", client=client),
+            model=_CanonicalLiveAgentModel(
+                OpenAIAgentModel(api_key="injected-client", client=client)
+            ),
             clock=configuration.clock("before_deadline"),
             configuration=configuration,
             cargo_safety_checker=OpenAISemanticSafetyChecker(
