@@ -8,6 +8,12 @@ from sqlmodel import Session, select
 from backend.app.storage.repositories import IncidentRecord
 
 
+def test_deployment_doc_names_required_runtime_contracts():
+    text = Path("docs/deployment.md").read_text()
+    for required in ("sqlite:////data/transshipment.db", "GET /healthz", "VITE_API_BASE_URL", "RUN_LIVE_LLM_TESTS=1", "US$5"):
+        assert required in text
+
+
 def test_dockerfile_is_python312_backend_only():
     text = Path("Dockerfile").read_text()
     assert "FROM python:3.12-slim" in text
