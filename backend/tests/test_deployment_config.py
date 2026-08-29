@@ -123,6 +123,17 @@ def test_parse_allowed_origins_rejects_empty_explicit_port():
         parse_allowed_origins("https://example.com:")
 
 
+@pytest.mark.parametrize(
+    "value",
+    ("https://exa mple.com", "https://%", "https://example..com"),
+)
+def test_parse_allowed_origins_rejects_malformed_hostnames(value):
+    from backend.app.main import parse_allowed_origins
+
+    with pytest.raises(ValueError, match="valid HTTPS origins"):
+        parse_allowed_origins(value)
+
+
 def test_healthz_checks_database_without_creating_incident(api_engine):
     from backend.app.main import create_app
 

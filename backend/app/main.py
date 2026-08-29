@@ -1,6 +1,7 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from os import getenv
+import re
 from typing import Annotated, Sequence
 from urllib.parse import urlparse
 from uuid import UUID
@@ -153,13 +154,17 @@ def parse_allowed_origins(value: str | None) -> Sequence[str]:
         raise ValueError("ALLOWED_ORIGINS must contain exact origins")
     identities = set()
     for origin in origins:
-        parsed = urlparse(origin)
         try:
+            parsed = urlparse(origin)
             port = parsed.port
         except ValueError as error:
             raise ValueError("ALLOWED_ORIGINS must contain valid HTTPS origins") from error
         is_local = parsed.hostname in {"localhost", "127.0.0.1"}
-        if (parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password or parsed.netloc.endswith(":") or parsed.path or parsed.params or parsed.query or parsed.fragment or (parsed.scheme == "http" and not is_local)):
+        valid_hostname = parsed.hostname is not None and len(parsed.hostname) <= 253 and re.fullmatch(
+            r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*",
+            parsed.hostname,
+        )
+        if (parsed.scheme not in {"http", "https"} or not valid_hostname or parsed.username or parsed.password or parsed.netloc.endswith(":") or parsed.path or parsed.params or parsed.query or parsed.fragment or (parsed.scheme == "http" and not is_local)):
             raise ValueError("ALLOWED_ORIGINS must contain valid HTTPS origins")
         identity = (parsed.scheme, parsed.hostname.lower(), port if port is not None else {"http": 80, "https": 443}[parsed.scheme])
         if identity in identities:

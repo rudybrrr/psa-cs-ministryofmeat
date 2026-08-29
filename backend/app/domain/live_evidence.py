@@ -3,7 +3,9 @@ from __future__ import annotations
 from datetime import date
 from decimal import Decimal
 from enum import StrEnum
+import math
 from pathlib import Path
+import statistics
 from typing import Literal, Mapping, Self
 from urllib.parse import urlparse
 
@@ -155,14 +157,24 @@ class LiveProviderReport(FrozenContract):
     schema_version: Literal["phase9-live-evidence-v1"]
     suite_id: Literal["phase9-live-provider-evidence"]
     generated_at: AwareDatetime
-    source_revision: str = Field(min_length=1)
+    source_revision: str = Field(pattern=r"^[0-9a-f]{40}$")
     evaluation_base_sha: str = Field(pattern=r"^[0-9a-f]{40}$")
     environment: Literal["local", "deployed"]
     config: LiveProviderRunConfig
     fixture_ids: tuple[str, ...] = ()
     observations: tuple[ProviderCallObservation, ...]
+    attempted_provider_call_count: int = Field(ge=0)
+    successful_provider_call_count: int = Field(ge=0)
+    failed_provider_call_count: int = Field(ge=0)
+    complete_workflow_count: int = Field(ge=0, le=1)
+    p50_successful_latency_ms: float | None = Field(default=None, ge=0)
+    p95_successful_latency_ms: float | None = Field(default=None, ge=0)
+    latency_provenance: Literal["CLIENT_OBSERVED_REQUEST_LATENCY"]
     stopped_stage: LiveStage | None
     cost: CostEstimate
+    semantic_smoke_review_id: str | None = None
+    semantic_smoke_assessment_id: str | None = None
+    semantic_smoke_policy_result_id: str | None = None
     agent_run_id: str | None = None
     agent_step_ids: tuple[str, ...] = ()
     safety_assessment_id: str | None = None
@@ -179,4 +191,29 @@ class LiveProviderReport(FrozenContract):
             raise ValueError("observations must be consecutively numbered from one")
         if len(self.observations) > self.config.max_calls:
             raise ValueError("observations cannot exceed the configured call cap")
+        successful = sum(item.success for item in self.observations)
+        if (
+            self.attempted_provider_call_count != len(self.observations)
+            or self.successful_provider_call_count != successful
+            or self.failed_provider_call_count != len(self.observations) - successful
+        ):
+            raise ValueError("serialized provider call counts must match observations")
+        latencies = sorted(
+            item.latency_ms
+            for item in self.observations
+            if item.success and item.latency_ms is not None
+        )
+        expected_p50 = float(statistics.median(latencies)) if latencies else None
+        expected_p95 = (
+            float(latencies[math.ceil(0.95 * len(latencies)) - 1])
+            if latencies
+            else None
+        )
+        if (
+            self.p50_successful_latency_ms != expected_p50
+            or self.p95_successful_latency_ms != expected_p95
+        ):
+            raise ValueError("latency percentiles must match successful observations")
+        if self.complete_workflow_count > self.config.max_workflows:
+            raise ValueError("complete workflow count exceeds configured cap")
         return self

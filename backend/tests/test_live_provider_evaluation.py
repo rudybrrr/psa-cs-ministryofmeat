@@ -9,6 +9,7 @@ import subprocess
 import sys
 from types import SimpleNamespace
 from typing import Iterator
+from uuid import UUID
 
 import pytest
 from openai import OpenAIError
@@ -16,7 +17,11 @@ from pydantic import ValidationError
 from sqlmodel import SQLModel, Session, create_engine
 from sqlmodel.pool import StaticPool
 
-from backend.app.domain.cargo_safety import SemanticCheckResult, SemanticSafetyCheckOutput
+from backend.app.domain.cargo_safety import (
+    CargoSafetyReviewState,
+    SemanticCheckResult,
+    SemanticSafetyCheckOutput,
+)
 from backend.app.domain.live_evidence import (
     CostEstimate,
     CostStatus,
@@ -26,14 +31,17 @@ from backend.app.domain.live_evidence import (
     PricingSnapshot,
     ProviderCallObservation,
 )
+from backend.app.evaluation import live_provider
 from backend.app.evaluation.live_openai_client import InstrumentedOpenAIClient, ProviderCallBudget
 from backend.app.evaluation.live_provider import (
     LiveProviderEvaluator,
+    _validate_pricing_snapshot_provenance,
     estimate_cost,
     main,
     render_live_evidence,
     write_artifacts,
 )
+from backend.app.storage.cargo_safety import CargoSafetyRepository
 
 
 @contextmanager
@@ -172,6 +180,18 @@ def valid_observation() -> ProviderCallObservation:
     )
 
 
+def report_metrics(*, empty: bool = False) -> dict[str, object]:
+    return {
+        "attempted_provider_call_count": 0 if empty else 1,
+        "successful_provider_call_count": 0 if empty else 1,
+        "failed_provider_call_count": 0,
+        "complete_workflow_count": 0,
+        "p50_successful_latency_ms": None if empty else 12,
+        "p95_successful_latency_ms": None if empty else 12,
+        "latency_provenance": "CLIENT_OBSERVED_REQUEST_LATENCY",
+    }
+
+
 def test_live_config_rejects_missing_opt_in_and_limits() -> None:
     with pytest.raises(TypeError):
         LiveProviderRunConfig()
@@ -199,11 +219,12 @@ def test_report_contract_rejects_raw_content_and_inconsistent_tokens() -> None:
         schema_version="phase9-live-evidence-v1",
         suite_id="phase9-live-provider-evidence",
         generated_at=datetime(2026, 8, 28, tzinfo=UTC),
-        source_revision="test",
+        source_revision="b" * 40,
         evaluation_base_sha="2ff0e58d98e586f7904c726a4bb485a8419e2954",
         environment="local",
         config=LiveProviderRunConfig(True, 10, 1, None),
         observations=(valid_observation(),),
+        **report_metrics(),
         stopped_stage=None,
         cost=CostEstimate(
             status=CostStatus.NOT_ESTABLISHED,
@@ -214,6 +235,14 @@ def test_report_contract_rejects_raw_content_and_inconsistent_tokens() -> None:
 
     assert report.label == "NON-DETERMINISTIC LIVE PROVIDER EVIDENCE"
     assert report.provider_call_count == 1
+    payload = report.model_dump(mode="json")
+    assert payload["attempted_provider_call_count"] == 1
+    assert payload["successful_provider_call_count"] == 1
+    assert payload["failed_provider_call_count"] == 0
+    assert payload["complete_workflow_count"] == 0
+    assert payload["p50_successful_latency_ms"] == 12
+    assert payload["p95_successful_latency_ms"] == 12
+    assert payload["latency_provenance"] == "CLIENT_OBSERVED_REQUEST_LATENCY"
     with pytest.raises(ValidationError):
         ProviderCallObservation.model_validate(
             {**valid_observation().model_dump(), "raw_error": "secret"}
@@ -235,11 +264,12 @@ def test_report_call_count_is_bounded() -> None:
         schema_version="phase9-live-evidence-v1",
         suite_id="phase9-live-provider-evidence",
         generated_at=datetime(2026, 8, 28, tzinfo=UTC),
-        source_revision="test",
+        source_revision="b" * 40,
         evaluation_base_sha="2ff0e58d98e586f7904c726a4bb485a8419e2954",
         environment="local",
         config=LiveProviderRunConfig(True, 10, 1, None),
         observations=(valid_observation(),),
+        **report_metrics(),
         stopped_stage=None,
         cost=CostEstimate(status=CostStatus.NOT_ESTABLISHED, reason="NO_PRICING_SNAPSHOT"),
     )
@@ -393,7 +423,9 @@ def test_exact_model_snapshot_estimates_from_observed_tokens() -> None:
     assert result.amount_usd == Decimal("0.000013")
 
 
-def test_complete_fake_workflow_uses_exact_ledger_and_durable_outcomes() -> None:
+def test_complete_fake_workflow_uses_exact_ledger_and_durable_outcomes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     outcomes = [
         valid_semantic_response(),
         valid_semantic_response(),
@@ -409,6 +441,7 @@ def test_complete_fake_workflow_uses_exact_ledger_and_durable_outcomes() -> None
         tool_response("pause_agent_run"),
     ]
     client = scripted_client_for_stages(outcomes)
+    monkeypatch.setenv("GIT_COMMIT_SHA", "f" * 40)
 
     report = LiveProviderEvaluator(
         config(), lambda budget: client, isolated_session
@@ -450,12 +483,58 @@ def test_complete_fake_workflow_uses_exact_ledger_and_durable_outcomes() -> None
     assert len(report.agent_step_ids) == 6
     assert report.safety_assessment_id is not None
     assert report.final_outcome_id is not None
+    assert report.semantic_smoke_review_id is not None
+    assert report.semantic_smoke_assessment_id is not None
+    assert report.semantic_smoke_policy_result_id is not None
+    assert report.attempted_provider_call_count == 10
+    assert report.successful_provider_call_count == 10
+    assert report.failed_provider_call_count == 0
+    assert report.complete_workflow_count == 1
+    assert report.p50_successful_latency_ms == 10
+    assert report.p95_successful_latency_ms == 10
+    checkout_sha = subprocess.run(
+        ("git", "rev-parse", "HEAD"),
+        capture_output=True,
+        check=True,
+        text=True,
+    ).stdout.strip()
+    assert report.source_revision == checkout_sha
 
 
-def test_invalid_pricing_snapshot_stops_before_client_construction(
-    tmp_path: Path,
-) -> None:
-    snapshot_path = tmp_path / "pricing.json"
+def test_semantic_smoke_persists_and_reports_fail_closed_outcome() -> None:
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+
+    @contextmanager
+    def sessions() -> Iterator[Session]:
+        SQLModel.metadata.create_all(engine)
+        with Session(engine) as session:
+            yield session
+
+    client = scripted_client_for_stages(
+        [valid_semantic_response(), valid_semantic_response(), OpenAIError("stop")]
+    )
+    try:
+        report = LiveProviderEvaluator(config(), lambda budget: client, sessions).run()
+        assert report.stopped_stage is LiveStage.TOOL_SELECTION_SMOKE
+        assert report.semantic_smoke_review_id is not None
+        with Session(engine) as session:
+            history = CargoSafetyRepository(session).history(
+                UUID(report.semantic_smoke_review_id)
+            )
+        assert history.review.state is CargoSafetyReviewState.COMPLETED
+        assert str(history.assessment.id) == report.semantic_smoke_assessment_id
+        assert str(history.policy_result.id) == report.semantic_smoke_policy_result_id
+        assert history.policy_result.automation_blocked is True
+    finally:
+        engine.dispose()
+
+
+def test_invalid_pricing_snapshot_stops_before_client_construction() -> None:
+    snapshot_path = Path(".test-phase9-invalid-pricing-snapshot.json")
     snapshot_path.write_text('{"provider":"openai"}', encoding="utf-8")
     called = False
 
@@ -464,21 +543,22 @@ def test_invalid_pricing_snapshot_stops_before_client_construction(
         called = True
         return scripted_client_for_stages([])
 
-    evaluator = LiveProviderEvaluator(
-        LiveProviderRunConfig(True, 10, 1, snapshot_path),
-        factory,
-        isolated_session,
-    )
+    try:
+        evaluator = LiveProviderEvaluator(
+            LiveProviderRunConfig(True, 10, 1, snapshot_path),
+            factory,
+            isolated_session,
+        )
 
-    with pytest.raises(ValueError, match="invalid PHASE9_LIVE_PRICING_SNAPSHOT"):
-        evaluator.run()
-    assert called is False
+        with pytest.raises(ValueError, match="invalid PHASE9_LIVE_PRICING_SNAPSHOT"):
+            evaluator.run()
+        assert called is False
+    finally:
+        snapshot_path.unlink(missing_ok=True)
 
 
-def test_non_openai_pricing_snapshot_stops_before_client_construction(
-    tmp_path: Path,
-) -> None:
-    snapshot_path = tmp_path / "pricing.json"
+def test_non_openai_pricing_snapshot_stops_before_client_construction() -> None:
+    snapshot_path = Path(".test-phase9-non-openai-pricing-snapshot.json")
     snapshot_path.write_text(
         PricingSnapshot(
             provider="not-openai",
@@ -502,15 +582,144 @@ def test_non_openai_pricing_snapshot_stops_before_client_construction(
         called = True
         return scripted_client_for_stages([])
 
-    evaluator = LiveProviderEvaluator(
-        LiveProviderRunConfig(True, 10, 1, snapshot_path),
-        factory,
-        isolated_session,
-    )
+    try:
+        evaluator = LiveProviderEvaluator(
+            LiveProviderRunConfig(True, 10, 1, snapshot_path),
+            factory,
+            isolated_session,
+        )
 
-    with pytest.raises(ValueError, match="provider must be openai"):
-        evaluator.run()
-    assert called is False
+        with pytest.raises(ValueError, match="provider must be openai"):
+            evaluator.run()
+        assert called is False
+    finally:
+        snapshot_path.unlink(missing_ok=True)
+
+
+def test_pricing_snapshot_path_must_be_repository_contained_and_tracked(
+    tmp_path: Path,
+) -> None:
+    checkout_sha = subprocess.run(
+        ("git", "rev-parse", "HEAD"),
+        capture_output=True,
+        check=True,
+        text=True,
+    ).stdout.strip()
+    snapshot = PricingSnapshot(
+        provider="openai",
+        model="gpt-5.6-luna",
+        currency="USD",
+        input_unit="token",
+        input_price_per_unit=Decimal("0.000001"),
+        output_unit="token",
+        output_price_per_unit=Decimal("0.000002"),
+        official_source_url="https://openai.com/api/pricing/",
+        source_date="2026-08-28",
+        snapshot_commit_sha=checkout_sha,
+        estimate_label="ESTIMATED_USD",
+    )
+    outside = tmp_path / "pricing.json"
+    untracked = Path(".test-phase9-pricing-snapshot.json")
+    outside.write_text(snapshot.model_dump_json(), encoding="utf-8")
+    untracked.write_text(snapshot.model_dump_json(), encoding="utf-8")
+    called = False
+
+    def factory(budget: ProviderCallBudget) -> InstrumentedOpenAIClient:
+        nonlocal called
+        called = True
+        return scripted_client_for_stages([])
+
+    try:
+        with pytest.raises(ValueError, match="repository-contained"):
+            LiveProviderEvaluator(
+                LiveProviderRunConfig(True, 10, 1, outside),
+                factory,
+                isolated_session,
+            ).run()
+        with pytest.raises(ValueError, match="Git-tracked"):
+            LiveProviderEvaluator(
+                LiveProviderRunConfig(True, 10, 1, untracked),
+                factory,
+                isolated_session,
+            ).run()
+        assert called is False
+    finally:
+        untracked.unlink(missing_ok=True)
+
+
+def test_pricing_snapshot_sha_must_contain_the_committed_snapshot_content(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo_root = tmp_path / "checkout"
+    snapshot_path = repo_root / "docs" / "pricing.json"
+    snapshot_path.parent.mkdir(parents=True)
+    snapshot = PricingSnapshot(
+        provider="openai",
+        model="gpt-5.6-luna",
+        currency="USD",
+        input_unit="token",
+        input_price_per_unit=Decimal("0.000001"),
+        output_unit="token",
+        output_price_per_unit=Decimal("0.000002"),
+        official_source_url="https://openai.com/api/pricing/",
+        source_date="2026-08-28",
+        snapshot_commit_sha="a" * 40,
+        estimate_label="ESTIMATED_USD",
+    )
+    snapshot_path.write_text(snapshot.model_dump_json(), encoding="utf-8")
+
+    def fake_git(args, **kwargs):
+        target = args[-1]
+        if args[1] == "ls-files":
+            return subprocess.CompletedProcess(args, 0, stdout=b"")
+        if args[1:3] == ("show", f"HEAD:{snapshot_path.relative_to(repo_root)}"):
+            return subprocess.CompletedProcess(args, 0, stdout=snapshot_path.read_bytes())
+        if args[1] == "show" and target.startswith(snapshot.snapshot_commit_sha):
+            return subprocess.CompletedProcess(args, 0, stdout=b"older content")
+        if args[1:3] == ("merge-base", "--is-ancestor"):
+            return subprocess.CompletedProcess(args, 0, stdout=b"")
+        raise AssertionError(f"unexpected git command: {args}")
+
+    monkeypatch.setattr(subprocess, "run", fake_git)
+
+    with pytest.raises(ValueError, match="contain the committed snapshot content"):
+        _validate_pricing_snapshot_provenance(snapshot_path, snapshot, repo_root)
+
+
+def test_pricing_snapshot_does_not_require_agent_and_semantic_models_to_match(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    snapshot = PricingSnapshot(
+        provider="openai",
+        model="gpt-5.6-luna",
+        currency="USD",
+        input_unit="token",
+        input_price_per_unit=Decimal("0.000001"),
+        output_unit="token",
+        output_price_per_unit=Decimal("0.000002"),
+        official_source_url="https://openai.com/api/pricing/",
+        source_date="2026-08-28",
+        snapshot_commit_sha="a" * 40,
+        estimate_label="ESTIMATED_USD",
+    )
+    snapshot_path = tmp_path / "pricing.json"
+    snapshot_path.write_text(snapshot.model_dump_json(), encoding="utf-8")
+    monkeypatch.setattr(live_provider, "_repo_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        live_provider,
+        "_validate_pricing_snapshot_provenance",
+        lambda path, loaded, repo_root: None,
+    )
+    monkeypatch.setenv("OPENAI_MODEL", "gpt-5.6-luna")
+    monkeypatch.setenv("OPENAI_AGENT_MODEL", "gpt-5.6-terra")
+
+    loaded = LiveProviderEvaluator(
+        LiveProviderRunConfig(True, 10, 1, snapshot_path),
+        lambda budget: scripted_client_for_stages([]),
+        isolated_session,
+    )._load_snapshot()
+
+    assert loaded == snapshot
 
 
 def test_artifacts_are_safe_and_restricted_to_live_directory(
@@ -525,11 +734,12 @@ def test_artifacts_are_safe_and_restricted_to_live_directory(
         schema_version="phase9-live-evidence-v1",
         suite_id="phase9-live-provider-evidence",
         generated_at=datetime(2026, 8, 28, tzinfo=UTC),
-        source_revision="test",
+        source_revision="b" * 40,
         evaluation_base_sha="2ff0e58d98e586f7904c726a4bb485a8419e2954",
         environment="local",
         config=config(),
         observations=(valid_observation(),),
+        **report_metrics(),
         stopped_stage=None,
         cost=CostEstimate(
             status=CostStatus.NOT_ESTABLISHED, reason="NO_PRICING_SNAPSHOT"
@@ -546,6 +756,42 @@ def test_artifacts_are_safe_and_restricted_to_live_directory(
     assert markdown_text == render_live_evidence(report)
     for forbidden in ("OPENAI_API_KEY", "fixture conflict", "corrosive", "phase8-"):
         assert forbidden not in json_text + markdown_text
+    assert "NO_PRICING_SNAPSHOT" in markdown_text
+    assert "CLIENT_OBSERVED_REQUEST_LATENCY" in markdown_text
+    durable = report.model_copy(
+        update={
+            "semantic_smoke_review_id": "smoke-review",
+            "semantic_smoke_assessment_id": "smoke-assessment",
+            "semantic_smoke_policy_result_id": "smoke-policy",
+            "agent_run_id": "agent-run",
+            "agent_step_ids": ("step-1", "step-2"),
+            "safety_assessment_id": "hero-assessment",
+            "final_outcome_id": "hero-outcome",
+        }
+    )
+    durable_text = render_live_evidence(durable)
+    for value in (
+        "smoke-review",
+        "smoke-assessment",
+        "smoke-policy",
+        "agent-run",
+        "step-1",
+        "hero-assessment",
+        "hero-outcome",
+    ):
+        assert value in durable_text
+    estimated = report.model_copy(
+        update={
+            "cost": CostEstimate(
+                status=CostStatus.ESTIMATED_USD,
+                amount_usd=Decimal("0.000013"),
+                pricing_snapshot_commit_sha="a" * 40,
+            )
+        }
+    )
+    estimated_text = render_live_evidence(estimated)
+    assert "0.000013" in estimated_text
+    assert "a" * 40 in estimated_text
     with pytest.raises(ValueError, match="docs/evaluations/live"):
         write_artifacts(report, Path("outside.json"), output_markdown)
     with pytest.raises(ValueError, match="distinct"):
@@ -573,6 +819,40 @@ def test_cost_requires_complete_exact_model_usage() -> None:
     assert estimate_cost(snapshot, (mismatch,)).reason == "MODEL_MISMATCH"
 
 
+def test_cost_estimates_only_calls_matching_the_snapshot_model() -> None:
+    snapshot = PricingSnapshot(
+        provider="openai",
+        model="gpt-5.6-luna",
+        currency="USD",
+        input_unit="token",
+        input_price_per_unit=Decimal("0.000001"),
+        output_unit="token",
+        output_price_per_unit=Decimal("0.000002"),
+        official_source_url="https://openai.com/api/pricing/",
+        source_date="2026-08-28",
+        snapshot_commit_sha="a" * 40,
+        estimate_label="ESTIMATED_USD",
+    )
+    terra = valid_observation().model_copy(
+        update={
+            "configured_model": "gpt-5.6-terra",
+            "returned_model": "gpt-5.6-terra",
+        }
+    )
+    luna = valid_observation().model_copy(
+        update={
+            "call_number": 2,
+            "configured_model": "gpt-5.6-luna",
+            "returned_model": "gpt-5.6-luna",
+        }
+    )
+
+    result = estimate_cost(snapshot, (terra, luna))
+
+    assert result.status is CostStatus.ESTIMATED_USD
+    assert result.amount_usd == Decimal("0.000013")
+
+
 def test_cli_validates_configuration_then_builds_the_bounded_runner(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -587,11 +867,12 @@ def test_cli_validates_configuration_then_builds_the_bounded_runner(
         schema_version="phase9-live-evidence-v1",
         suite_id="phase9-live-provider-evidence",
         generated_at=datetime(2026, 8, 28, tzinfo=UTC),
-        source_revision="test",
+        source_revision="b" * 40,
         evaluation_base_sha="2ff0e58d98e586f7904c726a4bb485a8419e2954",
         environment="local",
         config=config(),
         observations=(),
+        **report_metrics(empty=True),
         stopped_stage=None,
         cost=CostEstimate(
             status=CostStatus.NOT_ESTABLISHED, reason="NO_PRICING_SNAPSHOT"
@@ -672,11 +953,30 @@ def test_cli_rejects_output_paths_before_evaluator_or_client_work(
     assert touched is False
 
 
-def test_invalid_pricing_is_rejected_before_live_client_import_in_fresh_process(
-    tmp_path: Path,
-) -> None:
-    snapshot_path = tmp_path / "invalid-pricing.json"
-    snapshot_path.write_text('{"provider":"openai"}', encoding="utf-8")
+def test_untracked_pricing_is_rejected_before_live_client_import_in_fresh_process() -> None:
+    checkout_sha = subprocess.run(
+        ("git", "rev-parse", "HEAD"),
+        capture_output=True,
+        check=True,
+        text=True,
+    ).stdout.strip()
+    snapshot_path = Path(".test-phase9-fresh-process-untracked-pricing.json")
+    snapshot_path.write_text(
+        PricingSnapshot(
+            provider="openai",
+            model="gpt-5.6-luna",
+            currency="USD",
+            input_unit="token",
+            input_price_per_unit=Decimal("0.000001"),
+            output_unit="token",
+            output_price_per_unit=Decimal("0.000002"),
+            official_source_url="https://openai.com/api/pricing/",
+            source_date="2026-08-28",
+            snapshot_commit_sha=checkout_sha,
+            estimate_label="ESTIMATED_USD",
+        ).model_dump_json(),
+        encoding="utf-8",
+    )
     script = """
 import builtins
 import os
@@ -704,18 +1004,21 @@ try:
         "--output-markdown", "docs/evaluations/live/report.md",
     ])
 except ValueError as error:
-    assert "invalid PHASE9_LIVE_PRICING_SNAPSHOT" in str(error)
+    assert "Git-tracked" in str(error)
 else:
-    raise AssertionError("invalid pricing snapshot was accepted")
+    raise AssertionError("untracked pricing snapshot was accepted")
 """
 
-    result = subprocess.run(
-        [sys.executable, "-c", script, str(snapshot_path)],
-        cwd=Path.cwd(),
-        env={**os.environ, "OPENAI_API_KEY": "", "RUN_LIVE_LLM_TESTS": ""},
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    try:
+        result = subprocess.run(
+            [sys.executable, "-c", script, str(snapshot_path)],
+            cwd=Path.cwd(),
+            env={**os.environ, "OPENAI_API_KEY": "", "RUN_LIVE_LLM_TESTS": ""},
+            capture_output=True,
+            text=True,
+            check=False,
+        )
 
-    assert result.returncode == 0, result.stderr
+        assert result.returncode == 0, result.stderr
+    finally:
+        snapshot_path.unlink(missing_ok=True)

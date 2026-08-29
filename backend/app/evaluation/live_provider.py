@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
+import statistics
+import subprocess
 from collections.abc import Callable, Sequence
 from contextlib import contextmanager
 from datetime import UTC, datetime
@@ -55,6 +58,95 @@ class _StageFailure(RuntimeError):
         super().__init__(stage.value)
 
 
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[3]
+
+
+def _checkout_revision(repo_root: Path) -> str:
+    completed = subprocess.run(
+        ("git", "rev-parse", "HEAD"),
+        cwd=repo_root,
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+    revision = completed.stdout.strip()
+    if (
+        completed.returncode != 0
+        or len(revision) != 40
+        or any(character not in "0123456789abcdef" for character in revision)
+    ):
+        raise ValueError("live evidence requires a resolvable checkout revision")
+    return revision
+
+
+def _validate_pricing_snapshot_provenance(
+    path: Path, snapshot: PricingSnapshot, repo_root: Path
+) -> None:
+    relative = path.relative_to(repo_root).as_posix()
+    tracked = subprocess.run(
+        ("git", "ls-files", "--error-unmatch", "--", relative),
+        cwd=repo_root,
+        capture_output=True,
+        check=False,
+    )
+    if tracked.returncode != 0:
+        raise ValueError("pricing snapshot must be Git-tracked")
+    committed = subprocess.run(
+        ("git", "show", f"HEAD:{relative}"),
+        cwd=repo_root,
+        capture_output=True,
+        check=False,
+    )
+    if committed.returncode != 0 or committed.stdout != path.read_bytes():
+        raise ValueError("pricing snapshot content must be committed")
+    snapshot_content = subprocess.run(
+        ("git", "show", f"{snapshot.snapshot_commit_sha}:{relative}"),
+        cwd=repo_root,
+        capture_output=True,
+        check=False,
+    )
+    associated = subprocess.run(
+        ("git", "merge-base", "--is-ancestor", snapshot.snapshot_commit_sha, "HEAD"),
+        cwd=repo_root,
+        capture_output=True,
+        check=False,
+    )
+    if (
+        snapshot_content.returncode != 0
+        or snapshot_content.stdout != path.read_bytes()
+        or associated.returncode != 0
+    ):
+        raise ValueError(
+            "pricing snapshot commit must contain the committed snapshot content "
+            "in checkout history"
+        )
+
+
+def _report_metrics(
+    observations: Sequence[ProviderCallObservation], complete_workflow_count: int
+) -> dict[str, object]:
+    successful = tuple(item for item in observations if item.success)
+    latencies = sorted(
+        item.latency_ms for item in successful if item.latency_ms is not None
+    )
+    return {
+        "attempted_provider_call_count": len(observations),
+        "successful_provider_call_count": len(successful),
+        "failed_provider_call_count": len(observations) - len(successful),
+        "complete_workflow_count": complete_workflow_count,
+        "p50_successful_latency_ms": (
+            float(statistics.median(latencies)) if latencies else None
+        ),
+        "p95_successful_latency_ms": (
+            float(latencies[math.ceil(0.95 * len(latencies)) - 1])
+            if latencies
+            else None
+        ),
+        "latency_provenance": "CLIENT_OBSERVED_REQUEST_LATENCY",
+    }
+
+
 def estimate_cost(
     snapshot: PricingSnapshot | None,
     observations: Sequence[ProviderCallObservation],
@@ -69,18 +161,22 @@ def estimate_cost(
             status=CostStatus.NOT_ESTABLISHED,
             reason="INVALID_PRICING_SNAPSHOT",
         )
-    if any(
-        observation.configured_model != snapshot.model
-        or observation.returned_model not in {None, snapshot.model}
+    matching = tuple(
+        observation
         for observation in observations
+        if observation.configured_model == snapshot.model
+    )
+    if not matching or any(
+        observation.returned_model not in {None, snapshot.model}
+        for observation in matching
     ):
         return CostEstimate(
             status=CostStatus.NOT_ESTABLISHED,
             reason="MODEL_MISMATCH",
         )
-    if not observations or any(
+    if any(
         observation.input_tokens is None or observation.output_tokens is None
-        for observation in observations
+        for observation in matching
     ):
         return CostEstimate(
             status=CostStatus.NOT_ESTABLISHED,
@@ -90,7 +186,7 @@ def estimate_cost(
         (
             Decimal(observation.input_tokens) * snapshot.input_price_per_unit
             + Decimal(observation.output_tokens) * snapshot.output_price_per_unit
-            for observation in observations
+            for observation in matching
         ),
         Decimal(0),
     )
@@ -116,6 +212,7 @@ class LiveProviderEvaluator:
         self._budget: Any | None = None
 
     def run(self) -> LiveProviderReport:
+        source_revision = _checkout_revision(_repo_root())
         snapshot = self._load_snapshot()
         from backend.app.evaluation.live_openai_client import (
             LiveProviderCallCapExceeded,
@@ -139,6 +236,7 @@ class LiveProviderEvaluator:
         client = self._client_factory(budget)
         stopped_stage: LiveStage | None = None
         durable: dict[str, Any] = {}
+        complete_workflow_count = 0
         try:
             checker, model = self._adapters(client)
             self._invoke(
@@ -156,15 +254,12 @@ class LiveProviderEvaluator:
                     None,
                 ),
             )
-            self._invoke(
-                client,
-                LiveStage.SEMANTIC_SAFETY_SMOKE,
-                lambda: self._canonical_semantic_smoke(checker),
-            )
-            self._single_tool_smoke(client, model, LiveStage.TOOL_SELECTION_SMOKE)
             self._register_storage_models()
             with self._session_factory() as session:
-                durable = self._complete_workflow(client, session)
+                durable.update(self._persisted_semantic_smoke(client, checker, session))
+                self._single_tool_smoke(client, model, LiveStage.TOOL_SELECTION_SMOKE)
+                durable.update(self._complete_workflow(client, session))
+                complete_workflow_count = 1
             observations = self._observations(client)
             if (
                 len(observations) == 9
@@ -186,7 +281,7 @@ class LiveProviderEvaluator:
             schema_version="phase9-live-evidence-v1",
             suite_id="phase9-live-provider-evidence",
             generated_at=datetime.now(UTC),
-            source_revision=os.environ.get("GIT_COMMIT_SHA", "working-tree"),
+            source_revision=source_revision,
             evaluation_base_sha=EVALUATION_BASE_SHA,
             environment=(
                 "deployed"
@@ -196,6 +291,7 @@ class LiveProviderEvaluator:
             config=self._config,
             fixture_ids=FIXTURE_IDS,
             observations=observations,
+            **_report_metrics(observations, complete_workflow_count),
             stopped_stage=stopped_stage,
             cost=estimate_cost(snapshot, observations),
             **durable,
@@ -229,18 +325,19 @@ class LiveProviderEvaluator:
         path = self._config.pricing_snapshot_path
         if path is None:
             return None
+        repo_root = _repo_root()
+        resolved = (path if path.is_absolute() else repo_root / path).resolve()
+        if resolved == repo_root or repo_root not in resolved.parents:
+            raise ValueError("pricing snapshot must be repository-contained")
         try:
-            snapshot = PricingSnapshot.model_validate_json(path.read_text(encoding="utf-8"))
+            snapshot = PricingSnapshot.model_validate_json(
+                resolved.read_text(encoding="utf-8")
+            )
         except (OSError, ValidationError, ValueError) as error:
             raise ValueError("invalid PHASE9_LIVE_PRICING_SNAPSHOT") from error
         if snapshot.provider != "openai":
             raise ValueError("pricing snapshot provider must be openai")
-        configured_models = {
-            os.environ.get("OPENAI_MODEL", "gpt-5.6-luna"),
-            os.environ.get("OPENAI_AGENT_MODEL", "gpt-5.6-luna"),
-        }
-        if configured_models != {snapshot.model}:
-            raise ValueError("pricing snapshot model must exactly match configured models")
+        _validate_pricing_snapshot_provenance(resolved, snapshot, repo_root)
         return snapshot
 
     def _invoke(
@@ -338,22 +435,46 @@ class LiveProviderEvaluator:
 
         self._invoke(client, stage, select)
 
-    @staticmethod
-    def _canonical_semantic_smoke(checker: Any) -> tuple[Any, None]:
-        output = checker.check(
-            SemanticSafetyCheckInput(
-                structured_dangerous_goods=False,
-                structured_un_number=None,
-                structured_commodity="general cargo",
-                note_text=(
-                    "Manifest declares general cargo; free-text handling note "
-                    "identifies corrosive material and requires safety review."
-                ),
-            )
+    def _persisted_semantic_smoke(
+        self, client: Any, checker: Any, session: Session
+    ) -> dict[str, str]:
+        from backend.app.domain.cargo_safety import CargoSafetyReviewState
+        from backend.app.orchestration.cargo_safety import CargoSafetyWorkflow
+        from backend.app.orchestration.scarce_capacity import (
+            build_scarce_capacity_workflow,
         )
-        if output.result is not SemanticCheckResult.CONTRADICTION_FOUND:
-            raise AssertionError("canonical semantic smoke did not find the fixture conflict")
-        return output, None
+        from backend.app.services.canonical_replay import (
+            CANONICAL_SAFETY_CONTAINER_ID,
+            CANONICAL_SAFETY_NOTE_SOURCE,
+            CANONICAL_SAFETY_NOTE_TEXT,
+        )
+
+        incident = build_scarce_capacity_workflow(session).run().incident
+        workflow = CargoSafetyWorkflow.for_session(session, checker=checker)
+        review = workflow.create_review(
+            incident.id,
+            CANONICAL_SAFETY_CONTAINER_ID,
+            CANONICAL_SAFETY_NOTE_TEXT,
+            CANONICAL_SAFETY_NOTE_SOURCE,
+        )
+
+        def evaluate() -> tuple[Any, None]:
+            outcome = workflow.evaluate(review.id)
+            if (
+                outcome.review.state is not CargoSafetyReviewState.COMPLETED
+                or outcome.assessment.result
+                is not SemanticCheckResult.CONTRADICTION_FOUND
+                or not outcome.policy_result.automation_blocked
+            ):
+                raise AssertionError("canonical semantic smoke did not fail closed")
+            return outcome, None
+
+        outcome = self._invoke(client, LiveStage.SEMANTIC_SAFETY_SMOKE, evaluate)
+        return {
+            "semantic_smoke_review_id": str(outcome.review.id),
+            "semantic_smoke_assessment_id": str(outcome.assessment.id),
+            "semantic_smoke_policy_result_id": str(outcome.policy_result.id),
+        }
 
     def _complete_workflow(
         self, client: InstrumentedOpenAIClient, session: Session
@@ -538,9 +659,29 @@ def render_live_evidence(report: LiveProviderReport) -> str:
         "",
         f"Suite: `{report.suite_id}`",
         f"Generated: `{report.generated_at.isoformat()}`",
-        f"Provider calls: `{report.provider_call_count}/{report.config.max_calls}`",
+        f"Source revision: `{report.source_revision}`",
+        f"Provider calls attempted: `{report.attempted_provider_call_count}/{report.config.max_calls}`",
+        f"Provider calls successful: `{report.successful_provider_call_count}`",
+        f"Provider calls failed: `{report.failed_provider_call_count}`",
+        f"Complete workflows: `{report.complete_workflow_count}/{report.config.max_workflows}`",
+        f"Successful latency p50 ms: `{report.p50_successful_latency_ms}`",
+        f"Successful latency p95 ms: `{report.p95_successful_latency_ms}`",
+        f"Latency provenance: `{report.latency_provenance}`",
         f"Stopped stage: `{report.stopped_stage.value if report.stopped_stage else 'NONE'}`",
         f"Cost: `{report.cost.status.value}`",
+        f"Cost amount USD: `{report.cost.amount_usd if report.cost.amount_usd is not None else 'NOT_ESTABLISHED'}`",
+        f"Cost reason: `{report.cost.reason or 'NONE'}`",
+        f"Pricing snapshot commit: `{report.cost.pricing_snapshot_commit_sha or 'NONE'}`",
+        "",
+        "## Durable evidence IDs",
+        "",
+        f"Semantic smoke review: `{report.semantic_smoke_review_id or 'NONE'}`",
+        f"Semantic smoke assessment: `{report.semantic_smoke_assessment_id or 'NONE'}`",
+        f"Semantic smoke policy result: `{report.semantic_smoke_policy_result_id or 'NONE'}`",
+        f"Agent run: `{report.agent_run_id or 'NONE'}`",
+        f"Agent steps: `{', '.join(report.agent_step_ids) if report.agent_step_ids else 'NONE'}`",
+        f"Hero safety assessment: `{report.safety_assessment_id or 'NONE'}`",
+        f"Final outcome: `{report.final_outcome_id or 'NONE'}`",
         "",
         "| Call | Stage | Method | Success | Model | Input tokens | Output tokens | Latency ms | Tool |",
         "|---:|---|---|:---:|---|---:|---:|---:|---|",
