@@ -695,7 +695,7 @@ def test_pricing_snapshot_sha_must_identify_a_commit_containing_the_path(
             return subprocess.CompletedProcess(args, 0, stdout=b"")
         if args[1:3] == ("show", f"HEAD:{snapshot_path.relative_to(repo_root)}"):
             return subprocess.CompletedProcess(args, 0, stdout=snapshot_path.read_bytes())
-        if args[1] == "cat-file":
+        if args[1] == "show":
             return subprocess.CompletedProcess(args, 1, stdout=b"")
         if args[1:3] == ("merge-base", "--is-ancestor"):
             return subprocess.CompletedProcess(args, 0, stdout=b"")
@@ -751,6 +751,69 @@ def test_pricing_snapshot_provenance_accepts_committed_path_without_self_referen
     git("commit", "-m", "pin pricing snapshot path commit")
 
     _validate_pricing_snapshot_provenance(snapshot_path, snapshot, repo_root)
+
+
+@pytest.mark.parametrize(
+    ("changed_field", "changed_value"),
+    (
+        ("input_price_per_unit", Decimal("0.000009")),
+        ("official_source_url", "https://www.openai.com/api/pricing/"),
+    ),
+)
+def test_pricing_snapshot_provenance_rejects_changed_validated_payload_fields(
+    tmp_path: Path, changed_field: str, changed_value: object
+) -> None:
+    repo_root = tmp_path / "checkout"
+    repo_root.mkdir()
+
+    def git(*args: str) -> str:
+        return subprocess.run(
+            ("git", *args),
+            cwd=repo_root,
+            capture_output=True,
+            check=True,
+            text=True,
+        ).stdout.strip()
+
+    git("init")
+    git("config", "user.email", "phase9-tests@example.invalid")
+    git("config", "user.name", "Phase 9 Tests")
+    git("config", "commit.gpgsign", "false")
+    snapshot_path = repo_root / "docs" / "pricing.json"
+    snapshot_path.parent.mkdir(parents=True)
+    historical_payload = {
+        "provider": "openai",
+        "model": "gpt-5.6-luna",
+        "currency": "USD",
+        "input_unit": "token",
+        "input_price_per_unit": Decimal("0.000001"),
+        "output_unit": "token",
+        "output_price_per_unit": Decimal("0.000002"),
+        "official_source_url": "https://openai.com/api/pricing/",
+        "source_date": "2026-08-28",
+        "snapshot_commit_sha": "a" * 40,
+        "estimate_label": "ESTIMATED_USD",
+        changed_field: changed_value,
+    }
+    historical = PricingSnapshot.model_validate(historical_payload)
+    snapshot_path.write_text(historical.model_dump_json(), encoding="utf-8")
+    git("add", "docs/pricing.json")
+    git("commit", "-m", "add historical pricing snapshot")
+    snapshot_commit = git("rev-parse", "HEAD")
+    current = PricingSnapshot.model_validate(
+        {
+            **historical_payload,
+            "input_price_per_unit": Decimal("0.000001"),
+            "official_source_url": "https://openai.com/api/pricing/",
+            "snapshot_commit_sha": snapshot_commit,
+        }
+    )
+    snapshot_path.write_text(current.model_dump_json(), encoding="utf-8")
+    git("add", "docs/pricing.json")
+    git("commit", "-m", "change validated pricing snapshot field")
+
+    with pytest.raises(ValueError, match="validated payload fields"):
+        _validate_pricing_snapshot_provenance(snapshot_path, current, repo_root)
 
 
 def test_pricing_snapshot_does_not_require_agent_and_semantic_models_to_match(

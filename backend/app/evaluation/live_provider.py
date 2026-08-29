@@ -99,8 +99,8 @@ def _validate_pricing_snapshot_provenance(
     )
     if committed.returncode != 0 or committed.stdout != path.read_bytes():
         raise ValueError("pricing snapshot content must be committed")
-    snapshot_path = subprocess.run(
-        ("git", "cat-file", "-e", f"{snapshot.snapshot_commit_sha}:{relative}"),
+    snapshot_blob = subprocess.run(
+        ("git", "show", f"{snapshot.snapshot_commit_sha}:{relative}"),
         cwd=repo_root,
         capture_output=True,
         check=False,
@@ -112,10 +112,23 @@ def _validate_pricing_snapshot_provenance(
         check=False,
     )
     if (
-        snapshot_path.returncode != 0 or associated.returncode != 0
+        snapshot_blob.returncode != 0 or associated.returncode != 0
     ):
         raise ValueError(
             "pricing snapshot commit must contain the snapshot path in checkout history"
+        )
+    try:
+        referenced_snapshot = PricingSnapshot.model_validate_json(snapshot_blob.stdout)
+    except (ValidationError, ValueError) as error:
+        raise ValueError(
+            "pricing snapshot commit must contain a validated pricing snapshot"
+        ) from error
+    excluded = {"snapshot_commit_sha"}
+    if referenced_snapshot.model_dump(exclude=excluded) != snapshot.model_dump(
+        exclude=excluded
+    ):
+        raise ValueError(
+            "pricing snapshot commit validated payload fields must match current snapshot"
         )
 
 
