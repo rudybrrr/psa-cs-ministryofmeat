@@ -46,3 +46,11 @@ def test_openai_adapter_requires_one_nonparallel_tool_call() -> None:
     assert isinstance(turn, AgentModelTurn)
     assert request["tool_choice"] == "required"
     assert request["parallel_tool_calls"] is False
+
+
+def test_agent_prompt_discourages_redundant_reads_and_guides_typed_state_actions() -> None:
+    from backend.app.services.agent_model import AGENT_INSTRUCTIONS
+
+    assert "do not call get_* tools merely to reread information already present" in AGENT_INSTRUCTIONS
+    assert "PRE_DISCHARGE but not DISCHARGE_ACTIVE, select pause_agent_run" in AGENT_INSTRUCTIONS
+    assert "request_expedite_feasibility is exposed, select it before carrier mutation" in AGENT_INSTRUCTIONS

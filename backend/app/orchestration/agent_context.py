@@ -31,17 +31,17 @@ class AgentToolRegistry:
         if run.state in {AgentRunState.COMPLETED, AgentRunState.ESCALATED, AgentRunState.FAILED}:
             return ()
         tools = [
-            _tool("get_incident_context", "Read compact incident status."),
-            _tool("get_scarcity_evaluation", "Read persisted scarcity result."),
-            _tool("get_carrier_recovery_cases", "Read carrier recovery cases."),
-            _tool("get_cargo_safety_reviews", "Read cargo safety reviews."),
-            _tool("pause_agent_run", "Pause only at a durable wait boundary."),
+            _tool("get_incident_context", "Read compact incident status. Use only when required detail is absent from the supplied turn context."),
+            _tool("get_scarcity_evaluation", "Read persisted scarcity result. Use only when required detail is absent from the supplied turn context."),
+            _tool("get_carrier_recovery_cases", "Read carrier recovery cases. Use only when required detail is absent from the supplied turn context."),
+            _tool("get_cargo_safety_reviews", "Read cargo safety reviews. Use only when required detail is absent from the supplied turn context."),
+            _tool("pause_agent_run", "Pause at the durable wait boundary: when PRE_DISCHARGE is present, wait for DISCHARGE_ACTIVE evidence."),
             _tool("complete_agent_run", "Complete only when deterministic validation permits."),
             _tool("escalate_agent_run", "Safely escalate with typed evidence."),
         ]
         cases = CarrierRecoveryRepository(session).list_cases(run.incident_id)
         for case in cases:
-            tools.append(_tool("get_carrier_recovery_history", "Read one carrier case history.", ("case_id",)))
+            tools.append(_tool("get_carrier_recovery_history", "Read one carrier case history. Use only when required detail is absent from the supplied turn context.", ("case_id",)))
             if case.state is CarrierRecoveryCaseState.AWAITING_REQUEST_APPROVAL:
                 tools.append(_tool("send_authorised_rta_request", "Send an exact already-authorised request.", ("case_id",)))
             if case.state is CarrierRecoveryCaseState.AWAITING_CARRIER:

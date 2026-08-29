@@ -18,6 +18,19 @@ def test_context_uses_durable_ids_and_registry_filters_timeout_before_deadline(s
     assert "evaluate_carrier_timeout" not in {tool.name for tool in registry.available_tools(session, run)}
 
 
+def test_registry_keeps_read_tools_and_explains_pre_discharge_wait(session, incident) -> None:
+    from backend.app.domain.agent_runtime import AgentRun
+    from backend.app.orchestration.agent_context import AgentToolRegistry
+    from backend.app.orchestration.agent_runtime import CanonicalAgentRuntimeConfiguration
+
+    run = AgentRuntimeRepository(session).create_run(AgentRun(incident_id=incident.id, model_name="fake", prompt_version="v1"))
+    tools = {tool.name: tool for tool in AgentToolRegistry(clock=CanonicalAgentRuntimeConfiguration.load().clock("before_deadline")).available_tools(session, run)}
+    assert {"get_incident_context", "get_scarcity_evaluation", "get_carrier_recovery_cases", "get_cargo_safety_reviews", "pause_agent_run"} <= tools.keys()
+    assert "Use only when required detail is absent from the supplied turn context" in tools["get_incident_context"].description
+    assert "PRE_DISCHARGE" in tools["pause_agent_run"].description
+    assert "DISCHARGE_ACTIVE" in tools["pause_agent_run"].description
+
+
 def test_context_exposes_forecast_stages_and_pending_safety_reviews(session, incident) -> None:
     from backend.app.domain.agent_runtime import AgentRun
     from backend.app.orchestration.agent_context import AgentToolRegistry, build_agent_turn_context
