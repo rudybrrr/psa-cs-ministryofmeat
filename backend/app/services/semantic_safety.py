@@ -71,7 +71,7 @@ class OpenAISemanticSafetyChecker:
             output = parsed.output_parsed
             if output is None:
                 raise SemanticSafetyCheckerFailure(SemanticCheckFailureKind.INVALID_OUTPUT)
-            return SemanticSafetyCheckOutput.model_validate(output)
+            return SemanticSafetyCheckOutput.model_validate(output.model_dump())
         except SemanticSafetyCheckerFailure:
             raise
         except APITimeoutError as error:
