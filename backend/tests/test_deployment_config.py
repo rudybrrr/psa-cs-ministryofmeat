@@ -14,6 +14,13 @@ def test_deployment_doc_names_required_runtime_contracts():
         assert required in text
 
 
+def test_deployment_doc_uses_distinct_live_artifact_paths():
+    text = Path("docs/deployment.md").read_text()
+    assert 'docs/evaluations/live/${ARTIFACT_STAMP}-phase9-live-provider.json' in text
+    assert 'docs/evaluations/live/${ARTIFACT_STAMP}-phase9-live-provider.md' in text
+    assert "/tmp/phase9-live-provider" not in text
+
+
 def test_dockerfile_is_python312_backend_only():
     text = Path("Dockerfile").read_text()
     assert "FROM python:3.12-slim" in text

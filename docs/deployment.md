@@ -83,14 +83,16 @@ reinitialize, or replace the SQLite volume as a rollback step.
 The bounded live evaluator is opt-in and must not run until separately
 authorized. It requires `RUN_LIVE_LLM_TESTS=1`, a temporary
 `OPENAI_API_KEY`, `PHASE9_LIVE_MAX_CALLS` no greater than 10, and
-`PHASE9_LIVE_MAX_RUNS=1`; stop if the run would exceed the US$5 ceiling:
+`PHASE9_LIVE_MAX_RUNS=1`. Set a UTC `ARTIFACT_STAMP`; both output paths must
+remain distinct children of `docs/evaluations/live/`. Stop if the run would
+exceed the US$5 ceiling:
 
 ```bash
 RUN_LIVE_LLM_TESTS=1 PHASE9_LIVE_MAX_CALLS=10 PHASE9_LIVE_MAX_RUNS=1 \
   UV_CACHE_DIR=/private/tmp/psa-uv-cache uv run --python 3.12 --extra dev \
   python -m backend.app.evaluation.live_provider \
-  --output-json /tmp/phase9-live-provider.json \
-  --output-markdown /tmp/phase9-live-provider.md
+  --output-json "docs/evaluations/live/${ARTIFACT_STAMP}-phase9-live-provider.json" \
+  --output-markdown "docs/evaluations/live/${ARTIFACT_STAMP}-phase9-live-provider.md"
 ```
 
 Do not commit live artifacts or claim deployment verification without the
