@@ -66,6 +66,15 @@ class AgentToolRegistry:
         if unhandled is not None and not stronger_wait:
             forbidden = {"prepare_rta_request", "send_authorised_rta_request", "evaluate_carrier_timeout"}
             tools = [tool for tool in tools if tool.name not in forbidden]
+        immediate_progress = {
+            "request_expedite_feasibility",
+            "prepare_rta_request",
+            "send_authorised_rta_request",
+            "evaluate_carrier_timeout",
+            "request_cargo_safety_review",
+        }
+        if immediate_progress.intersection(tool.name for tool in tools):
+            tools = [tool for tool in tools if not tool.name.startswith("get_")]
         return tuple({tool.name: tool for tool in tools}.values())
 
 
