@@ -1,0 +1,12 @@
+.env
+.git
+.pytest_cache
+.venv
+__pycache__
+*.pyc
+*.db
+*.sqlite
+docs
+web
+node_modules
+package-lock.json
