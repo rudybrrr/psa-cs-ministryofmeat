@@ -60,9 +60,37 @@ button {
   cursor: pointer;
 }
 
-/* Canvas — plain void; structure comes from layout, not decoration */
+/* Canvas — content area over optional terminal backdrop */
 .psa-canvas {
+  background-color: transparent;
+}
+
+/* Dimmed port photography behind main shell (sidebar excluded) */
+.psa-app-backdrop {
+  isolation: isolate;
   background-color: var(--color-psa-void);
+}
+
+.psa-app-backdrop::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(
+      rgba(7, 8, 9, 0.88),
+      rgba(7, 8, 9, 0.92)
+    ),
+    url("/psa-terminal-backdrop.jpg");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+.psa-app-backdrop > * {
+  position: relative;
+  z-index: 1;
 }
 
 /* Surface hierarchy — elevation via tone, hairlines only where needed */
