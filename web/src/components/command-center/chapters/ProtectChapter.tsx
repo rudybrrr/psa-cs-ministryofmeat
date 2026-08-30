@@ -1,5 +1,9 @@
 import type { AgentRun } from "../../../api/types";
 import type { CargoSafetyHistory, CargoSafetyReview } from "../../../api/types";
+import { useEffect, useRef } from "react";
+import gsap from "gsap";
+
+import { motionEnabled } from "../../../lib/useReducedMotion";
 import { ChapterFrame, ComparisonColumn } from "./ChapterFrame";
 
 export function ProtectChapter({
@@ -19,6 +23,17 @@ export function ProtectChapter({
   const assessment = history?.assessment;
   const policy = history?.policy_result;
   const note = history?.note;
+  const finaleRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!motionEnabled() || !finaleRef.current || !policy?.automation_blocked) return;
+    const items = finaleRef.current.querySelectorAll("[data-protect-step]");
+    gsap.fromTo(
+      items,
+      { opacity: 0, y: 8 },
+      { opacity: 1, y: 0, duration: 0.24, stagger: 0.12, ease: "power2.out" },
+    );
+  }, [policy?.automation_blocked, assessment?.result]);
 
   return (
     <ChapterFrame
@@ -42,38 +57,36 @@ export function ProtectChapter({
         </button>
       ) : null}
 
-      {history ? (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <ComparisonColumn heading="Structured manifest">
-            <p>Trusted declaration source</p>
-            <p>
-              DG{" "}
-              {assessment ? String(assessment.structured_dangerous_goods) : "pending"} ·
-              UN {assessment?.structured_un_number ?? "—"} · commodity{" "}
-              {assessment?.structured_commodity ?? "—"}
-            </p>
-          </ComparisonColumn>
-          <ComparisonColumn heading="Untrusted handling note">
-            <p>{note?.text ?? "pending"}</p>
-            <p className="text-psa-steel">({note?.source ?? "—"})</p>
-          </ComparisonColumn>
-        </div>
+      {reviews.length > 0 && history?.review ? (
+        <p className="text-xs text-psa-chalk">Review: {history.review.state}</p>
       ) : null}
 
       {history ? (
-        <>
-          <p className="text-xs text-psa-chalk">
-            Review: {history.review.state}
-          </p>
+        <div ref={finaleRef} className="space-y-4">
+          <div className="grid gap-4 lg:grid-cols-2">
+            <ComparisonColumn heading="Structured manifest" light>
+              <p className="font-medium">Trusted declaration source</p>
+              <p>
+                DG{" "}
+                {assessment ? String(assessment.structured_dangerous_goods) : "pending"} · UN{" "}
+                {assessment?.structured_un_number ?? "—"} · commodity{" "}
+                {assessment?.structured_commodity ?? "—"}
+              </p>
+            </ComparisonColumn>
+            <ComparisonColumn heading="Untrusted handling note" light>
+              <p>{note?.text ?? "pending"}</p>
+              <p className="text-psa-data-ink/60">({note?.source ?? "—"})</p>
+            </ComparisonColumn>
+          </div>
 
-          <div className="rounded-[8px] border border-psa-coral/40 bg-psa-coral/10 px-4 py-4">
+          <div
+            data-protect-step
+            className="rounded-[8px] border border-psa-coral/40 bg-psa-coral/10 px-4 py-4"
+          >
             <p className="psa-label text-psa-coral">Semantic assessment</p>
             <p className="mt-2 font-mono text-lg text-psa-snow">
               {assessment?.result ?? "pending"}
             </p>
-            {!assessment ? (
-              <p className="mt-2 text-xs text-psa-chalk">Semantic result: pending</p>
-            ) : null}
             {assessment ? (
               <>
                 <p className="mt-2 text-xs text-psa-chalk">
@@ -83,17 +96,20 @@ export function ProtectChapter({
                   Explanation: {assessment.explanation}
                 </p>
               </>
-            ) : null}
+            ) : (
+              <p className="mt-2 text-xs text-psa-chalk">Semantic result: pending</p>
+            )}
           </div>
 
-          <div className="rounded-[8px] border border-psa-graphite bg-psa-graphite/20 px-4 py-4">
+          <div
+            data-protect-step
+            className="rounded-[8px] border border-white/12 bg-psa-slate px-4 py-4"
+          >
             <p className="psa-label">Deterministic safety policy</p>
             <p className="mt-2 text-sm font-medium text-psa-snow">
               {policy ? policy.disposition.replaceAll("_", " ") : "pending"}
             </p>
-            <p className="mt-1 font-mono text-sm text-psa-coral">
-              AUTOMATION BLOCKED
-            </p>
+            <p className="mt-1 font-mono text-sm text-psa-coral">AUTOMATION BLOCKED</p>
             <p className="mt-2 text-sm text-psa-chalk">
               {policy
                 ? `Deterministic policy: ${policy.disposition} · automation blocked ${String(policy.automation_blocked)}`
@@ -104,7 +120,7 @@ export function ProtectChapter({
               HUMAN DG REVIEW REQUIRED
             </p>
           </div>
-        </>
+        </div>
       ) : null}
 
       {run?.state === "ESCALATED" ? (

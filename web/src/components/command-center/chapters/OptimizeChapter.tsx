@@ -61,17 +61,18 @@ export function OptimizeChapter({
       </div>
 
       {allocated.length > 0 ? (
-        <div className="psa-surface-nested rounded-[8px] px-4 py-4">
-          <p className="psa-label">Selected allocation</p>
-          <p className="mt-2 text-xs text-psa-chalk">
-            {allocated.length} containers committed to expedite under{" "}
-            {summary?.selectedStrategy ?? "scenario-aware"} strategy
+        <div className="psa-data-surface rounded-[10px] px-4 py-4">
+          <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-psa-data-ink/60">
+            Selected allocation evidence
           </p>
-          {summary?.selectedStrategy ? (
-            <p className="mt-2 text-xs text-psa-steel">
-              Strategy: {summary.selectedStrategy} · {summary.scenarioCount} worlds
-            </p>
-          ) : null}
+          <p className="mt-2 text-sm text-psa-data-ink">
+            {allocated.length} containers committed to expedite under{" "}
+            {summary?.selectedStrategy ?? "scenario-aware"} strategy across{" "}
+            {summary?.scenarioCount ?? 50} scenario worlds.
+          </p>
+          <p className="mt-2 text-xs text-psa-data-ink/70">
+            Open the Containers workspace for per-container allocation and disposition detail.
+          </p>
         </div>
       ) : null}
 

@@ -3,6 +3,7 @@ import { useState } from "react";
 import type { CarrierRecoveryCase, CarrierRecoveryHistory } from "../../../api/types";
 import type { ContainerRecoveryRow } from "../../../lib/recoverySelectors";
 import { connectionShortLabel, formatUtcClock, truncateId } from "../../../lib/formatters";
+import { useAuthorityGatePulse } from "../../../hooks/useChapterMotion";
 import { ChapterFrame } from "./ChapterFrame";
 
 export function CoordinateChapter({
@@ -32,14 +33,20 @@ export function CoordinateChapter({
     history?.case.affected_container_ids[0] ??
     "—";
   const approved = history?.approvals.some((item) => item.status === "APPROVED");
+  const authorityRef = useAuthorityGatePulse(
+    carrierCase?.state === "AWAITING_REQUEST_APPROVAL" && !approved,
+  );
 
   return (
     <ChapterFrame
       label="Chapter 5 · Coordinate"
       title="Agent-prepared recovery — human authority required"
     >
-        <div className="rounded-[8px] border border-psa-amber/45 bg-psa-amber/10 px-4 py-4">
-          <p className="psa-label text-psa-amber">Human authority boundary</p>
+        <div
+          ref={authorityRef}
+          className="rounded-[8px] border border-psa-amber/45 bg-psa-amber/10 px-4 py-4"
+        >
+          <p className="psa-label text-psa-amber">Human authority required</p>
         <p className="mt-2 text-sm text-psa-chalk">
           The agent may prepare the JV2 recovery request and bind evidence. The agent
           may <strong className="text-psa-snow">not</strong> authorize outbound carrier

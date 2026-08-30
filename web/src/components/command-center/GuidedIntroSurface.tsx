@@ -18,8 +18,13 @@ export function GuidedIntroSurface({
         id="guided-intro-heading"
         className="mt-2 text-xl font-medium tracking-[-0.02em] text-psa-snow sm:text-2xl"
       >
-        Begin recovery analysis
+        A delayed inbound vessel has put 24 transshipment containers at risk — but recovery
+        capacity is limited.
       </h2>
+      <p className="mt-3 max-w-2xl text-sm leading-relaxed text-psa-chalk">
+        Begin the guided recovery walkthrough to see how the system allocates scarce expedite
+        slots, pauses at evidence boundaries, and stops at human authority and safety policy.
+      </p>
 
       <div className="mt-5 grid gap-3 sm:grid-cols-3">
         <div className="psa-surface-nested rounded-[8px] px-3 py-3">

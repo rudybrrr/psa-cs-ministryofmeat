@@ -74,8 +74,11 @@ export function RespondChapter({
       ) : null}
 
       {carrierCase?.state === "AWAITING_COUNTER_APPROVAL" && history ? (
-        <div className="psa-surface-nested space-y-3 rounded-[8px] px-4 py-4">
-          <p className="text-sm text-psa-chalk">
+        <div className="psa-data-surface space-y-3 rounded-[10px] px-4 py-4">
+          <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-psa-data-ink/60">
+            Carrier counter proposal
+          </p>
+          <p className="text-sm text-psa-data-ink">
             Carrier counter received — waiting for operator approval.
           </p>
           {counter ? (
@@ -108,7 +111,7 @@ export function RespondChapter({
 
       {carrierCase?.state === "COMPLETED" && history ? (
         <div className="psa-surface-nested space-y-3 rounded-[8px] px-4 py-4">
-          <p className="text-sm text-psa-mint">Carrier recovery completed.</p>
+          <p className="text-sm text-psa-fern">Carrier recovery completed.</p>
           {history.results.map((result) => (
             <div
               key={result.id}

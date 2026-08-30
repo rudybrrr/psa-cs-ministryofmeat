@@ -3,8 +3,12 @@ import type {
   ExpediteCommitment,
   YardForecastSnapshot,
 } from "../../../api/types";
+import { useEffect, useRef } from "react";
+import gsap from "gsap";
+
 import { buildAllocationComparison } from "../../../lib/chapterContext";
 import { latestSnapshot } from "../../../lib/recoverySelectors";
+import { motionEnabled } from "../../../lib/useReducedMotion";
 import { ChapterFrame, ComparisonColumn, MetricCard } from "./ChapterFrame";
 
 export function AdaptChapter({
@@ -24,12 +28,23 @@ export function AdaptChapter({
     (swap) => swap.before !== swap.after && !swap.before.includes("LOCKED"),
   );
 
+  const swapListRef = useRef<HTMLDivElement>(null);
+  const revisionKey = comparison.current?.id ?? "none";
+  useEffect(() => {
+    if (!motionEnabled() || !swapListRef.current || changedSwaps.length === 0) return;
+    gsap.fromTo(
+      swapListRef.current.querySelectorAll("[data-swap-chip]"),
+      { opacity: 0, scale: 0.92 },
+      { opacity: 1, scale: 1, duration: 0.28, stagger: 0.06, ease: "power2.out" },
+    );
+  }, [changedSwaps.length, revisionKey]);
+
   return (
     <ChapterFrame
       label="Chapter 4 · Adapt"
       title="Evidence arrives — allocation revises under locked commitments"
     >
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 lg:grid-cols-3">
         <MetricCard
           label="Forecast transition"
           value={
@@ -38,6 +53,22 @@ export function AdaptChapter({
               : "Awaiting discharge evidence"
           }
           accent
+        />
+        <MetricCard
+          label="Expected preserved"
+          value={
+            comparison.expectedBefore != null && comparison.expectedAfter != null
+              ? `${comparison.expectedBefore.toFixed(2)} → ${comparison.expectedAfter.toFixed(2)}`
+              : "—"
+          }
+        />
+        <MetricCard
+          label="Scenario-world total"
+          value={
+            comparison.totalBefore != null && comparison.totalAfter != null
+              ? `${comparison.totalBefore} → ${comparison.totalAfter}`
+              : "—"
+          }
         />
       </div>
 
@@ -68,20 +99,23 @@ export function AdaptChapter({
       ) : null}
 
       {changedSwaps.length > 0 ? (
-        <div className="psa-surface-nested rounded-[8px] px-4 py-4">
-          <p className="psa-label">Changed allocation</p>
-          <div className="mt-3 flex flex-wrap gap-2">
+        <div className="psa-data-surface rounded-[10px] px-4 py-4">
+          <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-psa-data-ink/60">
+            Allocation changes (R0 → R1)
+          </p>
+          <div ref={swapListRef} className="mt-3 flex flex-wrap gap-2">
             {changedSwaps.map((swap) => (
               <span
                 key={swap.containerId}
-                className="rounded border border-psa-graphite bg-psa-void px-2 py-1 font-mono text-xs text-psa-snow"
+                data-swap-chip
+                className="rounded-[6px] border border-black/10 bg-white px-2.5 py-1.5 font-mono text-xs font-medium text-psa-data-ink"
               >
                 {swap.containerId} {swap.before} → {swap.after}
               </span>
             ))}
           </div>
           {comparison.locked.length > 0 ? (
-            <p className="mt-3 text-xs text-psa-steel">
+            <p className="mt-3 text-xs text-psa-data-ink/70">
               Locked commitments remain stable: {comparison.locked.join(", ")}
             </p>
           ) : null}

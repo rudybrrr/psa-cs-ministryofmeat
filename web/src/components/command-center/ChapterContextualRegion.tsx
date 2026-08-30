@@ -17,6 +17,7 @@ import type {
 import type { RecoveryChapterId } from "../../lib/recoveryChapters";
 import { chapterForStage } from "../../lib/recoveryChapters";
 import type { ContainerRecoveryRow, RecoverySummary } from "../../lib/recoverySelectors";
+import { useChapterTransition } from "../../hooks/useChapterMotion";
 import type { ConsoleMode } from "./ModeSwitcher";
 import { AdaptChapter } from "./chapters/AdaptChapter";
 import { CoordinateChapter } from "./chapters/CoordinateChapter";
@@ -96,11 +97,13 @@ function resolveActiveChapter(
 }
 
 export function ChapterContextualRegion(props: ChapterContextualRegionProps) {
+  const chapter = resolveActiveChapter(props.stage, props.carrierCase);
+  const chapterRef = useChapterTransition(chapter);
+
   if (props.mode === "explore") {
     return null;
   }
 
-  const chapter = resolveActiveChapter(props.stage, props.carrierCase);
   const showAdaptEvidence =
     props.allocationRevisions.length >= 2;
   const showAgent =
@@ -121,7 +124,7 @@ export function ChapterContextualRegion(props: ChapterContextualRegionProps) {
     ) : null;
 
   return (
-    <div className="space-y-4" data-guided-context>
+    <div ref={chapterRef} className="space-y-4" data-guided-context>
       {chapter === "INCIDENT" ? (
         <IncidentChapter
           incident={props.incident}

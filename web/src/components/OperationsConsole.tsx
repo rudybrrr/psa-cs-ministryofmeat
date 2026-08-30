@@ -18,22 +18,36 @@ import { RecoveryKpiStrip } from "./command-center/RecoveryKpiStrip";
 import { ChapterProgress } from "./command-center/ChapterProgress";
 import { GuidedIntroSurface } from "./command-center/GuidedIntroSurface";
 import { ResumePrompt } from "./command-center/ResumePrompt";
-import { ExploreWorkspace } from "./command-center/ExploreWorkspace";
 import { ChapterContextualRegion } from "./command-center/ChapterContextualRegion";
 import { DashboardShell } from "./command-center/DashboardShell";
-import { DashboardSidebar } from "./command-center/DashboardSidebar";
+import {
+  DashboardSidebar,
+  type DashboardNavId,
+} from "./command-center/DashboardSidebar";
 import { DashboardContentHeader } from "./command-center/DashboardContentHeader";
 import { StageActionCard } from "./command-center/StageActionCard";
+import { AutoReplayPanel } from "./command-center/AutoReplayPanel";
+import { ExploreAvailability } from "./command-center/ExploreAvailability";
+import { RecoveryWorkspace } from "./command-center/workspaces/RecoveryWorkspace";
+import { ContainersWorkspace } from "./command-center/workspaces/ContainersWorkspace";
+import { CarrierWorkspace } from "./command-center/workspaces/CarrierWorkspace";
+import { EvidenceWorkspace } from "./command-center/workspaces/EvidenceWorkspace";
 
 export function OperationsConsole() {
   const console = useRecoveryConsole();
   const [mode, setMode] = useState<ConsoleMode>("guided");
+  const [workspace, setWorkspace] = useState<DashboardNavId>("overview");
   const run = console.agentRuns.at(-1) ?? null;
-  const canAdvance = canAdvanceAgent(run, {
+  const agentEvidenceCanAdvance = canAdvanceAgent(run, {
     carrierHistory: console.agentWaitHistory,
     reconsiderations: console.reconsiderations,
     tradeoffReviews: console.tradeoffReviews,
   });
+  const canonicalAdvanceAllowed =
+    console.canonicalStage?.next_allowed_action === "ADVANCE_AGENT" &&
+    console.canonicalStage.guided_can_execute;
+  const canAdvance =
+    mode === "guided" ? agentEvidenceCanAdvance && canonicalAdvanceAllowed : agentEvidenceCanAdvance;
 
   const consoleRef = useRef(console);
   consoleRef.current = console;
@@ -119,7 +133,7 @@ export function OperationsConsole() {
   const showResume =
     !console.incident &&
     !console.loading &&
-    console.storedIncidentId &&
+    Boolean(console.storedIncidentId) &&
     !console.resumeDismissed;
 
   const isGuidedEmpty =
@@ -128,10 +142,101 @@ export function OperationsConsole() {
     !console.loading &&
     !showResume;
 
-  const showGuidedShell =
-    mode === "guided" && (console.incident || isGuidedEmpty || showResume);
+  const showGuidedOverview =
+    mode === "guided" &&
+    workspace === "overview" &&
+    (console.incident || isGuidedEmpty || showResume);
+
+  const showExploreAvailability =
+    mode === "explore" && !console.incident && !console.loading && !showResume;
+
+  const handleModeChange = (nextMode: ConsoleMode) => {
+    setMode(nextMode);
+    if (nextMode === "explore" && console.incident) {
+      setWorkspace("evidence");
+    }
+    if (nextMode === "guided") {
+      setWorkspace("overview");
+    }
+  };
 
   const apiStatus = console.error ? "error" : console.loading ? "loading" : "ready";
+  const incidentLoaded = Boolean(console.incident);
+
+  const workspaceContent = incidentLoaded ? (
+    <>
+      {workspace === "recovery" ? (
+        <RecoveryWorkspace
+          summary={console.recoverySummary}
+          yardForecasts={console.yardForecasts}
+          allocationRevisions={console.allocationRevisions}
+          expediteCommitments={console.expediteCommitments}
+          tradeoffReviews={console.tradeoffReviews}
+          tradeoffOptions={console.tradeoffOptions}
+          run={run}
+          agentHistory={console.selectedAgentHistory}
+          canAdvance={canAdvance}
+          loading={console.loading}
+          onBootstrap={() => void console.bootstrapYard()}
+          onPublishActive={() => void console.publishActive()}
+          onAdvanceAgent={() => void console.advanceAgent()}
+          onRefresh={() => void console.refresh()}
+          onChooseTradeoff={(review, optionId) =>
+            void console.chooseTradeoff(review, optionId)
+          }
+        />
+      ) : null}
+
+      {workspace === "containers" ? (
+        <ContainersWorkspace
+          rows={console.containerRows}
+          selectedContainerId={console.selectedContainerId}
+          selectedContainer={console.selectedContainer}
+          loading={console.loading}
+          onSelectContainer={(id) => void console.selectContainer(id)}
+        />
+      ) : null}
+
+      {workspace === "carrier" ? (
+        <CarrierWorkspace
+          selectedContainer={console.selectedContainer}
+          carrierCase={console.selectedCarrierCase ?? null}
+          caseHistory={console.selectedCaseHistory}
+          decisions={console.decisions}
+          loading={console.loading}
+          agentRunActive={Boolean(
+            run && !["COMPLETED", "ESCALATED", "FAILED"].includes(run.state),
+          )}
+          onPrepare={(connectionId) => void console.prepareCarrierRecovery(connectionId)}
+          onApproveRequest={() => void console.approveRequest()}
+          onRejectRequest={() => void console.rejectRequest()}
+          onSend={() => void console.sendRequest()}
+          onSimulate={() => void console.simulateCarrierResponse()}
+          onApproveCounter={() => void console.approveCounter()}
+          onRejectCounter={() => void console.rejectCounter()}
+          onEvaluateTimeout={() => void console.evaluateTimeout()}
+        />
+      ) : null}
+
+      {workspace === "evidence" ? (
+        <EvidenceWorkspace
+          run={run}
+          agentHistory={console.selectedAgentHistory}
+          canAdvance={canAdvance}
+          loading={console.loading}
+          auditEvents={console.auditEvents}
+          approvalFingerprint={fingerprint}
+          cargoReviews={console.cargoSafetyReviews}
+          safetyHistories={console.safetyHistories}
+          onAdvanceAgent={() => void console.advanceAgent()}
+          onRefresh={() => void console.refresh()}
+          onStartAgent={() => void console.startAgent()}
+          onEvaluateSafety={(id) => void console.evaluateSafety(id)}
+          onCreateSafetyReview={() => void console.createSafetyReview("SYN-CNT-010")}
+        />
+      ) : null}
+    </>
+  ) : null;
 
   return (
     <>
@@ -139,15 +244,17 @@ export function OperationsConsole() {
       <DashboardShell
         sidebar={
           <DashboardSidebar
+            workspace={workspace}
+            onWorkspaceChange={setWorkspace}
             mode={mode}
-            onModeChange={setMode}
+            onModeChange={handleModeChange}
             apiStatus={apiStatus}
-            incidentLoaded={Boolean(console.incident)}
           />
         }
         header={
           <DashboardContentHeader
             mode={mode}
+            workspace={workspace}
             incident={console.incident}
             fixture={console.fixture}
             loading={console.loading}
@@ -165,39 +272,6 @@ export function OperationsConsole() {
             onStartFresh={() => void console.startFreshDemo()}
             onDismiss={console.dismissStoredIncident}
           />
-        ) : null}
-
-        {showGuidedShell ? (
-          <>
-            <RecoveryKpiStrip
-              summary={console.recoverySummary}
-              emptyPlaceholder={isGuidedEmpty}
-            />
-
-            <ChapterProgress
-              stage={console.canonicalStage?.stage}
-              empty={isGuidedEmpty}
-            />
-
-            {mode === "guided" ? (
-              <StageActionCard
-                stage={console.canonicalStage}
-                incident={console.incident}
-                fixture={console.fixture}
-                loading={console.loading}
-                approvalFingerprint={fingerprint}
-                onExecute={executeGuidedAction}
-                emptyState={
-                  isGuidedEmpty ? (
-                    <GuidedIntroSurface
-                      loading={console.loading}
-                      onStart={() => executeGuidedAction("CREATE_CANONICAL_INCIDENT")}
-                    />
-                  ) : undefined
-                }
-              />
-            ) : null}
-          </>
         ) : null}
 
         {console.loading ? (
@@ -218,116 +292,165 @@ export function OperationsConsole() {
           </div>
         ) : null}
 
-        {console.incident && (mode === "guided" || mode === "auto") ? (
-          <ChapterContextualRegion
-            mode={mode}
-            stage={console.canonicalStage}
-            incident={console.incident}
-            fixture={console.fixture}
-            summary={console.recoverySummary}
-            scarcityEvaluation={console.scarcityEvaluation}
-            containerRows={console.containerRows}
-            selectedContainerId={console.selectedContainerId}
-            onSelectContainer={(id) => void console.selectContainer(id)}
-            selectedContainer={console.selectedContainer}
-            yardForecasts={console.yardForecasts}
-            allocationRevisions={console.allocationRevisions}
-            expediteCommitments={console.expediteCommitments}
-            run={run}
-            agentHistory={console.selectedAgentHistory}
-            canAdvance={canAdvance}
+        {showExploreAvailability ? (
+          <ExploreAvailability
             loading={console.loading}
-            carrierCase={console.selectedCarrierCase ?? null}
-            caseHistory={console.selectedCaseHistory}
-            decisions={console.decisions}
-            approvalFingerprint={fingerprint}
-            agentRunActive={Boolean(
-              run && !["COMPLETED", "ESCALATED", "FAILED"].includes(run.state),
-            )}
-            cargoReviews={console.cargoSafetyReviews}
-            safetyHistories={console.safetyHistories}
-            onBootstrap={() => void console.bootstrapYard()}
-            onPublishActive={() => void console.publishActive()}
-            onAdvanceAgent={() => void console.advanceAgent()}
-            onRefresh={() => void console.refresh()}
-            onApproveRequest={() => void console.approveRequest()}
-            onRejectRequest={() => void console.rejectRequest()}
-            onSimulate={() => void console.simulateCarrierResponse()}
-            onApproveCounter={() => void console.approveCounter()}
-            onRejectCounter={() => void console.rejectCounter()}
-            onEvaluateTimeout={() => void console.evaluateTimeout()}
-            onCreateSafetyReview={() => void console.createSafetyReview("SYN-CNT-010")}
+            storedIncidentId={console.storedIncidentId}
+            onStartGuided={() => {
+              setMode("guided");
+              executeGuidedAction("CREATE_CANONICAL_INCIDENT");
+            }}
+            onResume={() => void console.resumeStoredIncident()}
           />
         ) : null}
 
-        <ExploreWorkspace
-          mode={mode}
-          incidentLoaded={Boolean(console.incident)}
-          loading={console.loading}
-          error={
-            console.error
-              ? { status: console.error.status, detail: console.error.detail }
-              : null
-          }
-          containerRows={console.containerRows}
-          selectedContainerId={console.selectedContainerId}
-          onSelectContainer={(id) => void console.selectContainer(id)}
-          run={run}
-          agentHistory={console.selectedAgentHistory}
-          canAdvance={canAdvance}
-          onStartAgent={() => void console.startAgent()}
-          onAdvanceAgent={() => void console.advanceAgent()}
-          onRefresh={() => void console.refresh()}
-          yardForecasts={console.yardForecasts}
-          allocationRevisions={console.allocationRevisions}
-          expediteCommitments={console.expediteCommitments}
-          onBootstrap={() => void console.bootstrapYard()}
-          onPublishActive={() => void console.publishActive()}
-          selectedContainer={console.selectedContainer}
-          carrierCase={console.selectedCarrierCase ?? null}
-          caseHistory={console.selectedCaseHistory}
-          decisions={console.decisions}
-          onPrepare={(connectionId) => void console.prepareCarrierRecovery(connectionId)}
-          onApproveRequest={() => void console.approveRequest()}
-          onRejectRequest={() => void console.rejectRequest()}
-          onSend={() => void console.sendRequest()}
-          onSimulate={() => void console.simulateCarrierResponse()}
-          onApproveCounter={() => void console.approveCounter()}
-          onRejectCounter={() => void console.rejectCounter()}
-          onEvaluateTimeout={() => void console.evaluateTimeout()}
-          agentRunActive={Boolean(
-            run && !["COMPLETED", "ESCALATED", "FAILED"].includes(run.state),
-          )}
-          tradeoffReviews={console.tradeoffReviews}
-          tradeoffOptions={console.tradeoffOptions}
-          onChooseTradeoff={(review, optionId) =>
-            void console.chooseTradeoff(review, optionId)
-          }
-          cargoReviews={console.cargoSafetyReviews}
-          safetyHistories={console.safetyHistories}
-          onEvaluateSafety={(id) => void console.evaluateSafety(id)}
-          onCreateSafetyReview={() => void console.createSafetyReview("SYN-CNT-010")}
-          auditEvents={console.auditEvents}
-          incidentId={console.incident?.id ?? null}
-          stage={console.canonicalStage}
-          approvalFingerprint={fingerprint}
-          onCreateIncident={() => void console.createCanonicalIncident()}
-          onStartDemoAgentRun={() => void console.startDemoAgentRun()}
-          onSimulateCarrierResponse={() =>
-            void console.simulateCarrierResponse(CANONICAL_COUNTER_EFFECTIVE_AT)
-          }
-          autoReplay={{
-            progress: autoReplay.progress,
-            canStart: !console.loading && console.canonicalStage.auto_replay_may_execute,
-            onStart: autoReplay.start,
-            onStop: autoReplay.stop,
-          }}
-          recoverySummary={console.recoverySummary}
-        />
+        {mode === "auto" && workspace === "overview" ? (
+          <>
+            <ChapterProgress
+              stage={console.canonicalStage?.stage}
+              empty={!incidentLoaded}
+            />
+            <AutoReplayPanel
+              stage={console.canonicalStage}
+              progress={autoReplay.progress}
+              canStart={!console.loading && console.canonicalStage.auto_replay_may_execute}
+              loading={console.loading}
+              onStart={autoReplay.start}
+              onStop={autoReplay.stop}
+            />
+            {incidentLoaded ? (
+              <ChapterContextualRegion
+                mode={mode}
+                stage={console.canonicalStage}
+                incident={console.incident}
+                fixture={console.fixture}
+                summary={console.recoverySummary}
+                scarcityEvaluation={console.scarcityEvaluation}
+                containerRows={console.containerRows}
+                selectedContainerId={console.selectedContainerId}
+                onSelectContainer={(id) => void console.selectContainer(id)}
+                selectedContainer={console.selectedContainer}
+                yardForecasts={console.yardForecasts}
+                allocationRevisions={console.allocationRevisions}
+                expediteCommitments={console.expediteCommitments}
+                run={run}
+                agentHistory={console.selectedAgentHistory}
+                canAdvance={canAdvance}
+                loading={console.loading}
+                carrierCase={console.selectedCarrierCase ?? null}
+                caseHistory={console.selectedCaseHistory}
+                decisions={console.decisions}
+                approvalFingerprint={fingerprint}
+                agentRunActive={Boolean(
+                  run && !["COMPLETED", "ESCALATED", "FAILED"].includes(run.state),
+                )}
+                cargoReviews={console.cargoSafetyReviews}
+                safetyHistories={console.safetyHistories}
+                onBootstrap={() => void console.bootstrapYard()}
+                onPublishActive={() => void console.publishActive()}
+                onAdvanceAgent={() => void console.advanceAgent()}
+                onRefresh={() => void console.refresh()}
+                onApproveRequest={() => void console.approveRequest()}
+                onRejectRequest={() => void console.rejectRequest()}
+                onSimulate={() => void console.simulateCarrierResponse()}
+                onApproveCounter={() => void console.approveCounter()}
+                onRejectCounter={() => void console.rejectCounter()}
+                onEvaluateTimeout={() => void console.evaluateTimeout()}
+                onCreateSafetyReview={() => void console.createSafetyReview("SYN-CNT-010")}
+              />
+            ) : null}
+          </>
+        ) : null}
 
-        {mode === "auto" && !console.incident ? (
+        {showGuidedOverview ? (
+          <>
+            <RecoveryKpiStrip
+              summary={console.recoverySummary}
+              emptyPlaceholder={isGuidedEmpty}
+            />
+
+            <ChapterProgress
+              stage={console.canonicalStage?.stage}
+              empty={isGuidedEmpty}
+            />
+
+            <StageActionCard
+              stage={console.canonicalStage}
+              incident={console.incident}
+              fixture={console.fixture}
+              loading={console.loading}
+              approvalFingerprint={fingerprint}
+              onExecute={executeGuidedAction}
+              emptyState={
+                isGuidedEmpty ? (
+                  <GuidedIntroSurface
+                    loading={console.loading}
+                    onStart={() => executeGuidedAction("CREATE_CANONICAL_INCIDENT")}
+                  />
+                ) : undefined
+              }
+            />
+
+            {incidentLoaded ? (
+              <ChapterContextualRegion
+                mode={mode}
+                stage={console.canonicalStage}
+                incident={console.incident}
+                fixture={console.fixture}
+                summary={console.recoverySummary}
+                scarcityEvaluation={console.scarcityEvaluation}
+                containerRows={console.containerRows}
+                selectedContainerId={console.selectedContainerId}
+                onSelectContainer={(id) => void console.selectContainer(id)}
+                selectedContainer={console.selectedContainer}
+                yardForecasts={console.yardForecasts}
+                allocationRevisions={console.allocationRevisions}
+                expediteCommitments={console.expediteCommitments}
+                run={run}
+                agentHistory={console.selectedAgentHistory}
+                canAdvance={canAdvance}
+                loading={console.loading}
+                carrierCase={console.selectedCarrierCase ?? null}
+                caseHistory={console.selectedCaseHistory}
+                decisions={console.decisions}
+                approvalFingerprint={fingerprint}
+                agentRunActive={Boolean(
+                  run && !["COMPLETED", "ESCALATED", "FAILED"].includes(run.state),
+                )}
+                cargoReviews={console.cargoSafetyReviews}
+                safetyHistories={console.safetyHistories}
+                onBootstrap={() => void console.bootstrapYard()}
+                onPublishActive={() => void console.publishActive()}
+                onAdvanceAgent={() => void console.advanceAgent()}
+                onRefresh={() => void console.refresh()}
+                onApproveRequest={() => void console.approveRequest()}
+                onRejectRequest={() => void console.rejectRequest()}
+                onSimulate={() => void console.simulateCarrierResponse()}
+                onApproveCounter={() => void console.approveCounter()}
+                onRejectCounter={() => void console.rejectCounter()}
+                onEvaluateTimeout={() => void console.evaluateTimeout()}
+                onCreateSafetyReview={() => void console.createSafetyReview("SYN-CNT-010")}
+              />
+            ) : null}
+          </>
+        ) : null}
+
+        {workspace !== "overview" ? workspaceContent : null}
+
+        {mode === "explore" && incidentLoaded && workspace === "overview" ? (
+          <>
+            <RecoveryKpiStrip summary={console.recoverySummary} />
+            <ChapterProgress stage={console.canonicalStage?.stage} />
+            <p className="psa-surface rounded-[10px] px-4 py-3 text-sm text-psa-chalk">
+              Use the workspace navigation to inspect recovery planning, containers, carrier
+              coordination, and evidence surfaces.
+            </p>
+          </>
+        ) : null}
+
+        {mode === "auto" && !incidentLoaded && workspace === "overview" ? (
           <p className="text-sm text-psa-steel">
-            Auto replay backup mode · create an incident in Explore or start guided demo
+            Auto replay will create the canonical incident on start, or resume an existing session.
           </p>
         ) : null}
       </DashboardShell>

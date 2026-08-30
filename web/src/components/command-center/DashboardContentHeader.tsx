@@ -1,6 +1,7 @@
 import type { Incident } from "../../api/types";
 import type { CanonicalIncidentFixture } from "../../api/types";
 import type { ConsoleMode } from "./ModeSwitcher";
+import type { DashboardNavId } from "./DashboardSidebar";
 
 const MODE_LABELS: Record<ConsoleMode, string> = {
   guided: "Guided demo",
@@ -8,8 +9,17 @@ const MODE_LABELS: Record<ConsoleMode, string> = {
   explore: "Explore workspace",
 };
 
+const WORKSPACE_LABELS: Record<DashboardNavId, string> = {
+  overview: "Overview",
+  recovery: "Recovery",
+  containers: "Containers",
+  carrier: "Carrier",
+  evidence: "Evidence / Audit",
+};
+
 export function DashboardContentHeader({
   mode,
+  workspace,
   incident,
   fixture,
   loading,
@@ -18,6 +28,7 @@ export function DashboardContentHeader({
   showStartDemo,
 }: {
   mode: ConsoleMode;
+  workspace: DashboardNavId;
   incident: Incident | null;
   fixture: CanonicalIncidentFixture | null;
   loading: boolean;
@@ -44,6 +55,8 @@ export function DashboardContentHeader({
             {loading ? "Refreshing persisted recovery state…" : context}
           </p>
           <p className="mt-1 text-xs text-psa-steel">
+            Workspace: <span className="text-psa-chalk">{WORKSPACE_LABELS[workspace]}</span>
+            {" · "}
             Mode: <span className="text-psa-chalk">{MODE_LABELS[mode]}</span>
             {incident ? (
               <>

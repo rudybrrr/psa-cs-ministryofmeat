@@ -1482,13 +1482,6 @@ describe("OperationsConsole full guided Phase 6 journey", () => {
     expect(backend.counts.counterApproval).toBe(1);
     expect(backend.counts.advance).toBe(5);
 
-    await user.click(advanceButton());
-    await waitFor(() => {
-      expect(screen.getByText("RUNNING")).toBeInTheDocument();
-      expect(screen.getByText(/preserved via rta/i)).toBeInTheDocument();
-    });
-    expect(backend.counts.advance).toBe(6);
-
     await user.click(screen.getByRole("button", { name: /record syn-cnt-010 safety evidence/i }));
     await waitFor(() => {
       const created = backend.posts.find((post) => post.url.endsWith("/cargo-safety-reviews") && post.url.includes(INCIDENT_ID));
@@ -1506,7 +1499,7 @@ describe("OperationsConsole full guided Phase 6 journey", () => {
     });
     expect(backend.counts.safetyCreate).toBe(1);
     expect(backend.counts.safetyEvaluate).toBe(0);
-    expect(backend.counts.advance).toBe(6);
+    expect(backend.counts.advance).toBe(5);
 
     await user.click(advanceButton());
     await waitFor(() => {
@@ -1516,7 +1509,7 @@ describe("OperationsConsole full guided Phase 6 journey", () => {
       expect(screen.getByText(/automation blocked true/i)).toBeInTheDocument();
       expect(screen.getByText(/DG false · UN —/)).toBeInTheDocument();
     });
-    expect(backend.counts.advance).toBe(7);
+    expect(backend.counts.advance).toBe(6);
     expect(backend.counts.safetyEvaluate).toBe(0);
     expect(backend.counts.send).toBe(0);
     expect(backend.counts.prepare).toBe(0);
