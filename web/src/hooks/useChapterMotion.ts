@@ -55,3 +55,70 @@ export function useKpiValuePulse(value: string) {
 
   return ref;
 }
+
+function parseKpiNumericValue(value: string): { target: number; decimals: number } | null {
+  if (value === "—" || value === "-" || value.trim() === "") return null;
+  const target = Number(value);
+  if (!Number.isFinite(target)) return null;
+  const dotIndex = value.indexOf(".");
+  const decimals = dotIndex >= 0 ? value.length - dotIndex - 1 : 0;
+  return { target, decimals };
+}
+
+function formatKpiCount(value: number, decimals: number): string {
+  if (decimals > 0) return value.toFixed(decimals);
+  return String(Math.round(value));
+}
+
+function kpiCountStart(target: number): number {
+  return target >= 1 ? 1 : 0;
+}
+
+function kpiCountDuration(target: number): number {
+  return Math.min(1.35, 0.65 + Math.log10(Math.max(target, 1)) * 0.35);
+}
+
+export function useKpiCountUp(value: string) {
+  const ref = useRef<HTMLParagraphElement>(null);
+  const parsed = parseKpiNumericValue(value);
+  const initialDisplay =
+    parsed && motionEnabled()
+      ? formatKpiCount(kpiCountStart(parsed.target), parsed.decimals)
+      : value;
+
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+
+    const numeric = parseKpiNumericValue(value);
+    if (!numeric) {
+      node.textContent = value;
+      return;
+    }
+
+    const { target, decimals } = numeric;
+    if (!motionEnabled()) {
+      node.textContent = formatKpiCount(target, decimals);
+      return;
+    }
+
+    const start = kpiCountStart(target);
+    const state = { current: start };
+    node.textContent = formatKpiCount(start, decimals);
+
+    const tween = gsap.to(state, {
+      current: target,
+      duration: kpiCountDuration(target),
+      ease: "power2.out",
+      onUpdate: () => {
+        node.textContent = formatKpiCount(state.current, decimals);
+      },
+    });
+
+    return () => {
+      tween.kill();
+    };
+  }, [value]);
+
+  return { ref, initialDisplay };
+}

@@ -1,4 +1,21 @@
+import { useKpiCountUp } from "../../hooks/useChapterMotion";
 import type { RecoverySummary } from "../../lib/recoverySelectors";
+
+function AnimatedKpiValue({
+  value,
+  className,
+}: {
+  value: string;
+  className?: string;
+}) {
+  const { ref, initialDisplay } = useKpiCountUp(value);
+
+  return (
+    <p ref={ref} className={className}>
+      {initialDisplay}
+    </p>
+  );
+}
 
 function KpiCard({
   label,
@@ -21,7 +38,7 @@ function KpiCard({
   return (
     <div className="psa-surface rounded-[10px] px-4 py-4">
       <p className="psa-meta">{label}</p>
-      <p className={`psa-kpi mt-2 ${valueClass}`}>{value}</p>
+      <AnimatedKpiValue value={value} className={`psa-kpi mt-2 ${valueClass}`} />
       <p className="mt-1.5 text-xs text-psa-steel">{sublabel}</p>
     </div>
   );
@@ -46,7 +63,10 @@ function CompactKpi({
   return (
     <div className="min-w-0 px-3 py-3 sm:px-4">
       <p className="psa-meta truncate">{label}</p>
-      <p className={`psa-kpi mt-1 text-xl sm:text-2xl ${valueClass}`}>{value}</p>
+      <AnimatedKpiValue
+        value={value}
+        className={`psa-kpi mt-1 text-xl sm:text-2xl ${valueClass}`}
+      />
     </div>
   );
 }
