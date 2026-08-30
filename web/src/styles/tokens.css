@@ -1,0 +1,75 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..500;14..32,600&display=swap");
+
+@theme {
+  --color-psa-void: #0b0c0e;
+  --color-psa-graphite: #131416;
+  --color-psa-charcoal: #1f1f21;
+  --color-psa-smoke: #3c3d3e;
+  --color-psa-steel: #71717a;
+  --color-psa-fog: #858687;
+  --color-psa-ash: #9d9e9f;
+  --color-psa-chalk: #cececf;
+  --color-psa-snow: #ffffff;
+  --color-psa-bone: #f2f2f2;
+  --color-psa-ink: #333333;
+  --color-psa-signal: #3b82f6;
+  --color-psa-arc: #60a5fa;
+  --color-psa-amber: #f59e0b;
+  --color-psa-fern: #22c55e;
+  --color-psa-coral: #f87171;
+  --font-psa: "Inter", system-ui, -apple-system, sans-serif;
+}
+
+:root {
+  color-scheme: dark;
+  font-family: var(--font-psa);
+  font-feature-settings: "ss01" on, "ss03" on;
+  line-height: 1.5;
+  font-weight: 400;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background: var(--color-psa-void);
+  color: var(--color-psa-snow);
+}
+
+#root {
+  min-height: 100vh;
+}
+
+button {
+  cursor: pointer;
+}
+
+.psa-surface {
+  background: var(--color-psa-graphite);
+  border: 0.5px solid rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.psa-surface-nested {
+  background: var(--color-psa-charcoal);
+  border: 0.5px solid rgba(255, 255, 255, 0.06);
+}
+
+.psa-label {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-psa-steel);
+}
+
+.psa-kpi {
+  font-variant-numeric: tabular-nums;
+  font-size: 1.5rem;
+  font-weight: 500;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}

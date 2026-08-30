@@ -50,6 +50,11 @@ import {
   latestSnapshot,
   latestAllocationRevision,
 } from "../lib/recoverySelectors";
+import {
+  clearStoredIncidentId,
+  readStoredIncidentId,
+  writeStoredIncidentId,
+} from "../lib/incidentPersistence";
 
 export interface RecoveryConsoleState {
   incident: Incident | null;
@@ -148,6 +153,10 @@ export function useRecoveryConsole() {
     useState<CanonicalDemoRunId | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
+  const [storedIncidentId, setStoredIncidentId] = useState<string | null>(() =>
+    readStoredIncidentId(),
+  );
+  const [resumeDismissed, setResumeDismissed] = useState(false);
 
   const recoverySummary = useMemo(() => {
     if (!fixture || !scarcityEvaluation) {
@@ -201,6 +210,8 @@ export function useRecoveryConsole() {
     setAuditEvents(bundle.auditEvents);
     setCarrierCases(bundle.carrierCases);
     setYardForecasts(bundle.yardForecasts); setAllocationRevisions(bundle.allocationRevisions); setExpediteCommitments(bundle.expediteCommitments); setReconsiderations(bundle.reconsiderations); setTradeoffReviews(bundle.tradeoffReviews); setTradeoffOptions(bundle.tradeoffOptions); setCargoSafetyReviews(bundle.cargoSafetyReviews); setAgentRuns(bundle.agentRuns); setCanonicalStage(bundle.canonicalStage);
+    writeStoredIncidentId(bundle.incident.id);
+    setStoredIncidentId(bundle.incident.id);
     const currentRun = bundle.agentRuns.at(-1);
     setSelectedAgentHistory(currentRun ? await getAgentRunHistory(currentRun.id) : null);
     setAgentWaitHistory(currentRun?.wait_subject_id && ["REQUEST_APPROVAL", "COUNTER_APPROVAL", "CARRIER_RESPONSE_OR_TIMEOUT"].includes(currentRun.wait_kind ?? "") ? await getCarrierCaseHistory(currentRun.wait_subject_id) : null);
@@ -272,8 +283,34 @@ export function useRecoveryConsole() {
       setSelectedContainerId(null);
       setSelectedCarrierCaseId(null);
       setSelectedCaseHistory(null);
+      setResumeDismissed(true);
     });
   }, [applyBundle, runMutation]);
+
+  const resumeStoredIncident = useCallback(async (): Promise<MutationOutcome> => {
+    const incidentId = readStoredIncidentId();
+    if (!incidentId) {
+      return SKIPPED_MUTATION;
+    }
+    return runMutation(async () => {
+      const bundle = await loadIncidentBundle(incidentId);
+      await applyBundle(bundle);
+      setResumeDismissed(true);
+    });
+  }, [applyBundle, runMutation]);
+
+  const startFreshDemo = useCallback(async (): Promise<MutationOutcome> => {
+    clearStoredIncidentId();
+    setStoredIncidentId(null);
+    setResumeDismissed(true);
+    return createCanonicalIncident();
+  }, [createCanonicalIncident]);
+
+  const dismissStoredIncident = useCallback(() => {
+    clearStoredIncidentId();
+    setStoredIncidentId(null);
+    setResumeDismissed(true);
+  }, []);
 
   const loadDemoRun = useCallback(
     async (runId: CanonicalDemoRunId) => {
@@ -526,6 +563,11 @@ export function useRecoveryConsole() {
     recoverySummary,
     containerRows,
     createCanonicalIncident,
+    resumeStoredIncident,
+    startFreshDemo,
+    dismissStoredIncident,
+    storedIncidentId,
+    resumeDismissed,
     loadDemoRun,
     selectContainer,
     prepareCarrierRecovery,

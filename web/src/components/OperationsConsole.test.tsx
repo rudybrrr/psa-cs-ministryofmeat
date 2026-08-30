@@ -477,12 +477,12 @@ describe("OperationsConsole canonical scarcity", () => {
     render(<OperationsConsole />);
 
     await user.click(
-      screen.getByRole("button", { name: /^create canonical incident$/i }),
+      screen.getByRole("button", { name: /^start recovery demo$/i }),
     );
 
     await waitFor(() => {
       expect(screen.getByText("SYN-EVT-ASX17-20260822-001")).toBeInTheDocument();
-      expect(screen.getByText("LIVE EVALUATION")).toBeInTheDocument();
+      expect(screen.getByText(/live evaluation/i)).toBeInTheDocument();
       expect(screen.getByText("11.2")).toBeInTheDocument();
       expect(screen.getByText("SYN-CNT-017")).toBeInTheDocument();
     });
@@ -502,7 +502,7 @@ describe("OperationsConsole error state", () => {
     const user = userEvent.setup();
     render(<OperationsConsole />);
     await user.click(
-      screen.getByRole("button", { name: /^create canonical incident$/i }),
+      screen.getByRole("button", { name: /^start recovery demo$/i }),
     );
 
     await waitFor(() => {
@@ -589,7 +589,7 @@ describe("RecoveryConsole persisted-state carrier flows", () => {
     render(<OperationsConsole />);
 
     await user.click(
-      screen.getByRole("button", { name: /^create canonical incident$/i }),
+      screen.getByRole("button", { name: /^start recovery demo$/i }),
     );
     await waitFor(() => expect(screen.getByText("SYN-EVT-ASX17-20260822-001")).toBeInTheDocument());
 
@@ -674,7 +674,7 @@ describe("RecoveryConsole persisted-state carrier flows", () => {
     render(<OperationsConsole />);
 
     await user.click(
-      screen.getByRole("button", { name: /^create canonical incident$/i }),
+      screen.getByRole("button", { name: /^start recovery demo$/i }),
     );
     await waitFor(() => expect(screen.getByText("SYN-EVT-ASX17-20260822-001")).toBeInTheDocument());
 
@@ -711,10 +711,10 @@ describe("OperationsConsole guided Phase 6 entry flow", () => {
     }));
     const user = userEvent.setup(); render(<OperationsConsole />);
     expect(screen.getByText(/SYNTHETIC DATA/)).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /^create canonical incident$/i }));
+    await user.click(screen.getByRole("button", { name: /^start recovery demo$/i }));
     await waitFor(() => expect(screen.getByText("SYN-EVENT")).toBeInTheDocument());
     expect(posts.filter((url) => url.endsWith("/agent-runs") && url.includes("/advance")).length).toBe(0);
-    await user.click(screen.getAllByRole("button", { name: /bootstrap pre_discharge/i }).at(-1)!);
+    await user.click(screen.getAllByRole("button", { name: /publish yard forecast/i }).at(-1)!);
     await waitFor(() => expect(posts.filter((url) => url.endsWith("/bootstrap")).length).toBe(1));
     expect(posts.some((url) => url.includes("/agent-runs/") && url.endsWith("/advance"))).toBe(false);
     expect(posts.some((url) => url.includes("optimizer") || url.includes("allocation-tradeoff-options/") && !url.endsWith("/bootstrap"))).toBe(false);
@@ -855,15 +855,154 @@ function createGuidedBackend() {
   }
 
   function deriveStage() {
-    const activeRun = state.runs.at(-1) as { state?: string } | undefined;
+    const activeRun = state.runs.at(-1) as
+      | { state?: string; wait_kind?: string | null }
+      | undefined;
     const hasAny = state.snapshots.length > 0;
+    const requestApproved = (
+      (state.history?.approvals as Array<{ status: string }> | undefined) ?? []
+    ).some((item) => item.status === "APPROVED");
+    const counterApproved = (
+      (state.history?.approvals as unknown[] | undefined) ?? []
+    ).length >= 2;
+
     if (!activeRun) {
       if (hasAny) {
-        return defaultStageView({ stage: "READY_TO_START_AGENT", ordinal: 3, progress_label: "Stage 3 of 16", next_allowed_action: "START_DEMO_AGENT_RUN" });
+        return defaultStageView({
+          stage: "READY_TO_START_AGENT",
+          ordinal: 3,
+          progress_label: "Stage 3 of 16",
+          next_allowed_action: "START_DEMO_AGENT_RUN",
+        });
       }
       return defaultStageView();
     }
-    return defaultStageView({ stage: "READY_TO_ADVANCE_TO_EVIDENCE_WAIT", ordinal: 4, progress_label: "Stage 4 of 16", next_allowed_action: "ADVANCE_AGENT" });
+
+    if (activeRun.state === "ESCALATED") {
+      return defaultStageView({
+        stage: "SAFETY_BLOCKED",
+        ordinal: 16,
+        progress_label: "Stage 16 of 16",
+        status: "TERMINAL_SUCCESS",
+        next_allowed_action: "NONE",
+        guided_can_execute: false,
+        auto_replay_may_execute: false,
+      });
+    }
+
+    if (activeRun.state === "WAITING") {
+      if (activeRun.wait_kind === "NEW_OPERATIONAL_EVIDENCE") {
+        const unhandled = state.assessments.some((item) => item.handled_at === null);
+        return unhandled
+          ? defaultStageView({
+              stage: "WAITING_FOR_ACTIVE_EVIDENCE",
+              ordinal: 5,
+              status: "PENDING_ACTION",
+              next_allowed_action: "ADVANCE_AGENT",
+            })
+          : defaultStageView({
+              stage: "WAITING_FOR_ACTIVE_EVIDENCE",
+              ordinal: 5,
+              status: "WAITING_EXTERNAL",
+              next_allowed_action: "PUBLISH_DISCHARGE_ACTIVE",
+            });
+      }
+      if (activeRun.wait_kind === "REQUEST_APPROVAL") {
+        return requestApproved
+          ? defaultStageView({
+              stage: "REQUEST_APPROVED_READY_TO_SEND",
+              ordinal: 9,
+              next_allowed_action: "ADVANCE_AGENT",
+            })
+          : defaultStageView({
+              stage: "REQUEST_APPROVAL_REQUIRED",
+              ordinal: 8,
+              status: "WAITING_HUMAN",
+              next_allowed_action: "APPROVE_REQUEST",
+              requires_human_authority: true,
+            });
+      }
+      if (activeRun.wait_kind === "CARRIER_RESPONSE_OR_TIMEOUT") {
+        if (state.caseState === "AWAITING_COUNTER_APPROVAL") {
+          return defaultStageView({
+            stage: "CARRIER_COUNTER_RECEIVED",
+            ordinal: 11,
+            next_allowed_action: "ADVANCE_AGENT",
+          });
+        }
+        return defaultStageView({
+          stage: "WAITING_FOR_CARRIER",
+          ordinal: 10,
+          status: "WAITING_EXTERNAL",
+          next_allowed_action: "SIMULATE_CARRIER_RESPONSE",
+        });
+      }
+      if (activeRun.wait_kind === "COUNTER_APPROVAL") {
+        if (!counterApproved) {
+          return defaultStageView({
+            stage: "COUNTER_APPROVAL_REQUIRED",
+            ordinal: 12,
+            status: "WAITING_HUMAN",
+            next_allowed_action: "APPROVE_COUNTER",
+            requires_human_authority: true,
+          });
+        }
+        return state.safetyReviews.length > 0
+          ? defaultStageView({
+              stage: "COUNTER_APPROVED_READY_TO_RESUME",
+              ordinal: 13,
+              next_allowed_action: "ADVANCE_AGENT",
+            })
+          : defaultStageView({
+              stage: "COUNTER_APPROVED_READY_TO_RESUME",
+              ordinal: 13,
+              next_allowed_action: "PERSIST_SAFETY_REVIEW",
+            });
+      }
+    }
+
+    if (
+      activeRun.state === "RUNNING" &&
+      state.caseState === "COMPLETED" &&
+      state.safetyReviews.length === 0
+    ) {
+      return defaultStageView({
+        stage: "COUNTER_APPROVED_READY_TO_RESUME",
+        ordinal: 13,
+        next_allowed_action: "PERSIST_SAFETY_REVIEW",
+      });
+    }
+
+    if (state.safetyReviews.length > 0 && activeRun.state === "RUNNING") {
+      return defaultStageView({
+        stage: "READY_FOR_SAFETY_EVIDENCE",
+        ordinal: 14,
+        next_allowed_action: "ADVANCE_AGENT",
+      });
+    }
+
+    if (!state.invocations.some((invocation) => invocation.tool_name === "pause_agent_run")) {
+      if (!hasAny) {
+        return defaultStageView({
+          stage: "READY_FOR_PRE_DISCHARGE",
+          ordinal: 2,
+          next_allowed_action: "BOOTSTRAP_PRE_DISCHARGE",
+        });
+      }
+      return defaultStageView({
+        stage: "READY_TO_ADVANCE_TO_EVIDENCE_WAIT",
+        ordinal: 4,
+        progress_label: "Stage 4 of 16",
+        next_allowed_action: "ADVANCE_AGENT",
+      });
+    }
+
+    return defaultStageView({
+      stage: "READY_TO_ADVANCE_TO_EVIDENCE_WAIT",
+      ordinal: 4,
+      progress_label: "Stage 4 of 16",
+      next_allowed_action: "ADVANCE_AGENT",
+    });
   }
 
   function recordStep(runRecord: Record<string, unknown>, tool: string, summary: string) {
@@ -1228,22 +1367,22 @@ describe("OperationsConsole full guided Phase 6 journey", () => {
     render(<OperationsConsole />);
 
     expect(screen.getByText(/SYNTHETIC DATA/)).toBeInTheDocument();
-    expect(screen.getByText(/No incident loaded/i)).toBeInTheDocument();
+    expect(screen.getByText(/Recovery command center/i)).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /^create canonical incident$/i }));
+    await user.click(screen.getByRole("button", { name: /^start recovery demo$/i }));
     await waitFor(() => expect(screen.getByText("SYN-EVT-GUIDED")).toBeInTheDocument());
     expect(backend.counts.advance).toBe(0);
 
     await user.click(await screen.findByRole("cell", { name: "SYN-CNT-017" }));
 
-    await user.click(screen.getAllByRole("button", { name: /bootstrap pre_discharge/i }).at(-1)!);
+    await user.click(screen.getAllByRole("button", { name: /publish yard forecast/i }).at(-1)!);
     await waitFor(() => {
       expect(screen.getByText(/wide uncertainty/)).toBeInTheDocument();
       expect(screen.getAllByText(/PRE_DISCHARGE/).length).toBeGreaterThan(0);
     });
     expect(backend.counts.bootstrap).toBe(1);
 
-    await user.click(screen.getByRole("button", { name: /start canonical demo agentrun/i }));
+    await user.click(screen.getByRole("button", { name: /start recovery agent/i }));
     await waitFor(() => expect(screen.getByText("CREATED")).toBeInTheDocument());
     expect(backend.counts.startDemoRun).toBe(1);
     expect(backend.counts.start).toBe(0);
@@ -1258,7 +1397,7 @@ describe("OperationsConsole full guided Phase 6 journey", () => {
     expect(backend.counts.advance).toBe(1);
     await expectAdvanceDisabled();
 
-    await user.click(screen.getAllByRole("button", { name: /publish discharge_active/i })[0]);
+    await user.click(screen.getAllByRole("button", { name: /publish discharge evidence/i })[0]);
     await waitFor(() => {
       expect(screen.getByText(/tighter forecast band/)).toBeInTheDocument();
       expect(screen.getAllByText(/DISCHARGE_ACTIVE/).length).toBeGreaterThan(0);
@@ -1268,10 +1407,10 @@ describe("OperationsConsole full guided Phase 6 journey", () => {
 
     await user.click(advanceButton());
     await waitFor(() => {
-      expect(screen.getByText(/R0 → R1/)).toBeInTheDocument();
-      expect(screen.getByText(/601 → 602/)).toBeInTheDocument();
-      expect(screen.getByText(/synthetic scenario-world total across 50 worlds/)).toBeInTheDocument();
-      expect(screen.getByText(/12\.02 → 12\.04/)).toBeInTheDocument();
+      expect(screen.getAllByText(/R0 → R1/).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/601 → 602/).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/synthetic scenario-world total across 50 worlds/).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/12\.02 → 12\.04/).length).toBeGreaterThan(0);
       expect(screen.getByText(/SYN-CNT-005 OUT CANCELLED/)).toBeInTheDocument();
       expect(screen.getByText(/SYN-CNT-001 IN PLANNED/)).toBeInTheDocument();
       expect(screen.getByText(/SYN-CNT-002 IN COMMITTED/)).toBeInTheDocument();
@@ -1312,7 +1451,7 @@ describe("OperationsConsole full guided Phase 6 journey", () => {
     expect(backend.counts.send).toBe(0);
     await expectAdvanceDisabled();
 
-    await user.click(screen.getByRole("button", { name: /simulate carrier response/i }));
+    await user.click(screen.getAllByRole("button", { name: /simulate carrier response/i })[0]);
     await waitFor(() => {
       expect(screen.getByText(/carrier counter received — waiting for operator approval/i)).toBeInTheDocument();
       expect(screen.getByText(/06:45Z/)).toBeInTheDocument();
@@ -1350,7 +1489,7 @@ describe("OperationsConsole full guided Phase 6 journey", () => {
     });
     expect(backend.counts.advance).toBe(6);
 
-    await user.click(screen.getByRole("button", { name: /persist syn-cnt-010 canonical contradiction/i }));
+    await user.click(screen.getByRole("button", { name: /record syn-cnt-010 safety evidence/i }));
     await waitFor(() => {
       const created = backend.posts.find((post) => post.url.endsWith("/cargo-safety-reviews") && post.url.includes(INCIDENT_ID));
       expect(created?.body).toEqual({
@@ -1382,6 +1521,7 @@ describe("OperationsConsole full guided Phase 6 journey", () => {
     expect(backend.counts.send).toBe(0);
     expect(backend.counts.prepare).toBe(0);
 
+    await user.click(screen.getByRole("button", { name: /^explore$/i }));
     expect(screen.getByText("Audit / decision history")).toBeInTheDocument();
     expect(screen.getAllByText(/decision.created|agent_run.escalated|carrier.response_received/i).length).toBeGreaterThan(0);
 
@@ -1595,7 +1735,7 @@ describe("OperationsConsole synthetic auto replay journey", () => {
     const user = userEvent.setup();
     render(<OperationsConsole />);
 
-    await user.click(screen.getByRole("button", { name: /^create canonical incident$/i }));
+    await user.click(screen.getByRole("button", { name: /^start recovery demo$/i }));
     await waitFor(() => expect(screen.getByText("SYN-EVT-AUTO")).toBeInTheDocument());
 
     await user.click(screen.getByRole("button", { name: /^auto replay$/i }));
@@ -1642,7 +1782,7 @@ describe("OperationsConsole synthetic auto replay journey", () => {
     vi.stubGlobal("fetch", backend.fetchMock);
     const first = userEvent.setup();
     render(<OperationsConsole />);
-    await first.click(screen.getByRole("button", { name: /^create canonical incident$/i }));
+    await first.click(screen.getByRole("button", { name: /^start recovery demo$/i }));
     await waitFor(() => expect(screen.getByText("SYN-EVT-AUTO")).toBeInTheDocument());
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: /^auto replay$/i }));
@@ -1677,7 +1817,7 @@ describe("OperationsConsole synthetic auto replay journey", () => {
     const user = userEvent.setup();
     render(<OperationsConsole />);
 
-    await user.click(screen.getByRole("button", { name: /^create canonical incident$/i }));
+    await user.click(screen.getByRole("button", { name: /^start recovery demo$/i }));
     await waitFor(() => expect(screen.getByText("SYN-EVT-FIX1")).toBeInTheDocument());
 
     await user.click(screen.getByRole("button", { name: /^auto replay$/i }));

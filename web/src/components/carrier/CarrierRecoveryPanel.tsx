@@ -23,15 +23,13 @@ interface CarrierRecoveryPanelProps {
 }
 
 function actionButtonClass(variant: "primary" | "danger" | "neutral" = "primary") {
-  const base =
-    "rounded border px-3 py-2 font-mono text-[11px] uppercase tracking-wide disabled:cursor-not-allowed disabled:opacity-50";
   if (variant === "danger") {
-    return `${base} border-rose-500/50 bg-rose-950/40 text-rose-100 hover:bg-rose-900/50`;
+    return "psa-btn-secondary border-psa-coral/40 px-3 py-2 text-[11px] uppercase tracking-wide text-psa-coral disabled:cursor-not-allowed disabled:opacity-50";
   }
   if (variant === "neutral") {
-    return `${base} border-slate-700 text-slate-300 hover:bg-slate-800`;
+    return "psa-btn-ghost px-3 py-2 text-[11px] uppercase tracking-wide disabled:cursor-not-allowed disabled:opacity-50";
   }
-  return `${base} border-emerald-500/50 bg-emerald-950/40 text-emerald-100 hover:bg-emerald-900/50`;
+  return "psa-btn-secondary px-3 py-2 text-[11px] uppercase tracking-wide disabled:cursor-not-allowed disabled:opacity-50";
 }
 
 export function CarrierRecoveryPanel({
@@ -52,7 +50,7 @@ export function CarrierRecoveryPanel({
 }: CarrierRecoveryPanelProps) {
   if (!selectedContainer) {
     return (
-      <aside className="rounded border border-slate-800 bg-slate-950/60 px-4 py-4">
+      <aside className="psa-surface rounded-[10px] px-4 py-4">
         <h2 className="text-sm font-semibold text-slate-100">Carrier recovery</h2>
         <p className="mt-2 text-sm text-slate-500">
           Select a container to inspect connection-scoped carrier recovery evidence
@@ -68,13 +66,13 @@ export function CarrierRecoveryPanel({
     0;
 
   return (
-    <aside className="space-y-4 rounded border border-slate-800 bg-slate-950/60 px-4 py-4">
+    <aside className="space-y-4 psa-surface rounded-[10px] px-4 py-4">
       <div>
-        <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-sky-300">
+        <p className="psa-label text-psa-signal">
           OPERATOR CONTROLS
         </p>
-        <h2 className="mt-1 text-sm font-semibold text-slate-100">Carrier recovery</h2>
-        <p className="mt-2 text-sm text-slate-300">
+        <h2 className="mt-1 text-sm font-semibold text-psa-snow">Carrier recovery</h2>
+        <p className="mt-2 text-sm text-psa-chalk">
           Connection:{" "}
           <span className="font-mono text-slate-100">
             {connectionShortLabel(selectedContainer.connectionId)}

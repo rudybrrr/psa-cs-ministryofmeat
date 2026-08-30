@@ -1,17 +1,6 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 
 import { SyntheticBanner } from "./SyntheticBanner";
-import { IncidentHeader } from "./IncidentHeader";
-import { AuditTimeline } from "./AuditTimeline";
-import { ActorLegend } from "./ActorBadge";
-import { RecoverySummaryPanel } from "./incident/RecoverySummary";
-import { ContainerRecoveryTable } from "./recovery/ContainerRecoveryTable";
-import { CarrierRecoveryPanel } from "./carrier/CarrierRecoveryPanel";
-import { SyntheticDemoControl } from "./demo/SyntheticDemoControl";
-import { AgentRunPanel } from "./agent/AgentRunPanel";
-import { DynamicYardPanel } from "./dynamic/DynamicYardPanel";
-import { TradeoffReviewPanel } from "./dynamic/TradeoffReviewPanel";
-import { CargoSafetyPanel } from "./safety/CargoSafetyPanel";
 import { useRecoveryConsole } from "../hooks/useRecoveryConsole";
 import {
   CANONICAL_COUNTER_EFFECTIVE_AT,
@@ -24,11 +13,25 @@ import type { CanonicalReplayActionType } from "../api/types";
 import { useAutoReplay } from "../hooks/useAutoReplay";
 import type { AutoReplayCallbacks } from "../lib/autoReplayController";
 import { canAdvanceAgent, canonicalApprovalFingerprint } from "../lib/recoverySelectors";
+import { ModeSwitcher, type ConsoleMode } from "./command-center/ModeSwitcher";
+import { IncidentCommandHeader } from "./command-center/IncidentCommandHeader";
+import { RecoveryKpiStrip } from "./command-center/RecoveryKpiStrip";
+import { ChapterProgress } from "./command-center/ChapterProgress";
+import { NextActionPanel } from "./command-center/NextActionPanel";
+import { GuidedIntroSurface } from "./command-center/GuidedIntroSurface";
+import { ResumePrompt } from "./command-center/ResumePrompt";
+import { ExploreWorkspace } from "./command-center/ExploreWorkspace";
+import { ChapterContextualRegion } from "./command-center/ChapterContextualRegion";
 
 export function OperationsConsole() {
   const console = useRecoveryConsole();
+  const [mode, setMode] = useState<ConsoleMode>("guided");
   const run = console.agentRuns.at(-1) ?? null;
-  const canAdvance = canAdvanceAgent(run, { carrierHistory: console.agentWaitHistory, reconsiderations: console.reconsiderations, tradeoffReviews: console.tradeoffReviews });
+  const canAdvance = canAdvanceAgent(run, {
+    carrierHistory: console.agentWaitHistory,
+    reconsiderations: console.reconsiderations,
+    tradeoffReviews: console.tradeoffReviews,
+  });
 
   const consoleRef = useRef(console);
   consoleRef.current = console;
@@ -36,16 +39,10 @@ export function OperationsConsole() {
   const autoCallbacks: AutoReplayCallbacks = {
     fetchStage: async () => {
       const current = consoleRef.current;
-      // readLatestState mirrors applied bundle data synchronously, so the
-      // freshly created incident is visible to the controller without
-      // depending on React render timing.
       const live = current.readLatestState();
       if (!live.incident) {
         return initialCanonicalStageView();
       }
-      // Stage-fetch failures (404 / network / backend) must propagate to
-      // runAutoReplay, which owns error-halting. They must never be converted
-      // into READY_TO_CREATE or trigger a fresh incident.
       return fetchCanonicalReplayStage(live.incident.id);
     },
     execute: async (action: CanonicalReplayActionType) => {
@@ -76,127 +73,240 @@ export function OperationsConsole() {
   };
   const autoReplay = useAutoReplay(autoCallbacks);
 
-  const fingerprint = canonicalApprovalFingerprint(console.canonicalStage, console.agentWaitHistory);
+  const fingerprint = canonicalApprovalFingerprint(
+    console.canonicalStage,
+    console.agentWaitHistory,
+  );
+
+  const executeGuidedAction = (action: CanonicalReplayActionType) => {
+    switch (action) {
+      case "CREATE_CANONICAL_INCIDENT":
+        void console.createCanonicalIncident();
+        break;
+      case "BOOTSTRAP_PRE_DISCHARGE":
+        void console.bootstrapYard();
+        break;
+      case "START_DEMO_AGENT_RUN":
+        void console.startDemoAgentRun();
+        break;
+      case "ADVANCE_AGENT":
+        void console.advanceAgent();
+        break;
+      case "PUBLISH_DISCHARGE_ACTIVE":
+        void console.publishActive();
+        break;
+      case "SIMULATE_CARRIER_RESPONSE":
+        void console.simulateCarrierResponse(CANONICAL_COUNTER_EFFECTIVE_AT);
+        break;
+      case "APPROVE_REQUEST":
+        void console.approveRequest();
+        break;
+      case "APPROVE_COUNTER":
+        void console.approveCounter();
+        break;
+      case "PERSIST_SAFETY_REVIEW":
+        void console.createSafetyReview(CANONICAL_SAFETY_CONTAINER_ID);
+        break;
+      case "SELECT_TRADEOFF_OPTION":
+        break;
+      default:
+        break;
+    }
+  };
+
+  const showResume =
+    !console.incident &&
+    !console.loading &&
+    console.storedIncidentId &&
+    !console.resumeDismissed;
+
+  const isGuidedEmpty =
+    mode === "guided" &&
+    !console.incident &&
+    !console.loading &&
+    !showResume;
+
+  const showGuidedProgress =
+    mode === "guided" && (console.incident || isGuidedEmpty);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
+    <div className="min-h-screen bg-psa-void text-psa-snow">
       <SyntheticBanner />
-      <IncidentHeader incident={console.incident} loading={console.loading} />
-
-      <main className="mx-auto max-w-7xl space-y-6 px-4 py-6">
-        <RecoverySummaryPanel
-          summary={console.recoverySummary}
-          fixtureId={console.fixture?.fixture_id ?? null}
-          loading={console.loading}
-        />
-
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]">
-          <AgentRunPanel run={run} history={console.selectedAgentHistory} loading={console.loading} canAdvance={canAdvance} onStart={() => void console.startAgent()} onAdvance={() => void console.advanceAgent()} onRefresh={() => void console.refresh()} />
-          <DynamicYardPanel snapshots={console.yardForecasts} revisions={console.allocationRevisions} commitments={console.expediteCommitments} loading={console.loading} onBootstrap={() => void console.bootstrapYard()} onActive={() => void console.publishActive()} />
+      <div className="mx-auto max-w-7xl space-y-6 px-4 py-6">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <ModeSwitcher mode={mode} onChange={setMode} />
+          {mode === "auto" ? (
+            <p className="text-xs text-psa-steel">Backup presentation · video · fast demo</p>
+          ) : null}
         </div>
 
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]">
-          <ContainerRecoveryTable
-            rows={console.containerRows}
-            selectedContainerId={console.selectedContainerId}
-            onSelect={(containerId) => void console.selectContainer(containerId)}
+        {showResume ? (
+          <ResumePrompt
+            incidentId={console.storedIncidentId!}
+            loading={console.loading}
+            onResume={() => void console.resumeStoredIncident()}
+            onStartFresh={() => void console.startFreshDemo()}
+            onDismiss={console.dismissStoredIncident}
+          />
+        ) : null}
+
+        {isGuidedEmpty ? (
+          <GuidedIntroSurface
+            loading={console.loading}
+            onStart={() => executeGuidedAction("CREATE_CANONICAL_INCIDENT")}
+          />
+        ) : null}
+
+        {console.incident ? (
+          <IncidentCommandHeader
+            incident={console.incident}
+            fixture={console.fixture}
             loading={console.loading}
           />
-          <CarrierRecoveryPanel
-            selectedContainer={console.selectedContainer}
-            carrierCase={console.selectedCarrierCase ?? null}
-            history={console.selectedCaseHistory}
-            decisions={console.selectedCaseHistory?.decisions ?? console.decisions}
+        ) : null}
+
+        {console.incident ? (
+          <RecoveryKpiStrip summary={console.recoverySummary} />
+        ) : null}
+
+        {showGuidedProgress ? (
+          <ChapterProgress stage={console.canonicalStage.stage} />
+        ) : null}
+
+        {mode === "guided" && console.incident ? (
+          <NextActionPanel
+            stage={console.canonicalStage}
             loading={console.loading}
-            onPrepare={(connectionId) =>
-              void console.prepareCarrierRecovery(connectionId)
-            }
-            onApproveRequest={() => void console.approveRequest()}
-            onRejectRequest={() => void console.rejectRequest()}
-            onSend={() => void console.sendRequest()}
-            onSimulate={() => void console.simulateCarrierResponse()}
-            onApproveCounter={() => void console.approveCounter()}
-            onRejectCounter={() => void console.rejectCounter()}
-            onEvaluateTimeout={() => void console.evaluateTimeout()}
-            agentRunActive={Boolean(console.agentRuns.at(-1) && !["COMPLETED", "ESCALATED", "FAILED"].includes(console.agentRuns.at(-1)!.state))}
+            approvalFingerprint={fingerprint}
+            onExecute={executeGuidedAction}
           />
-        </div>
+        ) : null}
 
-        <TradeoffReviewPanel reviews={console.tradeoffReviews} options={console.tradeoffOptions} loading={console.loading} onSelect={(review, optionId) => void console.chooseTradeoff(review, optionId)} />
-        <CargoSafetyPanel reviews={console.cargoSafetyReviews} histories={console.safetyHistories} loading={console.loading} onEvaluate={(id) => void console.evaluateSafety(id)} onCreateCanonical={() => void console.createSafetyReview("SYN-CNT-010")} />
-
-        {!console.incident && !console.loading && (
-          <div className="rounded border border-dashed border-slate-800 bg-slate-950/40 px-6 py-10 text-center">
-            <p className="text-sm text-slate-400">
-              No incident loaded. Create a canonical scarcity incident or start a
-              canonical carrier demo run.
-            </p>
-          </div>
-        )}
-
-        {console.loading && (
-          <div className="rounded border border-slate-800 bg-slate-900/30 px-4 py-3 font-mono text-sm text-slate-300">
+        {console.loading ? (
+          <div className="psa-surface rounded-[10px] px-4 py-3 text-sm text-psa-chalk">
             Contacting backend and loading persisted incident state…
           </div>
-        )}
+        ) : null}
 
-        {console.error && (
+        {console.error ? (
           <div
             role="alert"
-            className="rounded border border-rose-500/50 bg-rose-950/40 px-4 py-3 text-sm text-rose-100"
+            className="rounded-[10px] border border-psa-coral/50 bg-psa-coral/10 px-4 py-3 text-sm text-psa-snow"
           >
             <p className="font-semibold">Operations console error</p>
             <p className="mt-1 font-mono text-xs">
               {console.error.status}: {console.error.detail}
             </p>
           </div>
-        )}
+        ) : null}
 
-        {console.incident && (
-          <section className="space-y-4 rounded border border-slate-800 bg-slate-950/60 px-4 py-4">
-            <div>
-              <h2 className="text-sm font-semibold text-slate-100">
-                Audit / decision history
-              </h2>
-              <p className="mt-1 text-xs text-slate-500">
-                Persisted audit trail for the active incident. Human approvals and
-                carrier evidence remain visible in workflow order.
-              </p>
-            </div>
-            <ActorLegend />
-            <AuditTimeline events={console.auditEvents} loading={console.loading} />
-          </section>
-        )}
+        {console.incident && (mode === "guided" || mode === "auto") ? (
+          <ChapterContextualRegion
+            mode={mode}
+            stage={console.canonicalStage}
+            incident={console.incident}
+            fixture={console.fixture}
+            summary={console.recoverySummary}
+            scarcityEvaluation={console.scarcityEvaluation}
+            containerRows={console.containerRows}
+            selectedContainerId={console.selectedContainerId}
+            onSelectContainer={(id) => void console.selectContainer(id)}
+            selectedContainer={console.selectedContainer}
+            yardForecasts={console.yardForecasts}
+            allocationRevisions={console.allocationRevisions}
+            expediteCommitments={console.expediteCommitments}
+            run={run}
+            agentHistory={console.selectedAgentHistory}
+            canAdvance={canAdvance}
+            loading={console.loading}
+            carrierCase={console.selectedCarrierCase ?? null}
+            caseHistory={console.selectedCaseHistory}
+            decisions={console.decisions}
+            approvalFingerprint={fingerprint}
+            agentRunActive={Boolean(
+              run && !["COMPLETED", "ESCALATED", "FAILED"].includes(run.state),
+            )}
+            cargoReviews={console.cargoSafetyReviews}
+            safetyHistories={console.safetyHistories}
+            onBootstrap={() => void console.bootstrapYard()}
+            onPublishActive={() => void console.publishActive()}
+            onAdvanceAgent={() => void console.advanceAgent()}
+            onRefresh={() => void console.refresh()}
+            onApproveRequest={() => void console.approveRequest()}
+            onRejectRequest={() => void console.rejectRequest()}
+            onSimulate={() => void console.simulateCarrierResponse()}
+            onApproveCounter={() => void console.approveCounter()}
+            onRejectCounter={() => void console.rejectCounter()}
+            onEvaluateTimeout={() => void console.evaluateTimeout()}
+            onCreateSafetyReview={() => void console.createSafetyReview("SYN-CNT-010")}
+          />
+        ) : null}
 
-        <SyntheticDemoControl
-          incidentId={console.incident?.id ?? null}
+        <ExploreWorkspace
+          mode={mode}
+          incidentLoaded={Boolean(console.incident)}
           loading={console.loading}
-          stage={console.canonicalStage}
-          error={console.error ? { status: console.error.status, detail: console.error.detail } : null}
-          approvalFingerprint={fingerprint}
-          onCreateIncident={() => void console.createCanonicalIncident()}
-          onRefresh={() => void console.refresh()}
-          onBootstrap={() => void console.bootstrapYard()}
-          onStartDemoAgentRun={() => void console.startDemoAgentRun()}
+          error={
+            console.error
+              ? { status: console.error.status, detail: console.error.detail }
+              : null
+          }
+          containerRows={console.containerRows}
+          selectedContainerId={console.selectedContainerId}
+          onSelectContainer={(id) => void console.selectContainer(id)}
+          run={run}
+          agentHistory={console.selectedAgentHistory}
+          canAdvance={canAdvance}
+          onStartAgent={() => void console.startAgent()}
           onAdvanceAgent={() => void console.advanceAgent()}
+          onRefresh={() => void console.refresh()}
+          yardForecasts={console.yardForecasts}
+          allocationRevisions={console.allocationRevisions}
+          expediteCommitments={console.expediteCommitments}
+          onBootstrap={() => void console.bootstrapYard()}
           onPublishActive={() => void console.publishActive()}
-          onSimulateCarrierResponse={() => void console.simulateCarrierResponse(CANONICAL_COUNTER_EFFECTIVE_AT)}
+          selectedContainer={console.selectedContainer}
+          carrierCase={console.selectedCarrierCase ?? null}
+          caseHistory={console.selectedCaseHistory}
+          decisions={console.decisions}
+          onPrepare={(connectionId) => void console.prepareCarrierRecovery(connectionId)}
           onApproveRequest={() => void console.approveRequest()}
           onRejectRequest={() => void console.rejectRequest()}
+          onSend={() => void console.sendRequest()}
+          onSimulate={() => void console.simulateCarrierResponse()}
           onApproveCounter={() => void console.approveCounter()}
           onRejectCounter={() => void console.rejectCounter()}
+          onEvaluateTimeout={() => void console.evaluateTimeout()}
+          agentRunActive={Boolean(
+            run && !["COMPLETED", "ESCALATED", "FAILED"].includes(run.state),
+          )}
+          tradeoffReviews={console.tradeoffReviews}
+          tradeoffOptions={console.tradeoffOptions}
+          onChooseTradeoff={(review, optionId) =>
+            void console.chooseTradeoff(review, optionId)
+          }
+          cargoReviews={console.cargoSafetyReviews}
+          safetyHistories={console.safetyHistories}
+          onEvaluateSafety={(id) => void console.evaluateSafety(id)}
           onCreateSafetyReview={() => void console.createSafetyReview("SYN-CNT-010")}
+          auditEvents={console.auditEvents}
+          incidentId={console.incident?.id ?? null}
+          stage={console.canonicalStage}
+          approvalFingerprint={fingerprint}
+          onCreateIncident={() => void console.createCanonicalIncident()}
+          onStartDemoAgentRun={() => void console.startDemoAgentRun()}
+          onSimulateCarrierResponse={() =>
+            void console.simulateCarrierResponse(CANONICAL_COUNTER_EFFECTIVE_AT)
+          }
           autoReplay={{
             progress: autoReplay.progress,
-            // Projector authority: start is permitted exactly when the
-            // projected stage permits auto execution (READY_TO_CREATE local
-            // view included); loading/terminal/off-canonical/tradeoff exclude it.
             canStart: !console.loading && console.canonicalStage.auto_replay_may_execute,
             onStart: autoReplay.start,
             onStop: autoReplay.stop,
           }}
+          recoverySummary={console.recoverySummary}
         />
-      </main>
+      </div>
     </div>
   );
 }

@@ -32,9 +32,9 @@ export function ContainerRecoveryTable({
   loading = false,
 }: ContainerRecoveryTableProps) {
   return (
-    <section className="rounded border border-slate-800 bg-slate-950/60">
-      <div className="border-b border-slate-800 px-4 py-3">
-        <h2 className="text-sm font-semibold text-slate-100">
+    <section className="psa-surface rounded-[10px]">
+      <div className="border-b border-psa-graphite px-4 py-3">
+        <h2 className="text-sm font-semibold text-psa-snow">
           Container recovery workspace
         </h2>
         <p className="mt-1 text-xs text-slate-500">
