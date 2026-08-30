@@ -1,17 +1,20 @@
 @import url("https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..500;14..32,600&display=swap");
 
 @theme {
-  --color-psa-void: #0b0c0e;
-  --color-psa-graphite: #131416;
-  --color-psa-charcoal: #1f1f21;
-  --color-psa-smoke: #3c3d3e;
+  --color-psa-void: #070809;
+  --color-psa-graphite: #121316;
+  --color-psa-charcoal: #1c1d21;
+  --color-psa-slate: #26282e;
+  --color-psa-smoke: #3c3d42;
   --color-psa-steel: #71717a;
   --color-psa-fog: #858687;
   --color-psa-ash: #9d9e9f;
   --color-psa-chalk: #cececf;
   --color-psa-snow: #ffffff;
   --color-psa-bone: #f2f2f2;
-  --color-psa-ink: #333333;
+  --color-psa-ink: #1a1a1a;
+  --color-psa-data: #ececea;
+  --color-psa-data-ink: #1f2937;
   --color-psa-signal: #3b82f6;
   --color-psa-arc: #60a5fa;
   --color-psa-amber: #f59e0b;
@@ -48,15 +51,35 @@ button {
   cursor: pointer;
 }
 
+/* Surface hierarchy — visibly distinct layers */
 .psa-surface {
-  background: var(--color-psa-graphite);
-  border: 0.5px solid rgba(255, 255, 255, 0.08);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  background: var(--color-psa-charcoal);
+  border: 0.5px solid rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .psa-surface-nested {
-  background: var(--color-psa-charcoal);
-  border: 0.5px solid rgba(255, 255, 255, 0.06);
+  background: var(--color-psa-slate);
+  border: 0.5px solid rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.psa-surface-active {
+  background: var(--color-psa-slate);
+  border: 0.5px solid rgba(255, 255, 255, 0.14);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.psa-surface-chrome {
+  background: var(--color-psa-graphite);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.psa-data-surface {
+  background: var(--color-psa-data);
+  border: 0.5px solid rgba(0, 0, 0, 0.08);
+  color: var(--color-psa-data-ink);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
 }
 
 .psa-label {
@@ -68,8 +91,82 @@ button {
 
 .psa-kpi {
   font-variant-numeric: tabular-nums;
-  font-size: 1.5rem;
+  font-size: 1.75rem;
   font-weight: 500;
   line-height: 1.1;
   letter-spacing: -0.02em;
+}
+
+/* Button system */
+.psa-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.75rem;
+  padding: 0 1.25rem;
+  border-radius: 9px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1;
+  transition: background-color 120ms ease, border-color 120ms ease, opacity 120ms ease;
+}
+
+.psa-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.psa-btn-primary {
+  border: 0.5px solid rgba(255, 255, 255, 0.15);
+  background: var(--color-psa-bone);
+  color: var(--color-psa-ink);
+}
+
+.psa-btn-primary:hover:not(:disabled) {
+  background: #ffffff;
+}
+
+.psa-btn-secondary {
+  border: 0.5px solid rgba(255, 255, 255, 0.16);
+  background: var(--color-psa-charcoal);
+  color: var(--color-psa-snow);
+}
+
+.psa-btn-secondary:hover:not(:disabled) {
+  background: var(--color-psa-slate);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.psa-btn-ghost {
+  border: 0.5px solid transparent;
+  background: transparent;
+  color: var(--color-psa-chalk);
+  min-height: 2.25rem;
+  padding: 0 0.75rem;
+}
+
+.psa-btn-ghost:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--color-psa-snow);
+}
+
+.psa-btn-authority {
+  border: 0.5px solid rgba(245, 158, 11, 0.55);
+  background: rgba(245, 158, 11, 0.12);
+  color: var(--color-psa-snow);
+}
+
+.psa-btn-authority:hover:not(:disabled) {
+  background: rgba(245, 158, 11, 0.18);
+  border-color: rgba(245, 158, 11, 0.7);
+}
+
+.psa-btn-destructive {
+  border: 0.5px solid rgba(248, 113, 113, 0.45);
+  background: rgba(248, 113, 113, 0.08);
+  color: var(--color-psa-coral);
+}
+
+.psa-btn-destructive:hover:not(:disabled) {
+  background: rgba(248, 113, 113, 0.14);
 }

@@ -13,15 +13,17 @@ import type { CanonicalReplayActionType } from "../api/types";
 import { useAutoReplay } from "../hooks/useAutoReplay";
 import type { AutoReplayCallbacks } from "../lib/autoReplayController";
 import { canAdvanceAgent, canonicalApprovalFingerprint } from "../lib/recoverySelectors";
-import { ModeSwitcher, type ConsoleMode } from "./command-center/ModeSwitcher";
-import { IncidentCommandHeader } from "./command-center/IncidentCommandHeader";
+import { type ConsoleMode } from "./command-center/ModeSwitcher";
 import { RecoveryKpiStrip } from "./command-center/RecoveryKpiStrip";
 import { ChapterProgress } from "./command-center/ChapterProgress";
-import { NextActionPanel } from "./command-center/NextActionPanel";
 import { GuidedIntroSurface } from "./command-center/GuidedIntroSurface";
 import { ResumePrompt } from "./command-center/ResumePrompt";
 import { ExploreWorkspace } from "./command-center/ExploreWorkspace";
 import { ChapterContextualRegion } from "./command-center/ChapterContextualRegion";
+import { DashboardShell } from "./command-center/DashboardShell";
+import { DashboardSidebar } from "./command-center/DashboardSidebar";
+import { DashboardContentHeader } from "./command-center/DashboardContentHeader";
+import { StageActionCard } from "./command-center/StageActionCard";
 
 export function OperationsConsole() {
   const console = useRecoveryConsole();
@@ -126,20 +128,35 @@ export function OperationsConsole() {
     !console.loading &&
     !showResume;
 
-  const showGuidedProgress =
-    mode === "guided" && (console.incident || isGuidedEmpty);
+  const showGuidedShell =
+    mode === "guided" && (console.incident || isGuidedEmpty || showResume);
+
+  const apiStatus = console.error ? "error" : console.loading ? "loading" : "ready";
 
   return (
-    <div className="min-h-screen bg-psa-void text-psa-snow">
+    <>
       <SyntheticBanner />
-      <div className="mx-auto max-w-7xl space-y-6 px-4 py-6">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <ModeSwitcher mode={mode} onChange={setMode} />
-          {mode === "auto" ? (
-            <p className="text-xs text-psa-steel">Backup presentation · video · fast demo</p>
-          ) : null}
-        </div>
-
+      <DashboardShell
+        sidebar={
+          <DashboardSidebar
+            mode={mode}
+            onModeChange={setMode}
+            apiStatus={apiStatus}
+            incidentLoaded={Boolean(console.incident)}
+          />
+        }
+        header={
+          <DashboardContentHeader
+            mode={mode}
+            incident={console.incident}
+            fixture={console.fixture}
+            loading={console.loading}
+            showStartDemo={false}
+            onStartDemo={() => executeGuidedAction("CREATE_CANONICAL_INCIDENT")}
+            onStartFresh={() => void console.startFreshDemo()}
+          />
+        }
+      >
         {showResume ? (
           <ResumePrompt
             incidentId={console.storedIncidentId!}
@@ -150,36 +167,37 @@ export function OperationsConsole() {
           />
         ) : null}
 
-        {isGuidedEmpty ? (
-          <GuidedIntroSurface
-            loading={console.loading}
-            onStart={() => executeGuidedAction("CREATE_CANONICAL_INCIDENT")}
-          />
-        ) : null}
+        {showGuidedShell ? (
+          <>
+            <RecoveryKpiStrip
+              summary={console.recoverySummary}
+              emptyPlaceholder={isGuidedEmpty}
+            />
 
-        {console.incident ? (
-          <IncidentCommandHeader
-            incident={console.incident}
-            fixture={console.fixture}
-            loading={console.loading}
-          />
-        ) : null}
+            <ChapterProgress
+              stage={console.canonicalStage?.stage}
+              empty={isGuidedEmpty}
+            />
 
-        {console.incident ? (
-          <RecoveryKpiStrip summary={console.recoverySummary} />
-        ) : null}
-
-        {showGuidedProgress ? (
-          <ChapterProgress stage={console.canonicalStage.stage} />
-        ) : null}
-
-        {mode === "guided" && console.incident ? (
-          <NextActionPanel
-            stage={console.canonicalStage}
-            loading={console.loading}
-            approvalFingerprint={fingerprint}
-            onExecute={executeGuidedAction}
-          />
+            {mode === "guided" ? (
+              <StageActionCard
+                stage={console.canonicalStage}
+                incident={console.incident}
+                fixture={console.fixture}
+                loading={console.loading}
+                approvalFingerprint={fingerprint}
+                onExecute={executeGuidedAction}
+                emptyState={
+                  isGuidedEmpty ? (
+                    <GuidedIntroSurface
+                      loading={console.loading}
+                      onStart={() => executeGuidedAction("CREATE_CANONICAL_INCIDENT")}
+                    />
+                  ) : undefined
+                }
+              />
+            ) : null}
+          </>
         ) : null}
 
         {console.loading ? (
@@ -306,7 +324,13 @@ export function OperationsConsole() {
           }}
           recoverySummary={console.recoverySummary}
         />
-      </div>
-    </div>
+
+        {mode === "auto" && !console.incident ? (
+          <p className="text-sm text-psa-steel">
+            Auto replay backup mode · create an incident in Explore or start guided demo
+          </p>
+        ) : null}
+      </DashboardShell>
+    </>
   );
 }

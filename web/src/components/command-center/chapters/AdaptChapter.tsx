@@ -5,7 +5,7 @@ import type {
 } from "../../../api/types";
 import { buildAllocationComparison } from "../../../lib/chapterContext";
 import { latestSnapshot } from "../../../lib/recoverySelectors";
-import { ChapterFrame, MetricCard } from "./ChapterFrame";
+import { ChapterFrame, ComparisonColumn, MetricCard } from "./ChapterFrame";
 
 export function AdaptChapter({
   snapshots,
@@ -42,13 +42,29 @@ export function AdaptChapter({
       </div>
 
       {comparison.prior && comparison.current ? (
-        <p className="font-mono text-xs text-psa-chalk">
-          <b>{comparison.label}</b>
-          {" · "}
-          {comparison.totalBefore} → {comparison.totalAfter} synthetic scenario-world total
-          across 50 worlds · expected {comparison.expectedBefore?.toFixed(2)} →{" "}
-          {comparison.expectedAfter?.toFixed(2)}
-        </p>
+        <div className="grid gap-3 lg:grid-cols-2">
+          <ComparisonColumn heading={`${comparison.label} · prior (R0)`} light>
+            <p className="font-mono text-sm font-medium">
+              {comparison.totalBefore} scenario-world total
+            </p>
+            <p className="text-xs opacity-80">
+              Expected preserved {comparison.expectedBefore?.toFixed(2)}
+            </p>
+          </ComparisonColumn>
+          <ComparisonColumn heading={`${comparison.label} · current (R1)`} light>
+            <p className="font-mono text-sm font-medium">
+              {comparison.totalAfter} scenario-world total
+            </p>
+            <p className="text-xs opacity-80">
+              Expected preserved {comparison.expectedAfter?.toFixed(2)}
+            </p>
+          </ComparisonColumn>
+          <p className="text-xs text-psa-steel lg:col-span-2">
+            {comparison.totalBefore} → {comparison.totalAfter} synthetic scenario-world total
+            across 50 worlds · expected {comparison.expectedBefore?.toFixed(2)} →{" "}
+            {comparison.expectedAfter?.toFixed(2)}
+          </p>
+        </div>
       ) : null}
 
       {changedSwaps.length > 0 ? (

@@ -10,7 +10,7 @@ export function ChapterFrame({
   children: ReactNode;
 }) {
   return (
-    <section className="psa-surface rounded-[10px] px-5 py-5" data-chapter-panel>
+    <section className="psa-surface rounded-[12px] px-5 py-5" data-chapter-panel>
       <p className="psa-label text-psa-signal">{label}</p>
       <h2 className="mt-2 text-lg font-medium tracking-[-0.02em] text-psa-snow">{title}</h2>
       <div className="mt-4 space-y-4">{children}</div>
@@ -40,14 +40,28 @@ export function MetricCard({
 export function ComparisonColumn({
   heading,
   children,
+  light = false,
 }: {
   heading: string;
   children: ReactNode;
+  light?: boolean;
 }) {
   return (
-    <div className="psa-surface-nested rounded-[8px] px-4 py-4">
-      <p className="psa-label">{heading}</p>
-      <div className="mt-3 space-y-2 text-sm text-psa-chalk">{children}</div>
+    <div
+      className={
+        light
+          ? "psa-data-surface rounded-[8px] px-4 py-4"
+          : "psa-surface-nested rounded-[8px] px-4 py-4"
+      }
+    >
+      <p className={light ? "text-[11px] font-medium uppercase tracking-[0.12em] text-psa-data-ink/60" : "psa-label"}>
+        {heading}
+      </p>
+      <div
+        className={`mt-3 space-y-2 text-sm ${light ? "text-psa-data-ink" : "text-psa-chalk"}`}
+      >
+        {children}
+      </div>
     </div>
   );
 }

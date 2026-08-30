@@ -38,8 +38,8 @@ export function CoordinateChapter({
       label="Chapter 5 · Coordinate"
       title="Agent-prepared recovery — human authority required"
     >
-      <div className="rounded-[8px] border border-psa-signal/30 bg-psa-signal/5 px-4 py-4">
-        <p className="psa-label text-psa-signal">Human authority boundary</p>
+        <div className="rounded-[8px] border border-psa-amber/45 bg-psa-amber/10 px-4 py-4">
+          <p className="psa-label text-psa-amber">Human authority boundary</p>
         <p className="mt-2 text-sm text-psa-chalk">
           The agent may prepare the JV2 recovery request and bind evidence. The agent
           may <strong className="text-psa-snow">not</strong> authorize outbound carrier
@@ -48,29 +48,31 @@ export function CoordinateChapter({
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_16rem]">
-        <div className="psa-surface-nested space-y-3 rounded-[8px] px-4 py-4">
-          <p className="psa-label">Agent-prepared recovery request</p>
-          <p className="font-mono text-sm text-psa-snow">
+        <div className="psa-data-surface space-y-3 rounded-[8px] px-4 py-4">
+          <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-psa-data-ink/60">
+            Agent-prepared recovery request
+          </p>
+          <p className="font-mono text-sm font-medium text-psa-data-ink">
             {connectionShortLabel(connectionId)}
           </p>
-          <p className="text-xs text-psa-steel">{connectionId}</p>
-          <p className="text-sm text-psa-chalk">
+          <p className="text-xs text-psa-data-ink/70">{connectionId}</p>
+          <p className="text-sm text-psa-data-ink">
             Affected container: <span className="font-mono">{containerId}</span>
           </p>
           {history?.request_context?.response_deadline ? (
-            <p className="font-mono text-xs text-psa-fog">
+            <p className="font-mono text-xs text-psa-data-ink/70">
               Response deadline {formatUtcClock(history.request_context.response_deadline)}
             </p>
           ) : null}
           {carrierCase ? (
-            <p className="text-xs text-psa-steel">
+            <p className="text-xs text-psa-data-ink/70">
               Case {truncateId(carrierCase.id)} · {carrierCase.state.replaceAll("_", " ")}
             </p>
           ) : null}
         </div>
 
-        <div className="psa-surface-nested rounded-[8px] px-4 py-4">
-          <p className="psa-label">Operator action</p>
+        <div className="psa-surface-active space-y-3 rounded-[8px] border border-psa-amber/30 px-4 py-4">
+          <p className="psa-label text-psa-amber">Operator action</p>
           {carrierCase?.state === "AWAITING_REQUEST_APPROVAL" ? (
             <div className="mt-3 space-y-3">
               <p className="text-sm text-psa-chalk">
@@ -87,7 +89,7 @@ export function CoordinateChapter({
                     type="button"
                     disabled={loading}
                     onClick={onApproveRequest}
-                    className="psa-btn-primary w-full px-3 py-2.5 text-xs"
+                    className="psa-btn psa-btn-authority w-full text-xs"
                   >
                     Approve request
                   </button>
@@ -95,7 +97,7 @@ export function CoordinateChapter({
                     type="button"
                     disabled={loading}
                     onClick={onRejectRequest}
-                    className="psa-btn-secondary w-full px-3 py-2 text-xs"
+                    className="psa-btn psa-btn-destructive w-full text-xs"
                   >
                     Reject request
                   </button>
