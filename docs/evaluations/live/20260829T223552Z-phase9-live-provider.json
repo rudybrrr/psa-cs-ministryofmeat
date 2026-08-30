@@ -1,0 +1,71 @@
+{
+  "label": "NON-DETERMINISTIC LIVE PROVIDER EVIDENCE",
+  "schema_version": "phase9-live-evidence-v1",
+  "suite_id": "phase9-live-provider-evidence",
+  "generated_at": "2026-08-29T22:36:01.471284Z",
+  "source_revision": "d52cc0493f1e4c9e6284ddf65e71c1367e0f7851",
+  "evaluation_base_sha": "2ff0e58d98e586f7904c726a4bb485a8419e2954",
+  "environment": "local",
+  "config": {
+    "run_live_llm_tests": true,
+    "max_calls": 10,
+    "max_workflows": 1,
+    "pricing_snapshot_path": null
+  },
+  "fixture_ids": [
+    "synthetic-canonical-scarcity-v1",
+    "synthetic-canonical-dynamic-yard",
+    "synthetic-canonical-cargo-note"
+  ],
+  "observations": [
+    {
+      "call_number": 1,
+      "stage": "CONNECTIVITY_SMOKE",
+      "method": "responses.parse",
+      "configured_model": "gpt-5.6-luna",
+      "returned_model": "gpt-5.6-luna",
+      "success": true,
+      "failure_kind": null,
+      "latency_ms": 5640,
+      "input_tokens": 271,
+      "output_tokens": 116,
+      "total_tokens": 387,
+      "selected_tool": null
+    },
+    {
+      "call_number": 2,
+      "stage": "SEMANTIC_SAFETY_SMOKE",
+      "method": "responses.parse",
+      "configured_model": "gpt-5.6-luna",
+      "returned_model": "gpt-5.6-luna",
+      "success": true,
+      "failure_kind": null,
+      "latency_ms": 2493,
+      "input_tokens": 283,
+      "output_tokens": 139,
+      "total_tokens": 422,
+      "selected_tool": null
+    }
+  ],
+  "attempted_provider_call_count": 2,
+  "successful_provider_call_count": 2,
+  "failed_provider_call_count": 0,
+  "complete_workflow_count": 0,
+  "p50_successful_latency_ms": 2493.0,
+  "p95_successful_latency_ms": 5640.0,
+  "latency_provenance": "CLIENT_OBSERVED_REQUEST_LATENCY",
+  "stopped_stage": "SEMANTIC_SAFETY_SMOKE",
+  "cost": {
+    "status": "NOT_ESTABLISHED",
+    "amount_usd": null,
+    "reason": "NO_PRICING_SNAPSHOT",
+    "pricing_snapshot_commit_sha": null
+  },
+  "semantic_smoke_review_id": null,
+  "semantic_smoke_assessment_id": null,
+  "semantic_smoke_policy_result_id": null,
+  "agent_run_id": null,
+  "agent_step_ids": [],
+  "safety_assessment_id": null,
+  "final_outcome_id": null
+}

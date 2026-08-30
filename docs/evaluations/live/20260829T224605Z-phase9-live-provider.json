@@ -1,0 +1,113 @@
+{
+  "label": "NON-DETERMINISTIC LIVE PROVIDER EVIDENCE",
+  "schema_version": "phase9-live-evidence-v1",
+  "suite_id": "phase9-live-provider-evidence",
+  "generated_at": "2026-08-29T22:46:18.771754Z",
+  "source_revision": "ce95c2fc2db1fad47874959a051dd4639f144f08",
+  "evaluation_base_sha": "2ff0e58d98e586f7904c726a4bb485a8419e2954",
+  "environment": "local",
+  "config": {
+    "run_live_llm_tests": true,
+    "max_calls": 10,
+    "max_workflows": 1,
+    "pricing_snapshot_path": null
+  },
+  "fixture_ids": [
+    "synthetic-canonical-scarcity-v1",
+    "synthetic-canonical-dynamic-yard",
+    "synthetic-canonical-cargo-note"
+  ],
+  "observations": [
+    {
+      "call_number": 1,
+      "stage": "CONNECTIVITY_SMOKE",
+      "method": "responses.parse",
+      "configured_model": "gpt-5.6-luna",
+      "returned_model": "gpt-5.6-luna",
+      "success": true,
+      "failure_kind": null,
+      "latency_ms": 3166,
+      "input_tokens": 306,
+      "output_tokens": 103,
+      "total_tokens": 409,
+      "selected_tool": null
+    },
+    {
+      "call_number": 2,
+      "stage": "SEMANTIC_SAFETY_SMOKE",
+      "method": "responses.parse",
+      "configured_model": "gpt-5.6-luna",
+      "returned_model": "gpt-5.6-luna",
+      "success": true,
+      "failure_kind": null,
+      "latency_ms": 2337,
+      "input_tokens": 318,
+      "output_tokens": 127,
+      "total_tokens": 445,
+      "selected_tool": null
+    },
+    {
+      "call_number": 3,
+      "stage": "TOOL_SELECTION_SMOKE",
+      "method": "responses.create",
+      "configured_model": "gpt-5.6-terra",
+      "returned_model": "gpt-5.6-terra",
+      "success": true,
+      "failure_kind": null,
+      "latency_ms": 1745,
+      "input_tokens": 173,
+      "output_tokens": 37,
+      "total_tokens": 210,
+      "selected_tool": "pause_agent_run"
+    },
+    {
+      "call_number": 4,
+      "stage": "COMPLETE_WORKFLOW",
+      "method": "responses.create",
+      "configured_model": "gpt-5.6-terra",
+      "returned_model": "gpt-5.6-terra",
+      "success": true,
+      "failure_kind": null,
+      "latency_ms": 2144,
+      "input_tokens": 789,
+      "output_tokens": 98,
+      "total_tokens": 887,
+      "selected_tool": null
+    },
+    {
+      "call_number": 5,
+      "stage": "COMPLETE_WORKFLOW",
+      "method": "responses.create",
+      "configured_model": "gpt-5.6-terra",
+      "returned_model": "gpt-5.6-terra",
+      "success": true,
+      "failure_kind": null,
+      "latency_ms": 3089,
+      "input_tokens": 789,
+      "output_tokens": 96,
+      "total_tokens": 885,
+      "selected_tool": null
+    }
+  ],
+  "attempted_provider_call_count": 5,
+  "successful_provider_call_count": 5,
+  "failed_provider_call_count": 0,
+  "complete_workflow_count": 0,
+  "p50_successful_latency_ms": 2337.0,
+  "p95_successful_latency_ms": 3166.0,
+  "latency_provenance": "CLIENT_OBSERVED_REQUEST_LATENCY",
+  "stopped_stage": "COMPLETE_WORKFLOW",
+  "cost": {
+    "status": "NOT_ESTABLISHED",
+    "amount_usd": null,
+    "reason": "NO_PRICING_SNAPSHOT",
+    "pricing_snapshot_commit_sha": null
+  },
+  "semantic_smoke_review_id": "ade5620e-0d36-419a-95b4-543bf166f550",
+  "semantic_smoke_assessment_id": "edafe6da-7b21-427a-831d-b63a8fd9c6c6",
+  "semantic_smoke_policy_result_id": "2d5461ea-1bdd-4fb8-a128-b7d41dd48c2e",
+  "agent_run_id": null,
+  "agent_step_ids": [],
+  "safety_assessment_id": null,
+  "final_outcome_id": null
+}
