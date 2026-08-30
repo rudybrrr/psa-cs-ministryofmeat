@@ -7,10 +7,12 @@ import { ChapterFrame, MetricCard } from "./ChapterFrame";
 export function IncidentChapter({
   fixture,
   summary,
+  quiet = false,
 }: {
   incident: Incident | null;
   fixture: CanonicalIncidentFixture | null;
   summary: RecoverySummary | null;
+  quiet?: boolean;
 }) {
   const services = serviceSummaries(fixture);
 
@@ -18,14 +20,15 @@ export function IncidentChapter({
     <ChapterFrame
       label="Chapter 1 · Incident"
       title="Inbound disruption creates a constrained recovery problem"
+      quiet={quiet}
     >
-      <p className="max-w-2xl text-sm leading-relaxed text-psa-chalk">
+      <p className="max-w-2xl !pt-0 text-sm leading-relaxed text-psa-chalk">
         A delayed vessel arrival compresses the recovery window. PSA must preserve
         outbound connections for affected containers using scarce expedite capacity —
         without guessing before operational evidence arrives.
       </p>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 !pt-0">
         <MetricCard
           label="Schedule event"
           value={fixture?.event.id ?? "—"}
@@ -46,7 +49,7 @@ export function IncidentChapter({
       </div>
 
       {fixture ? (
-        <div className="psa-surface-nested rounded-[8px] px-4 py-4">
+        <div>
           <p className="psa-label">Disruption context</p>
           <p className="mt-2 text-sm text-psa-chalk">
             <span className="font-mono text-psa-snow">{fixture.event.vessel_name}</span>{" "}
@@ -57,7 +60,7 @@ export function IncidentChapter({
       ) : null}
 
       {services.length > 0 ? (
-        <div className="psa-surface-nested rounded-[8px] px-4 py-4">
+        <div>
           <p className="psa-label">Affected connections</p>
           <ul className="mt-3 space-y-2 text-sm text-psa-chalk">
             {services.map((service) => (

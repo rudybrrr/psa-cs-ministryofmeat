@@ -1,5 +1,3 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..500;14..32,600&display=swap");
-
 @theme {
   --color-psa-void: #070809;
   --color-psa-graphite: #121316;
@@ -21,10 +19,21 @@
   --color-psa-fern: #22c55e;
   --color-psa-coral: #f87171;
   --font-psa: "Inter", system-ui, -apple-system, sans-serif;
+  --font-psa-mono: ui-monospace, "SF Mono", "Cascadia Code", "Segoe UI Mono", monospace;
+}
+
+@keyframes psa-finale-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 :root {
-  color-scheme: dark;
   font-family: var(--font-psa);
   font-feature-settings: "ss01" on, "ss03" on;
   line-height: 1.5;
@@ -51,23 +60,25 @@ button {
   cursor: pointer;
 }
 
-/* Surface hierarchy — visibly distinct layers */
+/* Canvas — plain void; structure comes from layout, not decoration */
+.psa-canvas {
+  background-color: var(--color-psa-void);
+}
+
+/* Surface hierarchy — elevation via tone, hairlines only where needed */
 .psa-surface {
   background: var(--color-psa-charcoal);
-  border: 0.5px solid rgba(255, 255, 255, 0.12);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  border: 0.5px solid rgba(255, 255, 255, 0.1);
 }
 
 .psa-surface-nested {
   background: var(--color-psa-slate);
-  border: 0.5px solid rgba(255, 255, 255, 0.1);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  border: 0.5px solid rgba(255, 255, 255, 0.08);
 }
 
 .psa-surface-active {
-  background: var(--color-psa-slate);
-  border: 0.5px solid rgba(255, 255, 255, 0.14);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  background: #2a2c32;
+  border: 0.5px solid rgba(255, 255, 255, 0.12);
 }
 
 .psa-surface-chrome {
@@ -79,7 +90,33 @@ button {
   background: var(--color-psa-data);
   border: 0.5px solid rgba(0, 0, 0, 0.08);
   color: var(--color-psa-data-ink);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+/* Evidence artifacts — light surfaces; chapter tone via heading color only */
+.psa-evidence {
+  background: var(--color-psa-data);
+  border: 0.5px solid rgba(0, 0, 0, 0.08);
+  color: var(--color-psa-data-ink);
+}
+
+.psa-evidence--optimize .psa-evidence__title {
+  color: #475569;
+}
+
+.psa-evidence--adapt .psa-evidence__title {
+  color: #2563eb;
+}
+
+.psa-evidence--coordinate .psa-evidence__title {
+  color: #b45309;
+}
+
+.psa-evidence--respond .psa-evidence__title {
+  color: #64748b;
+}
+
+.psa-evidence--protect .psa-evidence__title {
+  color: #dc2626;
 }
 
 .psa-label {
@@ -89,12 +126,63 @@ button {
   color: var(--color-psa-steel);
 }
 
-.psa-kpi {
+.psa-meta {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-psa-steel);
+}
+
+.psa-mono {
+  font-family: var(--font-psa-mono);
   font-variant-numeric: tabular-nums;
-  font-size: 1.75rem;
+}
+
+.psa-kpi {
+  font-family: var(--font-psa-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 1.625rem;
   font-weight: 500;
   line-height: 1.1;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.03em;
+}
+
+/* Segmented control (presentation mode) */
+.psa-segment {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 8px;
+  background: var(--color-psa-charcoal);
+  border: 0.5px solid rgba(255, 255, 255, 0.08);
+}
+
+.psa-segment__btn {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  border-radius: 6px;
+  padding: 0.45rem 0.35rem;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.2;
+  color: var(--color-psa-fog);
+  background: transparent;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.psa-segment__btn:hover {
+  color: var(--color-psa-chalk);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.psa-segment__btn[aria-pressed="true"] {
+  color: var(--color-psa-snow);
+  background: var(--color-psa-slate);
+}
+
+.psa-segment__btn:focus-visible {
+  outline: 2px solid var(--color-psa-signal);
+  outline-offset: 1px;
 }
 
 /* Button system */
@@ -104,7 +192,7 @@ button {
   justify-content: center;
   min-height: 2.75rem;
   padding: 0 1.25rem;
-  border-radius: 9px;
+  border-radius: 8px;
   font-size: 0.875rem;
   font-weight: 500;
   line-height: 1;
@@ -122,7 +210,7 @@ button {
 }
 
 .psa-btn-primary {
-  border: 0.5px solid rgba(255, 255, 255, 0.15);
+  border: 0.5px solid rgba(255, 255, 255, 0.12);
   background: var(--color-psa-bone);
   color: var(--color-psa-ink);
 }
@@ -132,14 +220,13 @@ button {
 }
 
 .psa-btn-secondary {
-  border: 0.5px solid rgba(255, 255, 255, 0.16);
+  border: 0.5px solid rgba(255, 255, 255, 0.14);
   background: var(--color-psa-charcoal);
   color: var(--color-psa-snow);
 }
 
 .psa-btn-secondary:hover:not(:disabled) {
   background: var(--color-psa-slate);
-  border-color: rgba(255, 255, 255, 0.22);
 }
 
 .psa-btn-ghost {

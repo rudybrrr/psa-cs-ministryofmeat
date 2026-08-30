@@ -14,7 +14,8 @@
         "rule": "overused-font",
         "value": "inter",
         "files": [
-          "web/src/styles/tokens.css"
+          "web/src/styles/tokens.css",
+          "web/src/index.css"
         ],
         "createdAt": "2026-08-30T00:16:46.058Z",
         "reason": "user confirmed: PSA command center synthesis mandates Inter per Default+Grafbase spec"

@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { SyntheticBanner } from "./SyntheticBanner";
 import { useRecoveryConsole } from "../hooks/useRecoveryConsole";
@@ -13,6 +13,12 @@ import type { CanonicalReplayActionType } from "../api/types";
 import { useAutoReplay } from "../hooks/useAutoReplay";
 import type { AutoReplayCallbacks } from "../lib/autoReplayController";
 import { canAdvanceAgent, canonicalApprovalFingerprint } from "../lib/recoverySelectors";
+import { describeConsoleError } from "../lib/consoleErrors";
+import {
+  RECOVERY_CHAPTERS,
+  chapterForStage,
+  chapterIndex,
+} from "../lib/recoveryChapters";
 import { type ConsoleMode } from "./command-center/ModeSwitcher";
 import { RecoveryKpiStrip } from "./command-center/RecoveryKpiStrip";
 import { ChapterProgress } from "./command-center/ChapterProgress";
@@ -28,15 +34,18 @@ import { DashboardContentHeader } from "./command-center/DashboardContentHeader"
 import { StageActionCard } from "./command-center/StageActionCard";
 import { AutoReplayPanel } from "./command-center/AutoReplayPanel";
 import { ExploreAvailability } from "./command-center/ExploreAvailability";
+import { ExploreWorkspaceEmpty } from "./command-center/ExploreWorkspaceEmpty";
+import { LoadingIndicator } from "./command-center/LoadingIndicator";
+import { EvidenceWorkspace } from "./command-center/workspaces/EvidenceWorkspace";
 import { RecoveryWorkspace } from "./command-center/workspaces/RecoveryWorkspace";
 import { ContainersWorkspace } from "./command-center/workspaces/ContainersWorkspace";
 import { CarrierWorkspace } from "./command-center/workspaces/CarrierWorkspace";
-import { EvidenceWorkspace } from "./command-center/workspaces/EvidenceWorkspace";
 
 export function OperationsConsole() {
   const console = useRecoveryConsole();
   const [mode, setMode] = useState<ConsoleMode>("guided");
   const [workspace, setWorkspace] = useState<DashboardNavId>("overview");
+  const [reviewChapterIndex, setReviewChapterIndex] = useState<number | null>(null);
   const run = console.agentRuns.at(-1) ?? null;
   const agentEvidenceCanAdvance = canAdvanceAgent(run, {
     carrierHistory: console.agentWaitHistory,
@@ -151,6 +160,11 @@ export function OperationsConsole() {
     mode === "explore" && !console.incident && !console.loading && !showResume;
 
   const handleModeChange = (nextMode: ConsoleMode) => {
+    if (nextMode === "explore" && !console.incident && !console.storedIncidentId) {
+      setMode("guided");
+      setWorkspace("overview");
+      return;
+    }
     setMode(nextMode);
     if (nextMode === "explore" && console.incident) {
       setWorkspace("evidence");
@@ -162,6 +176,24 @@ export function OperationsConsole() {
 
   const apiStatus = console.error ? "error" : console.loading ? "loading" : "ready";
   const incidentLoaded = Boolean(console.incident);
+  const activeChapterIndex = incidentLoaded
+    ? chapterIndex(chapterForStage(console.canonicalStage.stage))
+    : 0;
+  const focusChapterId =
+    reviewChapterIndex != null ? RECOVERY_CHAPTERS[reviewChapterIndex]?.id : null;
+  const errorPresentation = console.error ? describeConsoleError(console.error) : null;
+
+  useEffect(() => {
+    setReviewChapterIndex(null);
+  }, [console.canonicalStage?.stage]);
+
+  const handleReviewPrevious = () => {
+    if (reviewChapterIndex !== null) {
+      setReviewChapterIndex(null);
+      return;
+    }
+    setReviewChapterIndex(Math.max(0, activeChapterIndex - 1));
+  };
 
   const workspaceContent = incidentLoaded ? (
     <>
@@ -275,20 +307,24 @@ export function OperationsConsole() {
         ) : null}
 
         {console.loading ? (
-          <div className="psa-surface rounded-[10px] px-4 py-3 text-sm text-psa-chalk">
-            Contacting backend and loading persisted incident state…
-          </div>
+          <LoadingIndicator label="Contacting backend and loading persisted incident state…" />
         ) : null}
 
-        {console.error ? (
+        {errorPresentation ? (
           <div
             role="alert"
-            className="rounded-[10px] border border-psa-coral/50 bg-psa-coral/10 px-4 py-3 text-sm text-psa-snow"
+            className="rounded-[10px] border border-psa-coral/50 bg-psa-coral/10 px-4 py-4 text-sm text-psa-snow"
           >
-            <p className="font-semibold">Operations console error</p>
-            <p className="mt-1 font-mono text-xs">
-              {console.error.status}: {console.error.detail}
-            </p>
+            <p className="font-semibold">{errorPresentation.title}</p>
+            <p className="mt-2 text-sm text-psa-chalk">{errorPresentation.detail}</p>
+            <button
+              type="button"
+              disabled={console.loading}
+              onClick={() => void console.refresh()}
+              className="psa-btn-secondary mt-4 px-4 py-2 text-xs"
+            >
+              Try again
+            </button>
           </div>
         ) : null}
 
@@ -363,28 +399,28 @@ export function OperationsConsole() {
         ) : null}
 
         {showGuidedOverview ? (
-          <>
-            <RecoveryKpiStrip
-              summary={console.recoverySummary}
-              emptyPlaceholder={isGuidedEmpty}
-            />
-
+          <div className="space-y-5">
             <ChapterProgress
               stage={console.canonicalStage?.stage}
               empty={isGuidedEmpty}
+              highlightIndex={reviewChapterIndex ?? undefined}
             />
 
             <StageActionCard
               stage={console.canonicalStage}
               incident={console.incident}
-              fixture={console.fixture}
               loading={console.loading}
               approvalFingerprint={fingerprint}
+              agentRun={run}
               onExecute={executeGuidedAction}
+              onReviewPrevious={incidentLoaded ? handleReviewPrevious : undefined}
+              reviewingPrior={reviewChapterIndex !== null}
               emptyState={
                 isGuidedEmpty ? (
                   <GuidedIntroSurface
                     loading={console.loading}
+                    summary={console.recoverySummary}
+                    fixture={console.fixture}
                     onStart={() => executeGuidedAction("CREATE_CANONICAL_INCIDENT")}
                   />
                 ) : undefined
@@ -392,9 +428,16 @@ export function OperationsConsole() {
             />
 
             {incidentLoaded ? (
+              <RecoveryKpiStrip summary={console.recoverySummary} compact />
+            ) : (
+              <RecoveryKpiStrip summary={null} emptyPlaceholder={isGuidedEmpty} compact />
+            )}
+
+            {incidentLoaded ? (
               <ChapterContextualRegion
                 mode={mode}
                 stage={console.canonicalStage}
+                focusChapterOverride={focusChapterId}
                 incident={console.incident}
                 fixture={console.fixture}
                 summary={console.recoverySummary}
@@ -432,10 +475,22 @@ export function OperationsConsole() {
                 onCreateSafetyReview={() => void console.createSafetyReview("SYN-CNT-010")}
               />
             ) : null}
-          </>
+          </div>
         ) : null}
 
         {workspace !== "overview" ? workspaceContent : null}
+
+        {mode === "explore" && !incidentLoaded && workspace !== "overview" ? (
+          <ExploreWorkspaceEmpty
+            tab={workspace}
+            loading={console.loading}
+            onStartGuided={() => {
+              setMode("guided");
+              setWorkspace("overview");
+              executeGuidedAction("CREATE_CANONICAL_INCIDENT");
+            }}
+          />
+        ) : null}
 
         {mode === "explore" && incidentLoaded && workspace === "overview" ? (
           <>

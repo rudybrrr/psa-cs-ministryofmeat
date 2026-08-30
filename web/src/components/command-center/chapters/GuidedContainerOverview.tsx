@@ -5,15 +5,17 @@ export function GuidedContainerOverview({
   rows,
   selectedContainerId,
   onSelect,
+  defaultOpen = false,
 }: {
   rows: ContainerRecoveryRow[];
   selectedContainerId: string | null;
   onSelect: (containerId: string) => void;
+  defaultOpen?: boolean;
 }) {
   if (rows.length === 0) return null;
 
   return (
-    <details className="psa-surface-nested rounded-[8px] px-4 py-3" open>
+    <details className="rounded-[10px] border border-white/8 bg-psa-charcoal/30 px-4 py-3" open={defaultOpen}>
       <summary className="cursor-pointer text-sm font-medium text-psa-snow">
         Affected containers ({rows.length})
       </summary>

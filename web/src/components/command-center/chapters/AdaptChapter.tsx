@@ -9,16 +9,18 @@ import gsap from "gsap";
 import { buildAllocationComparison } from "../../../lib/chapterContext";
 import { latestSnapshot } from "../../../lib/recoverySelectors";
 import { motionEnabled } from "../../../lib/useReducedMotion";
-import { ChapterFrame, ComparisonColumn, MetricCard } from "./ChapterFrame";
+import { ChapterFrame, ComparisonColumn, MetricCard, EvidencePanel } from "./ChapterFrame";
 
 export function AdaptChapter({
   snapshots,
   revisions,
   commitments,
+  quiet = false,
 }: {
   snapshots: YardForecastSnapshot[];
   revisions: AllocationRevision[];
   commitments: ExpediteCommitment[];
+  quiet?: boolean;
 }) {
   const comparison = buildAllocationComparison(revisions, commitments);
   const preDischarge = latestSnapshot(snapshots, "PRE_DISCHARGE");
@@ -43,8 +45,9 @@ export function AdaptChapter({
     <ChapterFrame
       label="Chapter 4 · Adapt"
       title="Evidence arrives — allocation revises under locked commitments"
+      quiet={quiet}
     >
-      <div className="grid gap-3 lg:grid-cols-3">
+      <div className="grid gap-3 lg:grid-cols-3 !pt-0">
         <MetricCard
           label="Forecast transition"
           value={
@@ -74,7 +77,7 @@ export function AdaptChapter({
 
       {comparison.prior && comparison.current ? (
         <div className="grid gap-3 lg:grid-cols-2">
-          <ComparisonColumn heading={`${comparison.label} · prior (R0)`} light>
+          <ComparisonColumn heading={`${comparison.label} · prior (R0)`} tone="adapt">
             <p className="font-mono text-sm font-medium">
               {comparison.totalBefore} scenario-world total
             </p>
@@ -82,7 +85,7 @@ export function AdaptChapter({
               Expected preserved {comparison.expectedBefore?.toFixed(2)}
             </p>
           </ComparisonColumn>
-          <ComparisonColumn heading={`${comparison.label} · current (R1)`} light>
+          <ComparisonColumn heading={`${comparison.label} · current (R1)`} tone="adapt">
             <p className="font-mono text-sm font-medium">
               {comparison.totalAfter} scenario-world total
             </p>
@@ -99,33 +102,30 @@ export function AdaptChapter({
       ) : null}
 
       {changedSwaps.length > 0 ? (
-        <div className="psa-data-surface rounded-[10px] px-4 py-4">
-          <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-psa-data-ink/60">
-            Allocation changes (R0 → R1)
-          </p>
-          <div ref={swapListRef} className="mt-3 flex flex-wrap gap-2">
+        <EvidencePanel title="Allocation changes (R0 → R1)" tone="adapt">
+          <div ref={swapListRef} className="flex flex-wrap gap-2">
             {changedSwaps.map((swap) => (
               <span
                 key={swap.containerId}
                 data-swap-chip
-                className="rounded-[6px] border border-black/10 bg-white px-2.5 py-1.5 font-mono text-xs font-medium text-psa-data-ink"
+                className="psa-mono rounded-[6px] border border-black/10 bg-white px-2.5 py-1.5 text-xs font-medium text-psa-data-ink"
               >
                 {swap.containerId} {swap.before} → {swap.after}
               </span>
             ))}
           </div>
           {comparison.locked.length > 0 ? (
-            <p className="mt-3 text-xs text-psa-data-ink/70">
+            <p className="text-xs text-psa-data-ink/70">
               Locked commitments remain stable: {comparison.locked.join(", ")}
             </p>
           ) : null}
-        </div>
+        </EvidencePanel>
       ) : null}
 
       {comparison.commitmentLines.length > 0 ? (
-        <div className="psa-surface-nested rounded-[8px] px-4 py-4">
-          <p className="psa-label">Commitment disposition</p>
-          <p className="mt-2 font-mono text-xs leading-relaxed text-psa-chalk">
+        <div>
+          <p className="psa-meta">Commitment disposition</p>
+          <p className="psa-mono mt-2 text-xs leading-relaxed text-psa-chalk">
             {comparison.commitmentLines.join(" · ")}
           </p>
         </div>

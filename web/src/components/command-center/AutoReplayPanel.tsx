@@ -32,7 +32,7 @@ export function AutoReplayPanel({
   return (
     <section className="psa-surface overflow-hidden rounded-[12px]" aria-labelledby="auto-replay-heading">
       <div className="border-b border-white/10 px-5 py-5 sm:px-6">
-        <p className="psa-label text-psa-signal">Presentation mode</p>
+        <p className="psa-meta">Presentation mode</p>
         <h2 id="auto-replay-heading" className="mt-1 text-xl font-medium tracking-[-0.02em] text-psa-snow">
           Auto replay
         </h2>
@@ -45,17 +45,17 @@ export function AutoReplayPanel({
       <div className="grid gap-0 lg:grid-cols-[1.1fr_0.9fr]">
         <div className="space-y-4 border-b border-white/10 px-5 py-5 lg:border-b-0 lg:border-r lg:px-6">
           <div className="psa-surface-nested rounded-[10px] px-4 py-4">
-            <p className="psa-label">Current chapter</p>
+            <p className="psa-meta">Current chapter</p>
             <p className="mt-2 text-lg font-medium text-psa-snow">{chapter.label}</p>
             <p className="mt-1 text-sm text-psa-chalk">{chapter.summary}</p>
           </div>
 
           <div className="psa-surface-nested rounded-[10px] px-4 py-4">
-            <p className="psa-label">Current action</p>
+            <p className="psa-meta">Current action</p>
             <p className="mt-2 text-sm font-medium text-psa-snow">{currentPresentation.headline}</p>
             <p className="mt-1 text-xs text-psa-steel">{currentPresentation.detail}</p>
             {progress.running ? (
-              <p className="mt-3 text-xs uppercase tracking-wide text-psa-signal">Running…</p>
+              <p className="mt-3 text-xs text-psa-signal">Running…</p>
             ) : null}
           </div>
 
@@ -71,7 +71,7 @@ export function AutoReplayPanel({
         </div>
 
         <div className="bg-psa-slate/50 px-5 py-5 lg:px-6">
-          <p className="psa-label">Playback controls</p>
+          <p className="psa-meta">Playback controls</p>
           <div className="mt-3 flex flex-wrap items-center gap-2">
             {!progress.running ? (
               <button
@@ -95,7 +95,7 @@ export function AutoReplayPanel({
             ) : null}
           </div>
 
-          <p className="mt-2 font-mono text-[10px] text-psa-steel">{stage.stage}</p>
+          <p className="psa-mono mt-2 text-[10px] text-psa-steel">{stage.stage}</p>
 
           <ol className="mt-3 max-h-40 overflow-y-auto rounded-[8px] border border-white/10 bg-psa-void/70 px-3 py-2 font-mono text-[11px] text-psa-steel">
             {progress.log.length === 0 ? (

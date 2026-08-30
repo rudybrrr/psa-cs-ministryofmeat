@@ -12,12 +12,16 @@ export function ProtectChapter({
   histories,
   loading,
   onCreateCanonical,
+  evidenceOnly = false,
+  quiet = false,
 }: {
   run: AgentRun | null;
   reviews: CargoSafetyReview[];
   histories: CargoSafetyHistory[];
   loading: boolean;
   onCreateCanonical(): void;
+  evidenceOnly?: boolean;
+  quiet?: boolean;
 }) {
   const history = histories[0];
   const assessment = history?.assessment;
@@ -39,14 +43,15 @@ export function ProtectChapter({
     <ChapterFrame
       label="Chapter 7 · Protect"
       title="Semantic detection — deterministic safety owns automation"
+      quiet={quiet}
     >
-      <p className="max-w-2xl text-sm leading-relaxed text-psa-chalk">
+      <p className="max-w-2xl !pt-0 text-sm leading-relaxed text-psa-chalk">
         Cargo safety separates semantic inconsistency detection from deterministic
         automation policy. A blocked escalation is a controlled successful outcome —
         not an application failure.
       </p>
 
-      {reviews.length === 0 ? (
+      {reviews.length === 0 && !evidenceOnly ? (
         <button
           type="button"
           disabled={loading}
@@ -64,7 +69,7 @@ export function ProtectChapter({
       {history ? (
         <div ref={finaleRef} className="space-y-4">
           <div className="grid gap-4 lg:grid-cols-2">
-            <ComparisonColumn heading="Structured manifest" light>
+            <ComparisonColumn heading="Structured manifest" tone="protect">
               <p className="font-medium">Trusted declaration source</p>
               <p>
                 DG{" "}
@@ -73,7 +78,7 @@ export function ProtectChapter({
                 {assessment?.structured_commodity ?? "—"}
               </p>
             </ComparisonColumn>
-            <ComparisonColumn heading="Untrusted handling note" light>
+            <ComparisonColumn heading="Untrusted handling note" tone="protect">
               <p>{note?.text ?? "pending"}</p>
               <p className="text-psa-data-ink/60">({note?.source ?? "—"})</p>
             </ComparisonColumn>
@@ -81,10 +86,10 @@ export function ProtectChapter({
 
           <div
             data-protect-step
-            className="rounded-[8px] border border-psa-coral/40 bg-psa-coral/10 px-4 py-4"
+            className="border-l-2 border-psa-coral/60 pl-4"
           >
-            <p className="psa-label text-psa-coral">Semantic assessment</p>
-            <p className="mt-2 font-mono text-lg text-psa-snow">
+            <p className="psa-meta text-psa-coral">Semantic assessment</p>
+            <p className="psa-mono mt-2 text-lg text-psa-snow">
               {assessment?.result ?? "pending"}
             </p>
             {assessment ? (
@@ -101,11 +106,8 @@ export function ProtectChapter({
             )}
           </div>
 
-          <div
-            data-protect-step
-            className="rounded-[8px] border border-white/12 bg-psa-slate px-4 py-4"
-          >
-            <p className="psa-label">Deterministic safety policy</p>
+          <div data-protect-step>
+            <p className="psa-meta">Deterministic safety policy</p>
             <p className="mt-2 text-sm font-medium text-psa-snow">
               {policy ? policy.disposition.replaceAll("_", " ") : "pending"}
             </p>
@@ -124,9 +126,9 @@ export function ProtectChapter({
       ) : null}
 
       {run?.state === "ESCALATED" ? (
-        <div className="psa-surface-nested rounded-[8px] border border-psa-coral/30 px-4 py-4">
-          <p className="psa-label">Final agent state</p>
-          <p className="mt-2 font-mono text-xl text-psa-coral">{run.state}</p>
+        <div className="border-l-2 border-psa-coral/50 pl-4">
+          <p className="psa-meta">Final agent state</p>
+          <p className="psa-mono mt-2 text-xl text-psa-coral">{run.state}</p>
           {run.escalation_reason ? (
             <p className="mt-2 text-sm text-psa-coral">
               Escalated: {run.escalation_reason}

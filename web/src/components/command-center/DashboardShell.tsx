@@ -14,7 +14,7 @@ export function DashboardShell({
       {sidebar}
       <div className="flex min-w-0 flex-1 flex-col">
         {header}
-        <main className="min-w-0 flex-1 overflow-x-hidden px-4 py-4 lg:px-6 lg:py-5">
+        <main className="psa-canvas min-w-0 flex-1 overflow-x-hidden px-4 py-4 lg:px-6 lg:py-5">
           <div className="mx-auto w-full max-w-[1400px] space-y-4">{children}</div>
         </main>
       </div>

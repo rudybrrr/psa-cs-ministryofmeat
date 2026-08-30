@@ -506,7 +506,9 @@ describe("OperationsConsole error state", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByRole("alert")).toHaveTextContent("503");
+      expect(screen.getByRole("alert")).toHaveTextContent("Server error");
+      expect(screen.getByRole("alert")).toHaveTextContent("Synthetic scenario unavailable");
+      expect(screen.getByRole("button", { name: /try again/i })).toBeInTheDocument();
     });
   });
 });
@@ -581,6 +583,14 @@ describe("RecoveryConsole persisted-state carrier flows", () => {
       createFetchMock({
         carrierCases: [counterCase],
         historyByCase: { [CASE_ID]: counterHistory },
+        canonicalStage: defaultStageView({
+          stage: "COUNTER_APPROVAL_REQUIRED",
+          ordinal: 12,
+          progress_label: "Stage 12 of 16",
+          status: "WAITING_HUMAN",
+          next_allowed_action: "APPROVE_COUNTER",
+          requires_human_authority: true,
+        }),
         onPost: (url, body) => posts.push({ url, body }),
       }),
     );
@@ -598,10 +608,10 @@ describe("RecoveryConsole persisted-state carrier flows", () => {
     await waitFor(() => {
       expect(screen.getByText(/carrier counter received — waiting for operator approval/i)).toBeInTheDocument();
       expect(screen.getByText(/06:45Z/)).toBeInTheDocument();
-      expect(screen.getAllByRole("button", { name: /approve counter/i }).length).toBeGreaterThan(0);
+      expect(screen.getByRole("button", { name: /approve counter/i })).toBeInTheDocument();
     });
 
-    await user.click(screen.getAllByRole("button", { name: /approve counter/i })[0]);
+    await user.click(screen.getByRole("button", { name: /approve counter/i }));
 
     await waitFor(() => {
       const approval = posts.find((post) => post.url.endsWith("/counter-approval"));
@@ -714,7 +724,7 @@ describe("OperationsConsole guided Phase 6 entry flow", () => {
     await user.click(screen.getByRole("button", { name: /^start recovery demo$/i }));
     await waitFor(() => expect(screen.getByText("SYN-EVENT")).toBeInTheDocument());
     expect(posts.filter((url) => url.endsWith("/agent-runs") && url.includes("/advance")).length).toBe(0);
-    await user.click(screen.getAllByRole("button", { name: /publish yard forecast/i }).at(-1)!);
+    await user.click(screen.getByRole("button", { name: /publish yard forecast/i }));
     await waitFor(() => expect(posts.filter((url) => url.endsWith("/bootstrap")).length).toBe(1));
     expect(posts.some((url) => url.includes("/agent-runs/") && url.endsWith("/advance"))).toBe(false);
     expect(posts.some((url) => url.includes("optimizer") || url.includes("allocation-tradeoff-options/") && !url.endsWith("/bootstrap"))).toBe(false);
@@ -1353,11 +1363,26 @@ describe("OperationsConsole full guided Phase 6 journey", () => {
   afterEach(() => cleanup());
 
   function advanceButton() {
-    return screen.getByRole("button", { name: /advance agent once/i });
+    return screen.getByRole("button", { name: /advance orchestration/i });
   }
 
   async function expectAdvanceDisabled() {
-    await waitFor(() => expect(advanceButton()).toBeDisabled());
+    const advance = screen.queryByRole("button", { name: /advance orchestration/i });
+    if (advance) {
+      await waitFor(() => expect(advance).toBeDisabled());
+      return;
+    }
+    await waitFor(() => {
+      const canonicalWaitActions = [
+        /publish discharge evidence/i,
+        /simulate carrier response/i,
+        /approve request/i,
+        /approve counter/i,
+      ];
+      expect(
+        canonicalWaitActions.some((name) => screen.queryByRole("button", { name }) !== null),
+      ).toBe(true);
+    });
   }
 
   it("drives create, bootstrap, agent waits, evidence, approvals, counter, and safety escalation without authority bypass", async () => {
@@ -1375,7 +1400,7 @@ describe("OperationsConsole full guided Phase 6 journey", () => {
 
     await user.click(await screen.findByRole("cell", { name: "SYN-CNT-017" }));
 
-    await user.click(screen.getAllByRole("button", { name: /publish yard forecast/i }).at(-1)!);
+    await user.click(screen.getByRole("button", { name: /publish yard forecast/i }));
     await waitFor(() => {
       expect(screen.getByText(/wide uncertainty/)).toBeInTheDocument();
       expect(screen.getAllByText(/PRE_DISCHARGE/).length).toBeGreaterThan(0);
@@ -1383,13 +1408,13 @@ describe("OperationsConsole full guided Phase 6 journey", () => {
     expect(backend.counts.bootstrap).toBe(1);
 
     await user.click(screen.getByRole("button", { name: /start recovery agent/i }));
-    await waitFor(() => expect(screen.getByText("CREATED")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/CREATED/i)).toBeInTheDocument());
     expect(backend.counts.startDemoRun).toBe(1);
     expect(backend.counts.start).toBe(0);
     expect(backend.counts.advance).toBe(0);
 
     await user.click(advanceButton());
-    const waitBanner = await screen.findByText("NEW_OPERATIONAL_EVIDENCE");
+    const waitBanner = await screen.findByText("Operational evidence needed");
     await waitFor(() => {
       expect(waitBanner).toBeInTheDocument();
       expect(screen.getByText(/waiting for updated yard forecast/i)).toBeInTheDocument();
@@ -1397,7 +1422,7 @@ describe("OperationsConsole full guided Phase 6 journey", () => {
     expect(backend.counts.advance).toBe(1);
     await expectAdvanceDisabled();
 
-    await user.click(screen.getAllByRole("button", { name: /publish discharge evidence/i })[0]);
+    await user.click(screen.getByRole("button", { name: /publish discharge evidence/i }));
     await waitFor(() => {
       expect(screen.getByText(/tighter forecast band/)).toBeInTheDocument();
       expect(screen.getAllByText(/DISCHARGE_ACTIVE/).length).toBeGreaterThan(0);
@@ -1420,14 +1445,14 @@ describe("OperationsConsole full guided Phase 6 journey", () => {
 
     await user.click(advanceButton());
     await waitFor(() => {
-      expect(screen.getByText("REQUEST_APPROVAL")).toBeInTheDocument();
+      expect(screen.getByText("Carrier request approval")).toBeInTheDocument();
       expect(screen.getByText(/RTA proposal awaiting operator approval/i)).toBeInTheDocument();
       expect(screen.queryByRole("button", { name: /prepare carrier recovery/i })).not.toBeInTheDocument();
     });
     expect(backend.counts.advance).toBe(3);
     expect(backend.counts.prepare).toBe(0);
 
-    await user.click(screen.getAllByRole("button", { name: /approve request/i })[0]);
+    await user.click(screen.getByRole("button", { name: /approve request/i }));
     await waitFor(() => {
       const approval = backend.posts.find((post) => post.url.endsWith("/request-approval"));
       expect(approval?.body).toEqual({
@@ -1444,14 +1469,14 @@ describe("OperationsConsole full guided Phase 6 journey", () => {
 
     await user.click(advanceButton());
     await waitFor(() => {
-      expect(screen.getByText("CARRIER_RESPONSE_OR_TIMEOUT")).toBeInTheDocument();
+      expect(screen.getByText("Awaiting carrier response")).toBeInTheDocument();
       expect(screen.getAllByText(/waiting for carrier response/i).length).toBeGreaterThan(0);
     });
     expect(backend.counts.advance).toBe(4);
     expect(backend.counts.send).toBe(0);
     await expectAdvanceDisabled();
 
-    await user.click(screen.getAllByRole("button", { name: /simulate carrier response/i })[0]);
+    await user.click(screen.getByRole("button", { name: /simulate carrier response/i }));
     await waitFor(() => {
       expect(screen.getByText(/carrier counter received — waiting for operator approval/i)).toBeInTheDocument();
       expect(screen.getByText(/06:45Z/)).toBeInTheDocument();
@@ -1461,14 +1486,14 @@ describe("OperationsConsole full guided Phase 6 journey", () => {
 
     await user.click(advanceButton());
     await waitFor(() => {
-      expect(screen.getByRole("alert")).toHaveTextContent("409");
-      expect(screen.getByText("COUNTER_APPROVAL")).toBeInTheDocument();
-      expect(screen.getByText(/operator approval required for carrier counter/i)).toBeInTheDocument();
+      expect(screen.getByRole("alert")).toHaveTextContent("Action blocked");
+      expect(screen.getByText("Carrier counter approval")).toBeInTheDocument();
+      expect(screen.getByText(/operator approval required for the carrier counter/i)).toBeInTheDocument();
     });
     expect(backend.counts.advance).toBe(5);
     await expectAdvanceDisabled();
 
-    await user.click(screen.getAllByRole("button", { name: /approve counter/i })[0]);
+    await user.click(screen.getByRole("button", { name: /approve counter/i }));
     await waitFor(() => {
       const approval = backend.posts.find((post) => post.url.endsWith("/counter-approval"));
       expect(approval?.body).toEqual({

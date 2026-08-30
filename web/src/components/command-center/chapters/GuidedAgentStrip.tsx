@@ -1,13 +1,7 @@
 import type { ReactNode } from "react";
 import type { AgentHistory, AgentRun } from "../../../api/types";
-
-const waitCopy: Record<string, string> = {
-  NEW_OPERATIONAL_EVIDENCE: "Waiting for updated yard forecast",
-  REQUEST_APPROVAL: "Operator approval required",
-  CARRIER_RESPONSE_OR_TIMEOUT: "Waiting for carrier response",
-  COUNTER_APPROVAL: "Operator approval required for carrier counter",
-  HUMAN_TRADEOFF_DECISION: "Operator must select one persisted feasible option",
-};
+import { agentStateLabel } from "../../../lib/agentRunPresentation";
+import { waitKindPresentation } from "../../../lib/waitKindCopy";
 
 export function GuidedAgentStrip({
   run,
@@ -17,6 +11,7 @@ export function GuidedAgentStrip({
   onAdvance,
   onRefresh,
   yardActions,
+  guided = false,
 }: {
   run: AgentRun | null;
   history: AgentHistory | null;
@@ -25,24 +20,44 @@ export function GuidedAgentStrip({
   onAdvance(): void;
   onRefresh(): void;
   yardActions?: ReactNode;
+  guided?: boolean;
 }) {
   if (!run) return null;
 
   const latest = history?.tool_invocations.at(-1);
+  const showControls = !guided;
+  const waiting = waitKindPresentation(run.wait_kind);
+
+  if (guided && run.state !== "WAITING" && !run.escalation_reason && !latest) {
+    return null;
+  }
 
   return (
-    <div className="psa-surface-nested space-y-3 rounded-[8px] px-4 py-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="psa-label">Agent orchestration</p>
-          <p className="mt-1 font-mono text-sm text-psa-snow">{run.state}</p>
-          {latest ? (
-            <p className="mt-1 text-xs text-psa-steel">
-              Latest tool: {latest.tool_name} · {latest.status}
-            </p>
-          ) : null}
-        </div>
-        <div className="flex flex-wrap gap-2">
+    <div className="border-t border-white/8 pt-4">
+      {run.state === "WAITING" && waiting ? (
+        <>
+          <p className="text-xs font-medium text-psa-amber">{waiting.label}</p>
+          <p className="mt-1 text-sm text-psa-chalk">{waiting.detail}</p>
+        </>
+      ) : (
+        <>
+          <p className="psa-meta">Agent status</p>
+          <p className="mt-1 text-sm text-psa-snow">{agentStateLabel(run.state)}</p>
+        </>
+      )}
+
+      {latest && !guided ? (
+        <p className="mt-1 text-xs text-psa-steel">
+          Latest tool: {latest.tool_name} · {latest.status}
+        </p>
+      ) : null}
+
+      {run.escalation_reason ? (
+        <p className="mt-2 text-sm text-psa-coral">Escalated: {run.escalation_reason}</p>
+      ) : null}
+
+      {showControls ? (
+        <div className="mt-3 flex flex-wrap gap-2">
           {yardActions}
           <button
             type="button"
@@ -65,24 +80,11 @@ export function GuidedAgentStrip({
             Refresh
           </button>
         </div>
-      </div>
-
-      {run.state === "WAITING" && run.wait_kind ? (
-        <div className="rounded-[6px] border border-psa-amber/40 bg-psa-amber/10 px-3 py-3 text-sm text-psa-snow">
-          <p className="font-mono text-xs text-psa-amber">{run.wait_kind}</p>
-          <p className="mt-1">{waitCopy[run.wait_kind] ?? "Waiting for persisted external state"}</p>
-        </div>
       ) : null}
 
-      {run.escalation_reason ? (
-        <p className="text-sm text-psa-coral">
-          Escalated: {run.escalation_reason}
-        </p>
+      {!guided && history?.steps.at(-1)?.action_summary ? (
+        <p className="mt-2 text-xs text-psa-steel">{history.steps.at(-1)?.action_summary}</p>
       ) : null}
-
-      <p className="text-xs text-psa-steel">
-        {history?.steps.at(-1)?.action_summary ?? "No action summary persisted."}
-      </p>
     </div>
   );
 }

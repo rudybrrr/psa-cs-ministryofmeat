@@ -32,6 +32,7 @@ import { RespondChapter } from "./chapters/RespondChapter";
 export interface ChapterContextualRegionProps {
   mode: ConsoleMode;
   stage: CanonicalReplayStageView;
+  focusChapterOverride?: RecoveryChapterId | null;
   incident: Incident | null;
   fixture: CanonicalIncidentFixture | null;
   summary: RecoverySummary | null;
@@ -97,16 +98,19 @@ function resolveActiveChapter(
 }
 
 export function ChapterContextualRegion(props: ChapterContextualRegionProps) {
-  const chapter = resolveActiveChapter(props.stage, props.carrierCase);
+  const chapter = props.focusChapterOverride ?? resolveActiveChapter(props.stage, props.carrierCase);
   const chapterRef = useChapterTransition(chapter);
+  const guided = props.mode === "guided";
+  const evidenceOnly = guided;
+  const quiet = guided;
 
   if (props.mode === "explore") {
     return null;
   }
 
-  const showAdaptEvidence =
-    props.allocationRevisions.length >= 2;
+  const showAdaptEvidence = props.allocationRevisions.length >= 2;
   const showAgent =
+    !guided &&
     Boolean(props.run) &&
     !["INCIDENT", "OPTIMIZE"].includes(chapter) &&
     !["ESCALATED", "COMPLETED", "FAILED"].includes(props.run?.state ?? "");
@@ -125,11 +129,14 @@ export function ChapterContextualRegion(props: ChapterContextualRegionProps) {
 
   return (
     <div ref={chapterRef} className="space-y-4" data-guided-context>
+      <p className="psa-meta">{guided ? "What changed" : "Chapter context"}</p>
+
       {chapter === "INCIDENT" ? (
         <IncidentChapter
           incident={props.incident}
           fixture={props.fixture}
           summary={props.summary}
+          quiet={quiet}
         />
       ) : null}
       {chapter === "OPTIMIZE" ? (
@@ -138,6 +145,8 @@ export function ChapterContextualRegion(props: ChapterContextualRegionProps) {
           scarcityEvaluation={props.scarcityEvaluation}
           loading={props.loading}
           onBootstrap={props.onBootstrap}
+          evidenceOnly={evidenceOnly}
+          quiet={quiet}
         />
       ) : null}
       {chapter === "OBSERVE" && !showAdaptEvidence ? (
@@ -145,6 +154,8 @@ export function ChapterContextualRegion(props: ChapterContextualRegionProps) {
           snapshots={props.yardForecasts}
           loading={props.loading}
           onPublishActive={props.onPublishActive}
+          evidenceOnly={evidenceOnly}
+          quiet={quiet}
         />
       ) : null}
       {showAdaptEvidence || chapter === "ADAPT" ? (
@@ -152,6 +163,7 @@ export function ChapterContextualRegion(props: ChapterContextualRegionProps) {
           snapshots={props.yardForecasts}
           revisions={props.allocationRevisions}
           commitments={props.expediteCommitments}
+          quiet={quiet}
         />
       ) : null}
       {chapter === "COORDINATE" ? (
@@ -164,6 +176,8 @@ export function ChapterContextualRegion(props: ChapterContextualRegionProps) {
           agentRunActive={props.agentRunActive}
           onApproveRequest={props.onApproveRequest}
           onRejectRequest={props.onRejectRequest}
+          evidenceOnly={evidenceOnly}
+          quiet={quiet}
         />
       ) : null}
       {chapter === "RESPOND" ? (
@@ -176,6 +190,8 @@ export function ChapterContextualRegion(props: ChapterContextualRegionProps) {
           onApproveCounter={props.onApproveCounter}
           onRejectCounter={props.onRejectCounter}
           onEvaluateTimeout={props.onEvaluateTimeout}
+          evidenceOnly={evidenceOnly}
+          quiet={quiet}
         />
       ) : null}
       {chapter === "PROTECT" || props.cargoReviews.length > 0 ? (
@@ -185,6 +201,8 @@ export function ChapterContextualRegion(props: ChapterContextualRegionProps) {
           histories={props.safetyHistories}
           loading={props.loading}
           onCreateCanonical={props.onCreateSafetyReview}
+          evidenceOnly={evidenceOnly}
+          quiet={quiet}
         />
       ) : null}
 
@@ -197,6 +215,7 @@ export function ChapterContextualRegion(props: ChapterContextualRegionProps) {
           onAdvance={props.onAdvanceAgent}
           onRefresh={props.onRefresh}
           yardActions={yardActions}
+          guided={guided}
         />
       ) : null}
 
@@ -205,6 +224,7 @@ export function ChapterContextualRegion(props: ChapterContextualRegionProps) {
           rows={props.containerRows}
           selectedContainerId={props.selectedContainerId}
           onSelect={props.onSelectContainer}
+          defaultOpen={!guided}
         />
       ) : null}
     </div>

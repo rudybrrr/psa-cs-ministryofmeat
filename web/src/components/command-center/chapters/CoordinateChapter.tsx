@@ -4,7 +4,7 @@ import type { CarrierRecoveryCase, CarrierRecoveryHistory } from "../../../api/t
 import type { ContainerRecoveryRow } from "../../../lib/recoverySelectors";
 import { connectionShortLabel, formatUtcClock, truncateId } from "../../../lib/formatters";
 import { useAuthorityGatePulse } from "../../../hooks/useChapterMotion";
-import { ChapterFrame } from "./ChapterFrame";
+import { ChapterFrame, EvidencePanel } from "./ChapterFrame";
 
 export function CoordinateChapter({
   selectedContainer,
@@ -15,6 +15,8 @@ export function CoordinateChapter({
   agentRunActive,
   onApproveRequest,
   onRejectRequest,
+  evidenceOnly = false,
+  quiet = false,
 }: {
   selectedContainer: ContainerRecoveryRow | null;
   carrierCase: CarrierRecoveryCase | null;
@@ -24,6 +26,8 @@ export function CoordinateChapter({
   agentRunActive: boolean;
   onApproveRequest(): void;
   onRejectRequest(): void;
+  evidenceOnly?: boolean;
+  quiet?: boolean;
 }) {
   const [showFingerprint, setShowFingerprint] = useState(false);
   const connectionId =
@@ -41,12 +45,13 @@ export function CoordinateChapter({
     <ChapterFrame
       label="Chapter 5 · Coordinate"
       title="Agent-prepared recovery — human authority required"
+      quiet={quiet}
     >
         <div
           ref={authorityRef}
-          className="rounded-[8px] border border-psa-amber/45 bg-psa-amber/10 px-4 py-4"
+          className="border-l-2 border-psa-amber/60 pl-4"
         >
-          <p className="psa-label text-psa-amber">Human authority required</p>
+          <p className="psa-meta text-psa-amber">Human authority required</p>
         <p className="mt-2 text-sm text-psa-chalk">
           The agent may prepare the JV2 recovery request and bind evidence. The agent
           may <strong className="text-psa-snow">not</strong> authorize outbound carrier
@@ -55,19 +60,16 @@ export function CoordinateChapter({
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_16rem]">
-        <div className="psa-data-surface space-y-3 rounded-[8px] px-4 py-4">
-          <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-psa-data-ink/60">
-            Agent-prepared recovery request
-          </p>
-          <p className="font-mono text-sm font-medium text-psa-data-ink">
+        <EvidencePanel title="Agent-prepared recovery request" tone="coordinate">
+          <p className="psa-mono text-sm font-medium">
             {connectionShortLabel(connectionId)}
           </p>
           <p className="text-xs text-psa-data-ink/70">{connectionId}</p>
-          <p className="text-sm text-psa-data-ink">
-            Affected container: <span className="font-mono">{containerId}</span>
+          <p>
+            Affected container: <span className="psa-mono">{containerId}</span>
           </p>
           {history?.request_context?.response_deadline ? (
-            <p className="font-mono text-xs text-psa-data-ink/70">
+            <p className="psa-mono text-xs text-psa-data-ink/70">
               Response deadline {formatUtcClock(history.request_context.response_deadline)}
             </p>
           ) : null}
@@ -76,10 +78,10 @@ export function CoordinateChapter({
               Case {truncateId(carrierCase.id)} · {carrierCase.state.replaceAll("_", " ")}
             </p>
           ) : null}
-        </div>
+        </EvidencePanel>
 
-        <div className="psa-surface-active space-y-3 rounded-[8px] border border-psa-amber/30 px-4 py-4">
-          <p className="psa-label text-psa-amber">Operator action</p>
+        <div className="space-y-3 lg:col-span-1">
+          <p className="psa-meta text-psa-amber">Operator action</p>
           {carrierCase?.state === "AWAITING_REQUEST_APPROVAL" ? (
             <div className="mt-3 space-y-3">
               <p className="text-sm text-psa-chalk">
@@ -90,7 +92,7 @@ export function CoordinateChapter({
                   Approval persisted. Advance the agent explicitly to send the authorised
                   request.
                 </p>
-              ) : !approved ? (
+              ) : !approved && !evidenceOnly ? (
                 <div className="flex flex-col gap-2">
                   <button
                     type="button"
