@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
-  <title id="title">Transshipment recovery</title>
+  <title id="title">ReRoute</title>
   <rect x="4" y="4" width="56" height="56" rx="16" fill="#0f172a"/>
   <path d="M16 21h27M16 32h24M16 43h17" fill="none" stroke="#22d3ee" stroke-linecap="round" stroke-width="5"/>
   <path d="M17 46c12 0 7-12 16-14 6-1 6-8 13-13" fill="none" stroke="#fbbf24" stroke-linecap="round" stroke-width="5"/>

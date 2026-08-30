@@ -1392,7 +1392,7 @@ describe("OperationsConsole full guided Phase 6 journey", () => {
     render(<OperationsConsole />);
 
     expect(screen.getByText(/SYNTHETIC DATA/)).toBeInTheDocument();
-    expect(screen.getByText(/Recovery command center/i)).toBeInTheDocument();
+    expect(screen.getByText(/^ReRoute$/i)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /^start recovery demo$/i }));
     await waitFor(() => expect(screen.getByText("SYN-EVT-GUIDED")).toBeInTheDocument());

@@ -54,8 +54,12 @@ export function DashboardSidebar({
   return (
     <aside className="psa-surface-chrome sticky top-0 flex h-screen w-[236px] shrink-0 flex-col overflow-hidden border-r border-white/10">
       <div className="border-b border-white/8 px-4 py-4">
-        <p className="text-[15px] font-medium tracking-[-0.02em] text-psa-snow">PSA Recovery</p>
-        <p className="mt-0.5 text-[11px] text-psa-steel">Tuas terminal · synthetic demo</p>
+        <img
+          src="/reroute-logo-white.png"
+          alt="ReRoute"
+          className="h-7 w-auto max-w-full"
+        />
+        <p className="mt-2 text-[11px] text-psa-steel">Tuas terminal · synthetic demo</p>
       </div>
 
       <nav aria-label="Workspace" className="flex-1 overflow-y-auto px-2 py-3">

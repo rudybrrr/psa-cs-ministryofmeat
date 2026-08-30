@@ -43,10 +43,10 @@ export function IncidentHeader({ incident, loading }: IncidentHeaderProps) {
     <header className="border-b border-slate-800 bg-slate-950/80 px-4 py-4">
       <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <img src="/favicon.svg" alt="" className="h-10 w-10 shrink-0" />
+          <img src="/reroute-icon-white.png" alt="" className="h-10 w-10 shrink-0" />
           <div>
             <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-slate-500">
-              Transshipment recovery console
+              ReRoute
             </p>
             <h1 className="mt-1 text-xl font-semibold text-slate-100">
               Incident operations status

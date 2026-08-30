@@ -30,7 +30,7 @@ export function DashboardContentHeader({
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="min-w-0">
           <h1 className="text-lg font-medium tracking-[-0.02em] text-psa-snow sm:text-xl">
-            {incident ? `${vessel} disruption` : "Recovery Command Center"}
+            {incident ? `${vessel} disruption` : "ReRoute"}
           </h1>
           <p className="mt-1 text-sm text-psa-chalk">
             {loading ? "Refreshing persisted recovery state…" : context}
