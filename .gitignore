@@ -10,3 +10,5 @@ htmlcov/
 backend/transshipment.db
 web/node_modules/
 web/dist/
+
+.impeccable/config.local.json
