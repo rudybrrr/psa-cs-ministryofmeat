@@ -6,9 +6,9 @@
 
 > **Synthetic operational demo. Not a PSA production system.** Every vessel, container, yard and timing value in this repository is invented. Built for PSA Code Sprint 2.0.
 
-**[▶ Live demo — psa-cs-ministryofmeat.vercel.app](https://psa-cs-ministryofmeat.vercel.app)** · **[Repository](https://github.com/rudybrrr/psa-cs-ministryofmeat)**
+> **Deployment archived.** The original hackathon demo was deployed on Vercel and Railway. The full project remains reproducible locally from this repository.
 
-No login, no API key, nothing to install. Press **Guided** to walk the incident stage by stage, or **Auto** to play the canonical run through, executing operator actions under the clearly labelled synthetic `synthetic-demo-operator` identity and halting where a genuine human trade-off decision is required.
+Run the project locally to use **Guided** mode for a stage-by-stage walkthrough, or **Auto** to play the canonical run through...
 
 ![ReRoute — scarce capacity allocation](web/screenshots/final/02-incident.png)
 <sub>ReRoute after a 195-minute vessel delay: 24 containers at risk, 8 expedite slots, and a scenario-aware allocation at 12.02 expected preserved connections against an 11.68 baseline on the pre-discharge forecast.</sub>
@@ -93,7 +93,7 @@ flowchart LR
 
 Layering rules that hold in the code: `domain/` contracts are frozen Pydantic models (`extra="forbid"`, `frozen=True`); only `orchestration/` writes durable state; policies and optimisers are pure functions; and the LLM sits behind two narrow protocols, `AgentModel.decide(context, tools)` and `SemanticSafetyChecker.check(evidence)`. Both protocols have credential-free deterministic implementations, so the demo, the whole test suite and the entire evidence package run offline through the same code path a live model uses.
 
-**Deployment.** Frontend on Vercel; backend on Railway from the root `Dockerfile`; SQLite on a Railway persistent volume at `/data`; OpenAI for the agent and semantic-safety models; OR-Tools CP-SAT in-process. No Redis, no Postgres, no queue, no Kubernetes.
+**Original deployment.** The hackathon demo ran with the frontend on Vercel and backend on Railway from the root `Dockerfile`, with SQLite on a Railway persistent volume at `/data`; OpenAI powered the agent and semantic-safety models, with OR-Tools CP-SAT in-process. The hosted deployment has since been archived. No Redis, no Postgres, no queue, no Kubernetes.
 
 ---
 
@@ -232,7 +232,7 @@ State lives in the database, not in an LLM context window.
 | **Optimization** | OR-Tools CP-SAT |
 | **AI** | OpenAI API (agent tool selection + semantic safety); optional — the demo runs without it |
 | **Persistence** | SQLite |
-| **Deployment** | Vercel (frontend) · Railway + Docker (backend) |
+| **Original deployment** | Vercel (frontend) · Railway + Docker (backend) · archived |
 | **Testing** | pytest · Vitest · Testing Library · oxlint · `tsc -b` |
 
 ---
@@ -339,7 +339,9 @@ shared/
 
 ---
 
-## 16 · Deployment
+## 16 · Deployment architecture (archived)
+
+> The public hackathon deployment is no longer active. The configuration below documents the original Vercel + Railway deployment used for ReRoute.
 
 | | |
 |---|---|
